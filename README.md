@@ -16,16 +16,8 @@ Local web interface for generating cinematic videos with synchronized audio powe
 | **Requirements** | NVIDIA GPU with 8+ GB VRAM (12+ GB recommended), CUDA 12.x driver |
 | **Launch** | `start.bat` — single file entry point, zero installation |
 
-> **Status:** Project released. Installation from source — via `install.bat`,
-> verification of local build — via `npm run release`
-> (clean → typecheck → build → prune → prepare → verify). Details in
-> the [Release Build](#release-build) section.
-
-## Screenshots
-
-| Main Window | Reference Generation | Result Lightbox |
-| :---: | :---: | :---: |
-| [![Main Window](screenshots/main-window.jpg)](screenshots/main-window.jpg) | [![Reference Generation](screenshots/reference-generation.jpg)](screenshots/reference-generation.jpg) | [![Result Lightbox](screenshots/result-lightbox.jpg)](screenshots/result-lightbox.jpg) |
+The studio runs in your browser. Use `npm run check` to verify the web build.
+The Windows backend installer remains available; Colab uses its own Linux setup.
 
 ## Installation on a New Machine
 
@@ -47,7 +39,6 @@ The installer script downloads and configures:
 | Python packages | 288 pinned working environment versions |
 | Custom nodes | 22 pinned commit nodes + 4 internal custom nodes |
 | Node.js | 22.20.0 (portable, if system lacks 18+) |
-| Electron | 44.9.0 (native desktop window, not a browser) |
 
 Downloads ~9 GB, installation takes 20–60 minutes depending on internet connection speed.
 Requires **25 GB** of free disk space.
@@ -92,14 +83,13 @@ troubleshooting details are available in [install/README.md](install/README.md).
   or **by reference photo of a person** (face matching, insightface). Live preview;
   falls back to human detector on long shots without clear face.
 - **ControlNet (Motion)** — video generation guided by motion depth maps from source clip.
-- **Portability** — single bat file, zero installation steps.
+- **Browser UI** — open the studio at `http://localhost:3000/`; Windows users can launch the web server and ComfyUI with `start.bat`.
 
 ## Project Structure
 
 ```
 Minimax_Studio_V7/
 ├── start.bat                    ← launch script (main entry point)
-├── start_hidden.vbs             ← hidden launcher (console hidden from taskbar)
 ├── install.bat                  ← environment installer for clean machine
 ├── install/                     ← installer files: install.ps1 + lockfiles + comfy-patches/
 ├── README.md                    ← this documentation file
@@ -117,17 +107,10 @@ Minimax_Studio_V7/
 ├── data/                        ← working data (generated at runtime, not in git)
 │   ├── loras.json               ← LoRA registry (turbo + custom)
 │   └── assistant-chats.json     ← LLM assistant chat history
-├── prompts/                     ← reference copies of system prompts (see prompts/README.md)
 ├── scripts/
 │   ├── build.mjs                ← production build with 8 GB Node heap
 │   ├── prune-build.mjs          ← build compression: webpack cache + .nft.json manifests
 │   ├── clean.mjs                ← build artifact and cache cleanup
-│   ├── release.mjs              ← full release cycle: clean → typecheck → build → prune → prepare → verify
-│   ├── prepare-electron.mjs     ← duplicate electron.exe under MinimaxH3Studio.exe
-│   ├── launch-electron.mjs      ← window launcher (with correct process name)
-│   ├── pe-version.mjs           ← PE version resource reader/builder
-│   ├── set-version-resource.ps1 ← inject version resources (Win32 API)
-│   ├── make-icons.mjs           ← icon generator
 │   └── start_comfy.bat          ← ComfyUI backend launcher
 ├── Bonsai_2_27B/                ← portable llama.cpp + ternary Bonsai 2 27B model
 ├── upscale/                     ← DLSS 5 Visual Enhancer ("Upscale" tab)
@@ -144,8 +127,7 @@ Minimax_Studio_V7/
 │   ├── components/ui/           ← shadcn/ui primitives
 │   ├── lib/                     ← business logic and stores (zustand)
 │   └── hooks/                   ← React hooks
-├── electron/                    ← desktop app shell (main.js + preload.js + icons)
-├── public/                      ← static assets (logo, splash videos)
+├── public/                      ← static assets (logo)
 ├── .next/                       ← production build (created by `npm run build`)
 ├── runtime/
 │   └── node.exe                 ← bundled Node.js (if missing from PATH)
@@ -169,22 +151,31 @@ Minimax_Studio_V7/
 start.bat
 ```
 
-The script automatically relaunches itself in a **minimized or hidden window** and performs:
+The Windows launcher keeps a visible console for logs and performs:
 
-1. Resolves Node.js (PATH → `runtime\node.exe` → error).
-2. Verifies presence of `ComfyUI-Easy-Install/`.
-3. Installs `node_modules` if missing.
-4. Builds `.next` production bundles if missing.
-5. Launches studio in its **native desktop app window (Electron)**: no address bar or browser tabs, custom icon and window title in taskbar. Electron spawns Web UI (:3000) and ComfyUI (:8188 with VRAM flags from `config.ini`), loads `/splash` screen, and enters studio when backend is ready. **Closing the window stops all processes** (web server, ComfyUI, and their child processes).
-6. If Electron is unavailable — graceful fallback to browser mode: server runs in background, opens default browser.
+1. Resolves Node.js (`runtime\node.exe` first, then PATH).
+2. Checks the configured ComfyUI folder; offers frontend-only mode if missing.
+3. Installs web dependencies and builds the production app if missing.
+4. Starts the web server on port 3000 and opens `/` in your default browser.
+5. Starts ComfyUI on port 8188 with the VRAM settings from `config/config.ini`.
 
-**To stop:** Close the application window (or console window).
+Keep the launch console open while using the studio. Closing the browser tab does
+not stop generation. Use the studio's cancel button to stop a job; view process
+logs and stop the local services from the launch console.
 
-### Process Name in Task Manager
+For manual startup, run ComfyUI separately (on Windows, `scripts\start_comfy.bat`),
+then run:
 
-The studio process appears in Windows Task Manager as **MinimaxH3Studio** rather than generic "electron", making it easy to identify.
+```sh
+npm ci
+npm run build
+npm start
+```
 
-Mechanism: `scripts/prepare-electron.mjs` generates a `MinimaxH3Studio.exe` copy alongside `electron.exe` and embeds Win32 version resources so file properties and Task Manager columns display the studio name.
+Open `http://localhost:3000/`. `npm run dev` can be used during development.
+The Next.js web UI can be built on other operating systems, but the bundled
+assistant, voice, folder picker and DLSS launchers still use Windows runtimes.
+Use the separate [Colab workflow](colab/README.md) for Linux GPU episode generation.
 
 ## Configuration
 
@@ -283,7 +274,7 @@ Configurable GPU selection (AI pipeline and video pipeline independently), codec
 ## Architecture
 
 ```
-Browser (:3000) / Electron App
+Browser (:3000)
   │
   ├─ Next.js App Router (React 19, Tailwind v4, shadcn/ui)
   │
@@ -337,15 +328,11 @@ Browser (:3000) / Electron App
 ```bash
 npm install          # install dependencies
 npm run dev          # dev server (:3000)
-npm run desktop      # desktop window (Electron) — manages server and ComfyUI
-npm run icons        # regenerate app icons from logo.svg
 npm run build        # production build (auto-allocates 8 GB Node heap)
 npm run build:default  # production build with default heap
 npm run typecheck    # TypeScript typecheck
 npm run check        # typecheck + build
 npm run clean        # clean .next, python caches, and logs
-npm run release      # full release cycle: clean → typecheck → build → prune → prepare → verify
-npm run prepare:electron  # recreate MinimaxH3Studio.exe with embedded resources
 ```
 
 > **Memory & Build:** `npm run build` runs `next build --webpack` via wrapper
@@ -355,41 +342,26 @@ npm run prepare:electron  # recreate MinimaxH3Studio.exe with embedded resources
 > **Strict Typechecking:** `tsconfig.json` enforces `noUnusedLocals` and
 > `noUnusedParameters` to eliminate dead imports and unused variables.
 
-## Release Build
+## Verification
 
-A release is a **folder distribution**, ready to run by launching `start.bat`.
-
-```bash
-npm run release
+```sh
+npm run check
+python3 -m unittest discover -s tests -v
 ```
 
-The script performs six stages:
+The web check runs TypeScript checking and a production build. Python tests cover
+script import, Colab planning/checkpoints, safe shutdown and episode assembly.
+Assembly integration tests require FFmpeg and ffprobe. GPU inference and the
+Windows launcher require their matching runtime for a live smoke test.
 
-1. **clean** — removes `.next/`, TypeScript cache, `__pycache__/`, logs, and temporary files.
-2. **typecheck** — executes `tsc --noEmit` with `strict` mode enabled.
-3. **build** — compiles Next.js production build in `.next/`.
-4. **prune** — compresses build: purges `.next/cache/` (~300 MB) and trims `.nft.json` manifests (~530 MB).
-   **Result: `.next` size shrinks from 841 MB → 8 MB.**
-5. **prepare** — produces `MinimaxH3Studio.exe` so the desktop window shows the product name.
-6. **verify** — validates release completeness.
+After editing Colab helpers, regenerate the notebook and repair script:
 
-To verify a release **without rebuilding**:
-
-```bash
-node scripts/release.mjs --verify
+```sh
+python3 scripts/build-colab-notebook.py
 ```
 
-### Distribution Checklist for Sharing
-
-| Item | Required | Notes |
-| ---- | -------- | ----- |
-| Entire project folder | Yes | Including `node_modules/`, `.next/`, `runtime/`, `stt/`, `upscale/` |
-| `ComfyUI-Easy-Install/` | Yes | Portable ComfyUI **without models** — weights downloaded via UI Settings → Models |
-| `Bonsai_2_27B/` | No | Downloaded on demand if Bonsai backend is chosen |
-| `data/` | No | Can be cleared before distribution (chat history and LoRA list) |
-| `config/config.ini` | Yes | Factory defaults |
-
-> **Before sharing with another person**, open Settings → Reset → **"Full Reset (All)"**.
-> This wipes generated videos, ComfyUI cache, upscale files, attachments, chat history,
-> prompts, and logs, while restoring factory defaults. Models, custom nodes, and
-> core program files remain untouched.
+Runtime files, model weights and user data are separate from the source tree.
+Keep `custom nodes/`, `install/comfy-patches/` and `upscale/` when using the web
+studio's generation and finishing features. Assistant prompts are maintained in
+`src/lib/h3-prompt-spec.ts`, `src/lib/assistant-stream.ts` and
+`src/lib/prompt-guide.md`.

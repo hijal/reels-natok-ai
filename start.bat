@@ -3,44 +3,13 @@ REM (fix 587) chcp 65001 REMOVED: cmd.exe under code page 65001
 REM improperly tracks read positions in batch files with multibyte UTF-8
 REM characters (Cyrillic in comments) — after an 8KB block
 REM the parser stumbled in the middle of words, executed comment fragments
-REM as commands and silently skipped lines below (including launching Electron).
+REM as commands and silently skipped launch commands.
 REM Comments are kept in plain ASCII — without 65001 the parser handles
 REM bytes correctly; echo strings are translated to ASCII.
 setlocal EnableExtensions
 
-REM (fix 570) Hidden launch: instead of a minimized window — fully hidden
-REM console. The VBS script launches the bat via WshShell.Run with HideWindow=0
-REM (hidden window), and on closing the Electron window, Electron itself kills
-REM the parent cmd process (taskkill by parent PID from main.js).
-REM The :hidden argument prevents infinite loops (VBS already launched us).
-if /i "%~1"==":hidden" goto main
-
-REM If the VBS script is available — launch through it (fully hidden window).
-REM If cscript/VBS are blocked by antivirus or policy — do not exit
-REM silently, fall back to a minimized console window.
-if exist "%~dp0start_hidden.vbs" (
-    where cscript >nul 2>&1
-    if not errorlevel 1 (
-        cscript //nologo "%~dp0start_hidden.vbs"
-        if not errorlevel 1 exit /b 0
-        echo [WARN] start_hidden.vbs failed - falling back to minimized console.
-    ) else (
-        echo [WARN] cscript not found - falling back to minimized console.
-    )
-)
-
-REM Fallback: VBS missing or blocked — minimized window (legacy behavior)
-start "" /min "%~f0" :hidden
-exit /b
-
-:main
-title MiniMax H3 Studio
+title MiniMax H3 Studio - Web
 cd /d "%~dp0"
-REM (fix 587) Hidden mode: pause/set /p are not possible (window is hidden) —
-REM errors are logged to start_error.log, interactive prompts receive
-REM safe default answers.
-set "HIDDEN="
-if /i "%~1"==":hidden" set "HIDDEN=1"
 
 set PORT=3000
 set COMFY_PORT=8188
@@ -99,14 +68,7 @@ echo  [WARN] ComfyUI not found at: %COMFY_ROOT%
 echo         Expected folder: %~dp0%COMFY_ROOT%\python_embeded\python.exe
 echo         Place the ComfyUI-Easy-Install folder next to this project.
 echo.
-REM (fix 587) Hidden window cannot prompt user — default to Y
-REM (frontend-only), reason is written to start_error.log.
-if defined HIDDEN (
-    echo [%date% %time%] WARN: ComfyUI not found at %COMFY_ROOT% - frontend-only mode, hidden>> "%~dp0start_error.log"
-    set "CONTINUE=Y"
-) else (
-    set /p CONTINUE=         Start Web UI anyway, frontend only [Y/N]:
-)
+set /p CONTINUE=         Start Web UI anyway, frontend only [Y/N]:
 if /i "%CONTINUE%"=="Y" goto frontend_only
 call :pause_or_log "[ERROR] ComfyUI not found, user declined frontend-only start"
 exit /b 0
@@ -173,86 +135,8 @@ if exist ".next\BUILD_ID" (
 )
 
 REM ============================================================
-REM  (fix 561) DESKTOP MODE — application window (Electron)
-REM  Electron handles: killing stale ports, starting server.js (on its
-REM  own Node) and ComfyUI (with VRAM flags from config.ini), opening
-REM  window at /splash, and killing both process trees on window close.
-REM  Console remains as a minimized log host; closing window terminates it too.
-REM  No Electron (incomplete node_modules) — falls back to browser mode.
-REM ============================================================
-if exist "node_modules\electron\dist\electron.exe" goto desktop_mode
-REM Electron 44+ downloads its binary lazily on first require('electron'),
-REM so cli.js is enough here: it fetches dist\ and starts the window.
-if exist "node_modules\electron\cli.js" goto desktop_mode
-echo  [WARN] Electron not found in node_modules - browser mode.
-goto web_mode
-
-:desktop_mode
-echo.
-REM (fix 586) Auto-cleanup of orphaned processes by project path REMOVED:
-REM it could affect unrelated processes (including Bionic/LM Studio) if their
-REM command line happened to contain the project path. We only keep
-REM killPortListeners(3000/8188) inside electron/main.js.
-echo  Starting desktop app (Electron window)...
-echo  Close the app window to stop everything (web server + ComfyUI).
-echo.
-
-REM (release) Process name in Task Manager. Standard electron.exe in process
-REM list is indistinguishable from other Electron apps — user cannot tell
-REM which process to terminate. prepare-electron creates a copy alongside it
-REM named MinimaxH3Studio.exe (with proper file properties), and that is what
-REM we run. If no copy exists — regular electron.exe runs as before.
-if exist "node_modules\electron\dist\MinimaxH3Studio.exe" goto desktop_mode_named
-"%NODE_CMD%" scripts\prepare-electron.mjs
-if exist "node_modules\electron\dist\MinimaxH3Studio.exe" goto desktop_mode_named
-echo  [WARN] Could not create MinimaxH3Studio.exe - process name stays "electron".
-goto desktop_mode_launch
-
-:desktop_mode_named
-echo  Process name: MinimaxH3Studio (visible in Task Manager).
-goto desktop_mode_launch
-
-:desktop_mode_launch
-
-REM (fix 582) Pre-check syntax of main.js: previously SyntaxError could
-REM occur in hidden window and start.bat silently exited without showing reason.
-"%NODE_CMD%" --check electron\main.js
-if errorlevel 1 (
-    echo.
-    echo  [ERROR] electron\main.js failed the syntax check.
-    echo          Fix the errors in that file, then run start.bat again.
-    call :pause_or_log "[ERROR] electron\main.js failed node --check"
-    exit /b 1
-)
-
-REM (release) launch-electron.mjs — same as cli.js (proxies electron.exe
-REM stdio so server/ComfyUI logs appear in this console), but for renamed
-REM MinimaxH3Studio.exe copy. If copy doesn't exist — fallback to standard
-REM electron/cli.js.
-if exist "node_modules\electron\dist\MinimaxH3Studio.exe" goto launch_named
-"%NODE_CMD%" node_modules\electron\cli.js electron\main.js
-goto launch_done
-
-:launch_named
-"%NODE_CMD%" scripts\launch-electron.mjs electron\main.js
-
-:launch_done
-set EL_EXIT=%errorlevel%
-echo.
-echo  Desktop app closed (code %EL_EXIT%). Closing...
-%SystemRoot%\System32\timeout.exe /t 3 /nobreak >nul
-exit /b %EL_EXIT%
-
-REM ============================================================
-REM  (fix 561) LEGACY: browser mode — fallback without Electron
-REM ============================================================
-:web_mode
-
-REM ============================================================
-REM  [fix 97] Start Web UI FIRST — browser with splash screen
-REM  opens immediately without waiting for ComfyUI load (30-90s).
-REM  Splash screen (/splash) polls /api/comfy/health and transitions
-REM  into application when backend is ready.
+REM  Start the browser studio before ComfyUI finishes loading.
+REM  The sidebar displays the backend connection status.
 REM ============================================================
 echo.
 echo  Starting web UI...
@@ -265,7 +149,7 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr /C:":%PORT% " ^| findstr /C:"
 
 set NODE_ENV=production
 
-REM Web server in background: needed RIGHT NOW to serve splash screen.
+REM Web server in background; logs remain in this console.
 start /b "" "%NODE_CMD%" server.js
 
 REM Wait for web server to respond (typically 1-3s)
@@ -278,7 +162,7 @@ if %wt% gtr 30 (
     call :pause_or_log "[ERROR] Web server did not start within 60s"
     exit /b 1
 )
-powershell -NoProfile -Command "try { [void](Invoke-WebRequest -Uri 'http://127.0.0.1:%PORT%/splash' -TimeoutSec 3 -UseBasicParsing); exit 0 } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "try { [void](Invoke-WebRequest -Uri 'http://127.0.0.1:%PORT%/' -TimeoutSec 3 -UseBasicParsing); exit 0 } catch { exit 1 }" >nul 2>&1
 if %errorlevel% equ 0 goto web_ready
 %SystemRoot%\System32\timeout.exe /t 2 /nobreak >nul
 goto wait_web
@@ -293,20 +177,20 @@ echo    ComfyUI:  http://127.0.0.1:%COMFY_PORT%
 echo    Backend:  %COMFY_ROOT%
 echo  ============================================
 echo.
-echo  Opening browser (splash screen)...
+echo  Opening browser...
 echo.
 
 REM (fix 128) Open browser on top of all windows (not in background).
 REM explorer.exe is simple, but Windows foreground-lock may prevent focus.
 REM (fix 129b) Reliable approach — PowerShell + SetForegroundWindow.
-call :open_browser_foreground http://localhost:%PORT%/splash
+call :open_browser_foreground http://localhost:%PORT%/
 
 REM ============================================================
 REM  Start ComfyUI backend
 REM ============================================================
 REM (fix 551) Frontend-only (no ComfyUI folder, user answered Y):
 REM Do not start backend — jump directly to keepalive (Web UI already running,
-REM splash screen properly polls /api/comfy/health).
+REM the studio displays backend connection status).
 if defined FRONTEND_ONLY (
     echo  [WARN] Frontend-only mode: ComfyUI backend NOT started.
     goto keepalive
@@ -371,7 +255,7 @@ if "%DYNAMIC_VRAM%"=="0" set "DYN_FLAG=--disable-dynamic-vram"
 REM Launch ComfyUI directly
 start /b "" "%COMFY_ROOT%\python_embeded\python.exe" -I "%COMFY_ROOT%\ComfyUI\main.py" --windows-standalone-build --use-ck-attention --disable-auto-launch --reserve-vram %RESERVE_VRAM% %DYN_FLAG% %EXTRA_FLAGS% %HEADROOM_FLAG%
 
-REM Wait for ComfyUI to be ready (browser splash screen will track this)
+REM Wait for ComfyUI to be ready (the studio also tracks connection status)
 echo       Waiting for ComfyUI (first start can take 30-90s)...
 set /a tries=0
 :wait_comfy
@@ -379,7 +263,7 @@ set /a tries+=1
 if %tries% gtr 120 (
     echo.
     echo  [WARN] ComfyUI did not start within 240s.
-    echo  Splash screen keeps waiting - check the output above.
+    echo  Check the output above and the ComfyUI connection indicator.
     echo.
     goto keepalive
 )
@@ -389,7 +273,7 @@ if %errorlevel% equ 0 goto comfy_ready
 goto wait_comfy
 
 :comfy_ready
-echo  [OK] ComfyUI is ready. Browser will enter the studio automatically.
+echo  [OK] ComfyUI is ready. The browser studio can now generate videos.
 
 REM ============================================================
 REM  Keepalive: console retains background processes (web + ComfyUI).
@@ -434,18 +318,9 @@ endlocal
 goto :eof
 
 REM ============================================================
-REM (fix 587) Subroutine for emergency paths: in visible window — pause
-REM (as before), in hidden window (launched via start_hidden.vbs) — pause
-REM is impossible (no UI, no input) and would hang forever. Instead
-REM message is appended to start_error.log next to start.bat.
-REM Implemented via goto (NOT via parenthesized blocks): messages might
-REM contain parentheses which inside ( ... ) would break the block.
+REM Display launch errors in this visible console.
 REM ============================================================
 :pause_or_log
-if defined HIDDEN goto :plog_hidden
 echo  %~1
 pause
-goto :eof
-:plog_hidden
-echo [%date% %time%] %~1>> "%~dp0start_error.log" 2>&1
 goto :eof

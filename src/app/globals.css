@@ -109,20 +109,9 @@
   /* (fix 717) Toast plaque — gray (in light theme --surface-2 is white,
      but specifically a gray backing is needed for text). */
   --toast-surface: #e6e6ec;
-
-  /* (fix 97) Splash screen accents — muted for light theme */
-  --splash-a: #d97706;
-  --splash-b: #7c3aed;
-  --splash-c: #0891b2;
-  --splash-glow: rgba(217, 119, 6, 0.25);
 }
 
 .dark {
-  /* (fix 97) Splash screen accents — vibrant on a deep background */
-  --splash-a: #f59e0b;
-  --splash-b: #8b5cf6;
-  --splash-c: #06b6d4;
-  --splash-glow: rgba(245, 158, 11, 0.35);
   --background: #07070c;
   --foreground: #e8e8ed;
   --card: #101018;
@@ -175,11 +164,6 @@
 }
 
 .dark-gray {
-  /* (fix 97) Splash accents — slightly calmer, suited for gray theme */
-  --splash-a: #f59e0b;
-  --splash-b: #a78bfa;
-  --splash-c: #22d3ee;
-  --splash-glow: rgba(245, 158, 11, 0.28);
   --background: #1c1c20;
   --foreground: #e8e8ec;
   --card: #252529;
@@ -233,15 +217,11 @@
 
 /* (fix 441) "Studio" theme: WARM graphite (brownish-umber undertone,
    without cold blue), thin warm hairline borders, slightly larger radii,
-   soft warm muted text. Primary accent — amber (#f59e0b, from splash).
+   soft warm muted text. Primary accent — amber (#f59e0b).
    Cyan utilities are recolored into an amber scale at token level (see below) —
    components untouched. */
 .dark-calm {
   --radius: 0.75rem;
-  --splash-a: #f59e0b;
-  --splash-b: #a78bfa;
-  --splash-c: #fbbf24;
-  --splash-glow: rgba(245, 158, 11, 0.32);
   --background: #131110;
   --foreground: #ece8e2;
   --card: #1b1815;
@@ -308,7 +288,7 @@
   --color-cyan-950: #451a03;
 }
 
-/* Brand gradient in warm theme: amber → soft violet (like splash) */
+/* Brand gradient in warm theme: amber → soft violet */
 .dark-calm .gradient-creative {
   background: linear-gradient(135deg, #f59e0b 0%, #a78bfa 100%);
 }
@@ -388,18 +368,6 @@
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
-}
-
-/* (fix 562) Electron window header (DesktopTitleBar): the entire bar is a window drag
-   area; interactive elements inside (if any) — no-drag. */
-.h3-titlebar {
-  -webkit-app-region: drag;
-}
-.h3-titlebar button,
-.h3-titlebar a,
-.h3-titlebar input,
-.h3-titlebar .h3-no-drag {
-  -webkit-app-region: no-drag;
 }
 
 ::-webkit-scrollbar-track {

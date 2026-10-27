@@ -14,8 +14,7 @@ const dir = __dirname
 // fresh machines. Set BIND_HOST=0.0.0.0 to expose the UI on the LAN.
 const hostname = process.env.BIND_HOST || '127.0.0.1'
 // (fix 716) PORT is validated: 'abc' -> NaN, 99999 -> out of range.
-// Previously the port would silently become invalid, causing Electron to wait 120s
-// and then show "server failed to start" without a clear reason.
+// Reject invalid values before starting the web server.
 const parsedPort = parseInt(process.env.PORT || '3000', 10)
 if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
   console.error(`Invalid PORT: ${process.env.PORT}`)
@@ -48,7 +47,7 @@ async function start() {
   const server = http.createServer((req, res) => {
     // (fix 716) requestHandler is an ASYNC function, its promise must be
     // handled. Previously it was dropped, so on reject the request HUNG WITHOUT
-    // RESPONSE (client waited until its timeout) — including Electron readiness probes.
+    // RESPONSE (client waited until its timeout) — including readiness probes.
     Promise.resolve(app.requestHandler(req, res)).catch((err) => {
       console.error('Request failed:', err && err.stack ? err.stack : err)
       try {
@@ -74,23 +73,6 @@ async function start() {
     console.log(`  Web UI:   http://localhost:${port}`)
     console.log(`  ComfyUI:  http://127.0.0.1:${process.env.COMFY_PORT || 8188}`)
   })
-
-  // (fix 587) Watchdog parent: Electron passes its PID in MINIMAX_PARENT_PID.
-  // If Electron dies (crash/hard kill), its before-quit cleanup won't
-  // run — without watchdog server.js and its python child processes (llm/stt) would continue
-  // idling. process.exit(0) triggers runner exit hooks
-  // (killChildSync) which kill python servers.
-  const parentPid = parseInt(process.env.MINIMAX_PARENT_PID || '', 10)
-  if (parentPid > 0) {
-    setInterval(() => {
-      try {
-        process.kill(parentPid, 0)
-      } catch {
-        console.log('[server] Parent process is gone, shutting down.')
-        process.exit(0)
-      }
-    }, 5000).unref()
-  }
 
   // Graceful shutdown
   // (fix 587) close() waits for browser keep-alive connections forever —

@@ -274,7 +274,7 @@ if (-not $SkipApp) {
         }
 
         if (-not (Test-Path 'node_modules')) {
-            Info 'npm ci - downloading ~1.2 GB, takes 5-15 minutes'
+            Info 'npm ci - installing web dependencies'
             & npm.cmd ci --no-audit --no-fund
             if ($LASTEXITCODE -ne 0) {
                 Warn 'npm ci failed, trying npm install'
@@ -284,30 +284,6 @@ if (-not $SkipApp) {
             Ok 'node_modules installed'
         } else {
             Ok 'node_modules already in place'
-        }
-
-        # Electron 44+ no longer downloads the binary during npm ci: it is downloaded
-        # lazily on the first require('electron'). start.bat checks
-        # node_modules\electron\dist\electron.exe and falls back to browser without it,
-        # so we download the binary right away during installation.
-        $elDir = Join-Path $Root 'node_modules\electron'
-        if (Test-Path $elDir) {
-            if (Test-Path (Join-Path $elDir 'dist\electron.exe')) {
-                Ok 'Electron already downloaded (app window)'
-            } else {
-                Info 'downloading Electron binary (~110 MB, one-time)...'
-                Push-Location $Root
-                try {
-                    & $nodeExe (Join-Path $elDir 'install.js')
-                } finally {
-                    Pop-Location
-                }
-                if (Test-Path (Join-Path $elDir 'dist\electron.exe')) {
-                    Ok 'Electron downloaded: app will open in a dedicated window'
-                } else {
-                    Warn 'Electron failed to download: start.bat will open app in browser. Run install.bat again.'
-                }
-            }
         }
 
         if ($Force -and (Test-Path '.next')) {

@@ -10,7 +10,6 @@ import {
   GaugeIcon,
   Grid3x3Icon,
   SettingsIcon,
-  TerminalIcon, // (fix 567) "Console" button
   ChevronLeftIcon,
   ChevronRightIcon,
   SparklesIcon,
@@ -20,7 +19,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SystemStatsBar } from '@/components/h3/system-stats-bar'
-import { ConsoleDialog } from '@/components/h3/console-dialog' // (fix 567)
 import {
   Tooltip,
   TooltipContent,
@@ -140,8 +138,6 @@ function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
 
 export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
-  // (fix 567) "Console" panel — full application output inside the UI
-  const [consoleOpen, setConsoleOpen] = useState(false)
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -239,27 +235,6 @@ export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: Sideba
         {/* Bottom section */}
         <div className="px-2 py-2 border-t border-border space-y-0.5">
           <ComfyHealthDot collapsed={collapsed} />
-          {/* (fix 567) "Console" — between ComfyUI indicator and settings:
-              full output of real console inside UI + copy/save. */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setConsoleOpen(true)}
-                className={cn(
-                  'w-full flex items-center gap-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-[var(--surface-2)] transition-colors',
-                  collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5'
-                )}
-              >
-                <TerminalIcon className="w-[18px] h-[18px] shrink-0" />
-                {!collapsed && <span className="text-sm font-medium">Console</span>}
-              </button>
-            </TooltipTrigger>
-            {collapsed && (
-              <TooltipContent side="right" className="bg-[var(--surface-3)] border-border text-foreground">
-                Console
-              </TooltipContent>
-            )}
-          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -292,9 +267,6 @@ export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: Sideba
             <ChevronLeftIcon className="w-3 h-3" />
           )}
         </button>
-
-        {/* (fix 567) "Console" panel */}
-        <ConsoleDialog open={consoleOpen} onOpenChange={setConsoleOpen} />
       </motion.aside>
     </TooltipProvider>
   )

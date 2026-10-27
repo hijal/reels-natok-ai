@@ -11,10 +11,10 @@ Open **[Reels_Natok_MiniMax_H3.ipynb](Reels_Natok_MiniMax_H3.ipynb)** in
 The notebook embeds its Python helpers, so it works without cloning this repository
 or publishing these changes first. Nothing needs to run on the local AMD machine.
 
-The existing Windows installer and Electron launcher are not used. This notebook
+The Windows installer and browser launcher are not used. This notebook
 installs a separate Linux ComfyUI backend, uses official MiniMax H3 Ref2VA weights,
 and runs native ComfyUI nodes through loopback HTTP. It does not expose a tunnel or
-require the studio's Windows custom-node patches, Electron or DLSS. An optional
+require the studio's Windows custom-node patches or DLSS. An optional
 local Qwen text planner adapts unstructured stories before MiniMax generation.
 
 ## Quick start

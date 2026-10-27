@@ -3,7 +3,7 @@
   "version": "7.0.0",
   "private": true,
   "productName": "Minimax H3 Studio",
-  "description": "Local cinematic video and audio generation studio based on the MiniMax H3 model (ComfyUI + Electron).",
+  "description": "Browser-based cinematic video and audio generation studio using MiniMax H3 and ComfyUI, with a separate Colab episode workflow.",
   "author": "MiniMax H3 Studio",
   "license": "UNLICENSED",
   "engines": {
@@ -14,13 +14,9 @@
     "build": "node scripts/build.mjs",
     "build:default": "next build --webpack",
     "start": "node server.js",
-    "desktop": "node scripts/launch-electron.mjs electron/main.js",
-    "icons": "node scripts/make-icons.mjs",
-    "prepare:electron": "node scripts/prepare-electron.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
-    "clean": "node scripts/clean.mjs",
-    "release": "node scripts/release.mjs"
+    "clean": "node scripts/clean.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",
@@ -52,7 +48,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
-    "electron": "^44.9.0",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5"
