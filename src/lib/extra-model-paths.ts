@@ -138,7 +138,7 @@ export function writeExtraModelPathsYaml(
     lines.push('minimax_studio:')
     for (const [cat, paths] of byCat) {
       lines.push(`    ${cat}:`)
-      lines.push(`        - "${p}"`)
+      for (const p of paths) lines.push(`        - "${p}"`)
     }
   }
   const content = lines.join('\n') + '\n'

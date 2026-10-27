@@ -1,5 +1,10 @@
 # MiniMax H3 Studio 7
 
+**Google Colab / G4:** For script upload, scene generation and automatic portrait
+episode assembly, use the separate [Colab notebook and guide](colab/README.md).
+It exports 1080×1920 MP4 and saves scene checkpoints to Drive. GPU inference
+requires the notebook's live smoke test; the Windows installer below is not used.
+
 Local web interface for generating cinematic videos with synchronized audio powered by the **MiniMax H3** model. Operates completely offline — requires only an NVIDIA GPU.
 
 | | |

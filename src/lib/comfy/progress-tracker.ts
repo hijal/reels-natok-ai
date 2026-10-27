@@ -732,15 +732,3 @@ export function getPreview(promptId: string): PreviewEntry | null {
   ensureConnected()
   return previewMap.get(promptId) ?? null
 }
-
-/** Get progress for a prompt_id. Returns null if unknown. */
-export function getProgress(promptId: string): ProgressEntry | null {
-  ensureConnected()
-  return progressMap.get(promptId) ?? null
-}
-
-/** Get the latest preview image for a prompt_id. Returns null if none. */
-export function getPreview(promptId: string): PreviewEntry | null {
-  ensureConnected()
-  return previewMap.get(promptId) ?? null
-}

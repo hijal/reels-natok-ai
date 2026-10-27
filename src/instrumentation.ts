@@ -8,11 +8,14 @@
  * the H3FaceTrackCrop combo for fallback_detector.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return
-  try {
-    const { syncExtraModelPathsYaml } = await import('./lib/extra-model-paths')
-    syncExtraModelPathsYaml()
-  } catch (e) {
-    console.error('[startup] extra_model_paths.yaml:', e instanceof Error ? e.message : e)
+  // Keep the import inside the runtime branch so webpack excludes Node-only
+  // filesystem code from the Edge instrumentation bundle.
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    try {
+      const { syncExtraModelPathsYaml } = await import('./lib/extra-model-paths')
+      syncExtraModelPathsYaml()
+    } catch (e) {
+      console.error('[startup] extra_model_paths.yaml:', e instanceof Error ? e.message : e)
+    }
   }
 }

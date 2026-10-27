@@ -1,0 +1,14 @@
+{
+  "episodes": [
+    {
+      "output": "exports/episode-01.mp4",
+      "fit": "pad",
+      "clips": ["clips/episode-01-scene-01.mp4", "clips/episode-01-scene-02.mp4"]
+    },
+    {
+      "output": "exports/episode-02.mp4",
+      "fit": "pad",
+      "clips": ["clips/episode-02-scene-01.mp4", "clips/episode-02-scene-02.mp4"]
+    }
+  ]
+}

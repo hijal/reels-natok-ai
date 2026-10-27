@@ -537,7 +537,3 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
 
   return result
 }
-  const result: Record<string, unknown> = { ...stdWorkflow, ...extraNodes }
-
-  return result
-}
