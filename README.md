@@ -1,5 +1,12 @@
 # MiniMax H3 Studio 7
 
+**Cloudflare browser episode studio:** open
+[Reels_Natok_Web_Studio.ipynb](colab/Reels_Natok_Web_Studio.ipynb) in paid Colab.
+After GPU/backend setup, use the password-protected CF URL for story/script
+upload, plan review/editing, test generation, batch rendering/resume, previews,
+downloads and GPU release. The local PC needs only a browser. See the
+[browser workflow guide](colab/README.md) for Quick/named tunnels and Colab Secrets.
+
 **Google Colab / G4:** For script upload, scene generation and automatic portrait
 episode assembly, use the separate [Colab notebook and guide](colab/README.md).
 It always exports 9:16, Full HD 1080×1920 MP4, defaults to a 60-second story
@@ -352,7 +359,7 @@ script import, Colab planning/checkpoints, safe shutdown and episode assembly.
 Assembly integration tests require FFmpeg and ffprobe. GPU inference and the
 Windows launcher require their matching runtime for a live smoke test.
 
-After editing Colab helpers, regenerate the notebook and repair script:
+After editing Colab helpers/browser assets, regenerate both notebooks and the repair script:
 
 ```sh
 python3 scripts/build-colab-notebook.py

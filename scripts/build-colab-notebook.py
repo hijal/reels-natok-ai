@@ -302,3 +302,86 @@ print('Repair complete. No Qwen invocation or model download was needed. Run the
 '''
 (ROOT / "colab/repair-script-upload.py").write_text(repair, encoding="utf-8")
 print("Built repair-script-upload.py for existing Colab sessions")
+
+# Separate browser-first notebook: reuse the tested GPU/Drive/backend setup,
+# then serve the episode workflow through an authenticated Cloudflare tunnel.
+import copy
+setup_end = next(i for i, cell in enumerate(cells) if ''.join(cell['source']).startswith('#@title 6.')) + 1
+cells = copy.deepcopy(cells[:setup_end])
+cells[0]['source'] = '''# Reels Natok — Cloudflare browser studio
+
+Colab-এ শুধু GPU, Drive ও backend setup চালাও। তারপর printed HTTPS URL খুলে
+**story/script upload → scene plan review/edit → test → generate/resume → preview/download**
+সব browser dashboard থেকে করো। Local PC-তে Node/Python/GPU চালাতে হবে না।
+
+এই notebook **paid Colab with positive compute-unit balance**-এর জন্য।
+[Colab FAQ](https://research.google.com/colaboratory/faq.html) অনুযায়ী free managed
+compute-এ notebook UI বাদ দিয়ে মূলত বাইরের Web UI ব্যবহার করা নিষিদ্ধ। Paid
+runtime-ও usage/session limits মেনে চলে; tunnel runtime-কে permanent করে না।
+
+1. GPU/High-RAM বেছে নিয়ে setup cells 1–6 চালাও।
+2. Dashboard helper cells এবং **7. Open browser studio** চালাও। URL ও password দেখাবে।
+3. URL খুলে password দিয়ে sign in করো। Default generation preset **768×1344**;
+   final export **1080×1920, 24 fps, H.264/AAC**। Final resize নতুন AI detail যোগ করে না।
+4. আগে scene plan review/edit ও 5-second test করো, তারপর batch generate করো।
+5. কাজ শেষে dashboard-এর **Save & release GPU** চাপলে saved episodes verify করে
+   Drive sync এবং runtime disconnect হবে। Error হলে runtime assigned থাকবে।
+
+Quick Tunnel default: CF account/domain লাগবে না; নতুন tunnel-এ URL বদলাবে।
+Password ছাড়া API ও videos দেখা যাবে না। Password notebook output থেকে private রাখো।
+Stable hostname চাইলে Colab Secrets-এ `CLOUDFLARE_TUNNEL_TOKEN` এবং
+`REELS_PUBLIC_URL` দাও। Named tunnel route-এর origin হবে **http://127.0.0.1:7860**।
+নিজের password দিতে optional Secret `REELS_WEB_PASSWORD` (অন্তত 12 characters)।
+Token, password বা HF token notebook code/Git-এ লিখবে না।
+
+এটি episode dashboard; পুরোনো Windows Studio-এর DLSS/Voice/Face Refine UI নয়।
+Existing Colab generation/checkpoint/assembly helpers-ই ব্যবহার করে। GPU model
+compatibility, actual inference quality ও live Cloudflare connectivity এই local
+CPU environment-এ যাচাই করা যায় না—Colab-এ প্রথম test চালাতে হবে।
+
+[Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+'''.splitlines(True)
+for name in ('colab_web.py', 'colab_tunnel.py', 'colab_web.html', 'colab_web_ui.js'):
+    source = (ROOT / 'tools' / name).read_text(encoding='utf-8')
+    code(f"#@title Install browser asset: {name}\n(TOOLS / {name!r}).write_text({source!r}, encoding='utf-8')\n", hidden=True)
+code('''#@title 7. Open browser studio — keep this cell running
+from google.colab import userdata
+from colab_tunnel import launch_dashboard, watch_dashboard, stop_dashboard
+
+def optional_secret(name):
+    try:
+        return userdata.get(name) or ''
+    except Exception:
+        return ''
+
+# Rerunning this cell stops only its own old services.
+if 'WEB_HANDLES' in globals():
+    stop_dashboard(WEB_HANDLES)
+WEB_HANDLES = launch_dashboard(WORKSPACE, RUNTIME, PYTHON, URL,
+    password=optional_secret('REELS_WEB_PASSWORD'),
+    token=optional_secret('CLOUDFLARE_TUNNEL_TOKEN'),
+    public_url=optional_secret('REELS_PUBLIC_URL'))
+# Job controls live in the browser. This loop watches service lifecycle and
+# performs verified Drive flush/runtime release in the notebook's own context.
+watch_dashboard(WEB_HANDLES, RUNTIME, WORKSPACE)
+''')
+markdown('''### Reconnect / resume
+Browser বন্ধ করে আবার একই URL খুললে চলমান job/logs ফিরে পাবে। Tunnel process
+নতুন করে চালালে Quick Tunnel-এর নতুন URL ও password ব্যবহার করো। Runtime reset
+হলে setup cells আবার চালিয়ে dashboard-এ **Restore saved plan** → **Generate / resume
+batch** চাপো। Matching completed scenes Drive থেকে reuse হবে। Models local runtime-এ
+থাকায় reset-এর পরে আবার download লাগতে পারে।
+
+Cell 7 stop করলে dashboard/tunnel বন্ধ হয় এবং active worker/owned ComfyUI generation
+cancel করার চেষ্টা হয়। Saved scenes থাকে। এটি notebook-এর পুরোনো monitoring-cell
+behavior থেকে আলাদা। Runtime-এ GPU না থাকলে tunnel একা generation করতে পারবে না।
+''')
+web_notebook = {'nbformat': 4, 'nbformat_minor': 5,
+    'metadata': {'colab': {'name': 'Reels_Natok_Web_Studio.ipynb'},
+                 'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
+                 'accelerator': 'GPU'}, 'cells': cells}
+for i, cell in enumerate(cells):
+    cell['id'] = f'reels-web-{i:02d}'
+web_path = ROOT / 'colab/Reels_Natok_Web_Studio.ipynb'
+web_path.write_text(json.dumps(web_notebook, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
+print(f'Built {web_path.name}: {len(cells)} cells')

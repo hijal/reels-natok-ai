@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reels Natok — Episode Studio</title>
+  <style>
+    :root{color-scheme:dark;font:15px/1.55 system-ui,sans-serif;background:#101215;color:#e9edef}*{box-sizing:border-box}body{margin:0}header{padding:24px 5vw;border-bottom:1px solid #30343c;display:flex;gap:20px;justify-content:space-between;align-items:center}h1{font-size:24px;margin:0}h2{font-size:19px;margin:0 0 16px}p{margin:6px 0 18px}.muted,small{color:#a6b1bd}main{max-width:1450px;margin:28px auto;padding:0 4vw}.grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:24px}.card{background:#191d23;border:1px solid #303844;border-radius:16px;padding:24px;margin-bottom:24px}label{display:block;font-size:13px;color:#bcc8d4;margin:15px 0 6px}input,select,textarea,button{font:inherit}input,select,textarea{width:100%;background:#11151b;border:1px solid #414c5a;border-radius:8px;padding:10px;color:#f5f7fa}textarea{resize:vertical;min-height:130px}button,.link{border:1px solid #465260;border-radius:8px;padding:9px 15px;color:#eef5fc;background:#242d38;cursor:pointer;text-decoration:none;display:inline-block}button.primary{background:#64debf;color:#0e211a;border-color:#64debf;font-weight:650}button:disabled{opacity:.45;cursor:wait}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row.fields>*{flex:1;min-width:135px}.actions{margin-top:18px}.badge{background:#223e37;color:#86f1d2;border-radius:20px;padding:4px 12px;font-size:12px}pre{background:#101318;padding:15px;border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace;max-height:330px;overflow:auto}.notice{color:#a9edda;background:#16352e;border:1px solid #2f6355;padding:12px 16px;border-radius:10px;margin-bottom:20px}.error{color:#ffc1b8;background:#3d211f;border-color:#81443c}.hidden{display:none!important}#login{max-width:470px;margin:70px auto}.episode{border-top:1px solid #3b4451;margin-top:20px;padding-top:10px}.scene{padding:10px 0}.scene textarea{min-height:130px}.scene input{max-width:130px}.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px}video{width:100%;max-height:360px;background:#080a0e;border-radius:10px}.video-grid article{min-width:0}.video-grid p{overflow-wrap:anywhere;font-size:12px}#refs{font-size:13px;color:#91dfc9}.danger{border-color:#965449;color:#ffc9c0}details summary{cursor:pointer;margin:12px 0}a{color:#8ce6d4}@media(max-width:850px){.grid{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.card{padding:18px}}
+  </style>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<header><div><h1>Reels Natok <span class="badge">Episode Studio</span></h1><small>Story to screen · MiniMax H3 · English dialogue</small></div><div class="row"><span id="connection" class="muted">Connecting…</span><button id="logout" class="hidden">Sign out</button></div></header>
+<main>
+  <div id="notice" class="notice hidden" role="status"></div>
+  <section id="login" class="card"><h2>Open your studio</h2><p class="muted">Enter the dashboard password printed in your Colab setup cell.</p><form id="login-form"><label for="password">Dashboard password</label><input id="password" type="password" autocomplete="current-password" required><div class="actions"><button class="primary">Sign in</button></div></form></section>
+  <div id="studio" class="hidden">
+    <div class="grid">
+      <section class="card"><h2>1. Your story</h2><p class="muted">Write a logline or upload scripts. Multiple scripts become a batch of episodes.</p>
+        <label for="title">Episode title</label><input id="title" value="My episode" maxlength="300">
+        <label for="mode">Planning mode</label><select id="mode"><option value="auto-story">Auto story — local Qwen planner</option><option value="structured-script">DRAMA SCRIPT — preserve supplied scenes</option><option value="scene-paragraphs">Prompt paragraphs — one scene each</option></select>
+        <label for="story">Logline / story / script</label><textarea id="story" placeholder="A brief idea, a complete story or a DRAMA SCRIPT…"></textarea>
+        <label for="scripts">Upload UTF-8 .txt scripts</label><input id="scripts" type="file" accept=".txt,text/plain" multiple><small>Uploaded scripts join the typed story, if present.</small>
+        <div class="row fields"><div><label for="target">Story target (seconds)</label><input id="target" type="number" min="5" max="120" value="60"></div><div><label for="scene-seconds">Preferred scene (seconds)</label><input id="scene-seconds" type="number" min="5" max="15" value="5"></div></div>
+        <label for="context">Shared character, voice and story context</label><textarea id="context" placeholder="Describe each recurring character. Map uploaded images to <Picture 1>, <Picture 2>…"></textarea>
+        <label for="images">Character / scene references (up to 9)</label><input id="images" type="file" accept="image/png,image/jpeg,image/webp" multiple><div id="refs">No references uploaded.</div><button id="clear-refs" type="button">Clear references</button>
+        <div class="row actions"><button id="plan" class="primary" data-job>Build scene plan</button><button id="restore" data-job>Restore saved plan</button></div>
+      </section>
+      <div>
+        <section class="card"><h2>2. Render settings</h2><label for="preset">Generation resolution</label><select id="preset"><option value="768x1344">768 × 1344 — higher detail</option><option value="576x1024">576 × 1024 — lower memory</option></select><label for="fit">Portrait finishing</label><select id="fit"><option value="pad">Preserve full frame (pad)</option><option value="crop">Fill portrait frame (center crop)</option></select><label for="seed">Seed</label><input id="seed" type="number" min="0" value="42" max="9007199254740991"><p class="muted"><small>Final export: 1080 × 1920, 24 fps, H.264/AAC. This resize adds no AI detail. Frame alignment can lengthen scenes. Native voices, identity and lip sync need review.</small></p><div class="row actions"><button id="test" data-job>Render 5s test</button><button id="generate" class="primary" data-job>Generate / resume batch</button></div></section>
+        <section class="card"><div class="row"><h2>Job progress</h2><button id="cancel" class="danger">Cancel active job</button></div><p id="job-status" class="muted">No jobs yet.</p><pre id="job-log">Your worker log appears here. Closing this page does not stop generation.</pre><details><summary>Recent jobs</summary><div id="job-history"></div></details><button id="release" class="danger" data-job>Save &amp; release GPU</button><p><small>Available after a full batch succeeds. Re-verifies exports, syncs Drive and disconnects the runtime. The tunnel then closes.</small></p></section>
+      </div>
+    </div>
+    <section class="card"><h2>3. Review and edit your scene plan</h2><p class="muted">Review dialogue, appearance and framing before rendering. Changes to a plan or render settings create a new recipe; matching completed scenes resume automatically.</p><div id="plans"><p class="muted">Build or restore a plan to begin.</p></div></section>
+    <section class="card"><h2>Scenes &amp; finished episodes</h2><p class="muted">Completed clips stay on Drive. Preview them here or download an MP4.</p><div id="videos" class="video-grid"></div></section>
+  </div>
+</main>
+</body></html>

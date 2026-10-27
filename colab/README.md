@@ -1,5 +1,43 @@
 # MiniMax H3 drama on Google Colab
 
+**Browser dashboard through Cloudflare Tunnel:** use
+[Reels_Natok_Web_Studio.ipynb](Reels_Natok_Web_Studio.ipynb) if you want to do the
+episode work in a web page. Run its setup cells, open the printed HTTPS URL and
+sign in with the printed password. The dashboard handles story/script uploads,
+references, plan review/editing, a test scene, full batch generation/resume,
+worker logs, video preview/download and verified GPU release.
+
+This mode targets paid Colab with a positive compute-unit balance. Google's
+[Colab FAQ](https://research.google.com/colaboratory/faq.html) prohibits primarily
+using an external Web UI on free managed compute. Paid runtimes still have session
+and compute limits. A tunnel stops working when the runtime stops.
+
+Quick Tunnel is the default; no CF account or domain is needed. Its URL changes
+when a new tunnel starts. The dashboard uses polling rather than SSE and protects
+both APIs and videos with a password. Keep the password and notebook output
+private. An optional `REELS_WEB_PASSWORD` Colab Secret sets your own password
+(12+ characters). For a stable hostname, configure a named tunnel with service
+`http://127.0.0.1:7860` and set the Colab Secrets `CLOUDFLARE_TUNNEL_TOKEN` and
+`REELS_PUBLIC_URL` (your HTTPS hostname). Never paste tokens in code or Git.
+See [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+and [named tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
+
+Default browser generation is **768×1344**; the final 1080×1920 export remains an
+FFmpeg resize. This is the episode workflow through a browser, rather than the
+Windows Studio's DLSS/Voice/Face Refine interface. It reuses the same Linux models,
+planning, recipe checkpoints and assembly helpers described below.
+
+Keep the launch cell running. Closing the browser leaves jobs running. Reopen
+the current URL to monitor them. Rerunning the launch cell stops its own old
+dashboard/tunnel and attempts to cancel active owned jobs. After a runtime reset,
+rerun setup and choose **Restore saved plan → Generate / resume batch**. Matching
+completed scenes remain on Drive. **Save & release GPU** is available after a full
+batch succeeds; it verifies exports, stops the services, flushes Drive and releases
+the runtime. Errors leave the runtime assigned for inspection/relaunch.
+
+The original [Reels_Natok_MiniMax_H3.ipynb](Reels_Natok_MiniMax_H3.ipynb) remains
+available for notebook-only operation; the instructions below describe that mode.
+
 Facebook / Instagram Reels output is always **9:16, Full HD 1080×1920 MP4**.
 The default story target is **60 seconds (1 minute)**, with adjustable duration.
 This is the project's starting target, not a claim that one length performs best
@@ -218,7 +256,7 @@ Sources: [Colab FAQ](https://research.google.com/colaboratory/faq.html),
 
 ## Maintaining the notebook
 
-Edit the Python helpers in `tools/`, then regenerate the embedded notebook:
+Edit the Python helpers/browser assets in `tools/`, then regenerate both notebooks:
 
 ```sh
 python3 scripts/build-colab-notebook.py
