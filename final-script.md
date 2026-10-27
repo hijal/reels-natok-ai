@@ -1,8 +1,8 @@
 # Final Script — Common Drama Script Standard
 
 Use this file as the common reference for writing new stories, converting existing scripts,
-and planning future episodes. It combines the character and scene structure from
-`script-format (1).md` with the H3 guidance from `script-format-h3.md`.
+and planning future episodes. It defines the character, scene, dialogue and timing
+conventions for this project's MiniMax H3 workflow.
 
 Default delivery: **English-language drama, MiniMax H3, 9:16, 1080×1920, 24 fps,
 usually a 60- or 120-second episode**. Shorter episodes are also allowed.
@@ -13,25 +13,25 @@ unless the source story specifies one.
 This `.md` file is a format guide. Save each actual drama script as a separate UTF-8 `.txt`
 file whose first line is `DRAMA SCRIPT`. Use the AI conversion prompt and template below.
 
-## 1. What was combined from the two guides
+## 1. Supported production profile
 
-| Topic | Classic guide | H3 guide | This common standard |
-| --- | --- | --- | --- |
-| Structure | Header, characters, rules, scenes, optional shots | Same structure | One consistent section order for every episode |
-| Character continuity | Look, voice, references, variants | Look, voice descriptions, references, variants | Stable IDs and identity descriptions; explicit intentional variants |
-| Video | `still` / `hero` | Generated video for every shot | Omit `CLIP`; each shot is one continuous creative unit |
-| Dialogue/audio | Separate voice, lip sync and sound stages | Native mixed video/audio | English dialogue, voice intent and SFX; no assumed separate audio stems |
-| Timing | Depends on the video model | 4–15s in the source guide | **5–15s per render shot**, matching this project's Colab path |
-| Delivery | Multiple aspects/FPS | 24 fps, 9:16 or 16:9 | **9:16, 1080×1920, 24 fps** for this project profile |
-| On-screen text | `TEXT` / captions | Unavailable | Omit `TEXT`; readable overlays/captions are outside this profile |
-| Music | May use a separate continuous track | Native mixed audio per clip | Creative description, without a seamless recording guarantee |
-| Transition | cut, dissolve, fade | Same creative vocabulary | **cut**, matching current Colab assembly |
-| Voice controls | `VOICE ID` | Unused | `VOICE` and `ACCENT`, without a guaranteed identity/voice lock |
+| Topic | Project convention |
+| --- | --- |
+| Structure | Header, characters, rules and scenes, in that order |
+| Character continuity | Stable IDs, look and voice descriptions, references and intentional variants |
+| Video | One continuous generated shot per scene; omit `CLIP` |
+| Dialogue/audio | Native mixed video/audio; English dialogue, voice intent and SFX |
+| Timing | **5–15s per render shot**, matching the Colab importer |
+| Delivery | **9:16, 1080×1920, 24 fps** |
+| On-screen text | Omit `TEXT`; overlays and captions are outside this profile |
+| Music | Creative description, without a seamless recording guarantee |
+| Transition | **cut**, matching current Colab assembly |
+| Voice controls | `VOICE` and `ACCENT`, without a guaranteed identity/voice lock |
 
-The source guides describe another dashboard's parser, approved keyframes, reviews,
-automatic overlays and audio mastering. This project is not assumed to implement those
-features. This is the project's writing/conversion standard, not a claim of complete
-backward compatibility with that dashboard.
+The current workflow uses model prompts for appearance, action, voices and audio.
+Approved keyframes, separate voice/audio stems, overlays and audio mastering are
+outside this production profile. The importer supports one-shot scenes; it rejects
+multi-shot `SHOT` blocks.
 
 ## 2. Using the format with the current Colab notebook
 
@@ -54,7 +54,7 @@ For the current workflow:
    still uses the single `SCENE_SECONDS` setting. Ordinary stories in `auto-story` still
    use Qwen to create a plan.
 
-This importer supports the one-shot profile, not every grammar feature of the source guides.
+This importer supports the one-shot profile described here.
 Multi-shot `SHOT` blocks are rejected with a clear error. `REF` paths are not automatically
 loaded; upload actual images separately and map their Picture tags manually. Production
 `NOTE` lines are retained as metadata rather than sent to the model. Keyframes, voices,

@@ -103,13 +103,11 @@ Minimax_Studio_V7/
 │
 ├── config/
 │   └── config.ini               ← application configuration (VRAM, LLM, sound)
-├── components.json              ← shadcn/ui configuration
 ├── data/                        ← working data (generated at runtime, not in git)
 │   ├── loras.json               ← LoRA registry (turbo + custom)
 │   └── assistant-chats.json     ← LLM assistant chat history
 ├── scripts/
 │   ├── build.mjs                ← production build with 8 GB Node heap
-│   ├── prune-build.mjs          ← build compression: webpack cache + .nft.json manifests
 │   ├── clean.mjs                ← build artifact and cache cleanup
 │   └── start_comfy.bat          ← ComfyUI backend launcher
 ├── Bonsai_2_27B/                ← portable llama.cpp + ternary Bonsai 2 27B model

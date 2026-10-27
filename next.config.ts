@@ -13,9 +13,8 @@ const nextConfig: NextConfig = {
   // NOTE: On Windows this option does NOT work — Next joins the pattern with
   // project root via path.join, yielding backslashes, which picomatch
   // interprets as escape characters (verified on Next 16.1.1).
-  // Actual build pruning is handled by scripts/prune-build.mjs — it trims
-  // generated .nft.json manifests after build. Option remains for
-  // POSIX builds where path.join produces forward slashes.
+  // These exclusions remain useful on POSIX builds, where path.join
+  // produces forward slashes. Bundled runtimes stay separate from the web build.
   outputFileTracingExcludes: {
     '*': [
       'ComfyUI-Easy-Install/**',
