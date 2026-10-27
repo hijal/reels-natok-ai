@@ -27,6 +27,9 @@ def atomic_json(path, data):
 
 def plan_script(text, title="Episode", duration=5, context=""):
     """Each paragraph / --- block is a scene; this is not an LLM screenplay rewrite."""
+    from drama_script import is_drama_script, parse_drama_script
+    if is_drama_script(text):
+        return parse_drama_script(text, context=context)
     if not isinstance(text, str) or not text.strip():
         raise ValueError("Script is empty")
     if len(text.encode()) > 2 * 1024 * 1024:

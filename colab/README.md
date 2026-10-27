@@ -18,15 +18,23 @@ local Qwen text planner adapts unstructured stories before MiniMax generation.
 2. Cells 1–6 চালিয়ে tools, Drive, backend ও models প্রস্তুত করো। Model download
    কয়েক দশক GB; প্রথম setup-এ সময় লাগবে। Model access চাইলে Colab Secrets-এ
    `HF_TOKEN` রাখো; token notebook বা Git-এ লিখবে না।
-3. Cell 7-এ `auto-story` mode নিয়ে গল্প/স্ক্রিপ্ট `.txt` upload করো এবং target
-   duration 60/120 seconds দাও। Local text planner scene plan তৈরি করবে। এক
-   `.txt` = এক episode; একাধিক `.txt` = series। আগে থেকে scene অনুযায়ী script
-   থাকলে `scene-paragraphs` নাও—এক paragraph = এক scene, planner download লাগে না।
+3. Cell 7-এ `auto-story` mode রাখো। `LOGLINE`-এ ছোট English idea paste করো,
+   `EPISODE_TITLE` দাও, target duration 60/120 seconds রাখো। Scene বা dialogue
+   নিজে লিখতে হবে না। [The Last Slice logline](the-last-slice-s01e01.logline.txt)
+   সরাসরি paste করতে পারো। Local text planner scene plan তৈরি করবে।
+   File দিয়ে করতে চাইলে `LOGLINE` খালি রেখে গল্প/স্ক্রিপ্ট `.txt` upload করো। এক
+   `.txt` = এক episode; একাধিক `.txt` = series। `DRAMA SCRIPT` দিয়ে শুরু হওয়া
+   one-shot structured scripts নিজে detect হবে—Qwen download/rewriting লাগে না।
+   Plain prompt paragraphs হলে `scene-paragraphs` নাও—এক paragraph = এক scene।
    [এক মিনিটের example](drama.example.txt) দেওয়া আছে।
-4. একইসঙ্গে character reference images upload করা যাবে। Shared context-এ
+4. Logline-এর সঙ্গে reference images দিতে `UPLOAD_FILES` চালু করো। একাধিক
+   episode-এর `.txt`-ও upload করা যাবে; logline দেওয়া থাকলে সেটি একটি অতিরিক্ত
+   episode হিসেবে গণ্য হবে। Shared context-এ
    `<Picture 1>`, `<Picture 2>` কার ছবি তা লেখো; notebook reference order দেখায়।
 5. Cell 8-এ প্রথমে একটি 5-second scene দেখো। পছন্দ হলে cell 9 চালাও—সব scene
-   শেষ হলে episode নিজে assemble হবে। Cell 10-এ preview/download করা যাবে।
+   শেষ হলে episode নিজে assemble হবে। Cell 9-এর `AUTO_DISCONNECT = True`
+   default: সব episode যাচাই ও Drive sync হওয়ার পরে runtime/GPU release করবে।
+   ভিডিও Drive থেকে দেখো। Cell 10-এ preview চাইলে checkbox বন্ধ রাখো।
 
 Outputs: `MyDrive/reels-natok-ai/episodes/<episode-name>-<recipe-hash>/`.
 Each folder keeps the scene clips, prompt IDs, recipe, assembly manifest and final
@@ -46,6 +54,37 @@ per paragraph and concise quoted dialogue. Review auto-generated plans before
 video inference: adaptation may alter details. Reference images and shared context
 help continuity; identical identity/voice and exact English speech are not
 guaranteed. Inspect the smoke test before generating an episode.
+
+Structured `DRAMA SCRIPT` files are detected in either mode. The one-shot importer
+keeps supplied scene durations, dialogue, cast descriptions, variants, action/sound
+cues and the source title. Invalid input produces a line-numbered error rather
+than an LLM rewrite. Multi-shot `SHOT` blocks are currently rejected; use separate
+SCENE blocks. REF paths require manual image upload/mapping. Native model timing,
+identity and lip-sync fidelity still require the live smoke test.
+
+## Repair an existing Colab session after a planner error
+
+Do not disconnect the runtime or repeat model setup just for this repair.
+In the notebook that already has the script uploaded, add a code cell:
+
+```python
+from google.colab import files
+repair_files = files.upload()  # Select colab/repair-script-upload.py from this project.
+exec(compile(repair_files['repair-script-upload.py'], 'repair-script-upload.py', 'exec'), globals())
+```
+
+The self-contained [repair file](repair-script-upload.py) updates notebook helpers
+and imports the previously uploaded structured script. It restores `scripts` and
+`last-plan.json` without a Qwen call, GPU allocation or model download. Continue
+with the existing scene test (cell 8) and full generation (cell 9). If the session
+has no uploaded script, rerun the upload cell after the helper update instead.
+
+For ordinary stories that still use Qwen, child output is streamed to the notebook
+and saved at `WORKSPACE/planner/<request-hash>/planner.log`. A failed planner now
+raises an error with that path and the actual traceback tail, instead of only a
+generic `CalledProcessError`. The wrapper traceback alone cannot establish whether
+the underlying failure was a dependency issue, download error, disk pressure or GPU
+memory issue.
 
 ## Generation and resume
 
@@ -72,6 +111,12 @@ non-English scene results for new English requests.
   scripts, recipes and exports remain on Drive.
 - Runtime `/content` is temporary. Models remain there because they exceed a
   typical free Drive quota. Models may need downloading after runtime reset.
+- Automatic shutdown runs only after the entire uploaded batch finishes. It checks
+  final exports and scene checkpoints, saves `last-results.json`, then flushes and
+  unmounts Drive before calling Colab's `runtime.unassign()`. Generation, validation
+  or sync failures skip shutdown; the test scene never triggers it. The browser tab
+  stays open. Use the updated notebook's cell 9 for this behavior; updating helpers
+  alone does not change an older notebook's generation cell.
 - Stopping the notebook monitoring cell leaves the backend job running. Use the
   optional interrupt cell to request cancellation. Completed scene files remain.
 

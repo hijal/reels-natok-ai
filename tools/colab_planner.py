@@ -6,10 +6,43 @@ import re
 import shutil
 import subprocess
 import sys
+from collections import deque
 
 from colab_drama import atomic_json, digest
 
 PLANNER_REPO = "Qwen/Qwen2.5-7B-Instruct"
+
+
+def run_planner(command, log_path):
+    """Show child output in the notebook and retain the real failure traceback."""
+    log_path = Path(log_path)
+    tail = deque(maxlen=100)
+    with log_path.open("w", encoding="utf-8") as log:
+        try:
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, encoding="utf-8", errors="replace", bufsize=1)
+        except OSError as exc:
+            raise RuntimeError(f"Could not start planner: {exc}. Check runtime setup (cell 4). Log: {log_path}") from exc
+        try:
+            for line in proc.stdout:
+                print(line, end="", flush=True)
+                log.write(line)
+                log.flush()
+                tail.append(line)
+            code = proc.wait()
+        except BaseException:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            raise
+        finally:
+            proc.stdout.close()
+    if code:
+        details = "".join(tail)[-5000:]
+        raise RuntimeError(f"Story planner exited with code {code}. Full log: {log_path}\n\n{details or 'No child-process output was produced.'}")
 
 
 def scene_schedule(target_seconds, scene_seconds):
@@ -42,6 +75,10 @@ def decode_plan(raw, title, context, target_seconds, scene_seconds):
 
 
 def plan_story(text, title, context, target_seconds, scene_seconds, runtime_root, workspace):
+    from drama_script import is_drama_script, parse_drama_script
+    if is_drama_script(text):
+        print("Detected DRAMA SCRIPT: importing supplied scenes without Qwen or a model download.", flush=True)
+        return parse_drama_script(text, context=context)
     scene_schedule(target_seconds, scene_seconds)
     if not text.strip() or len(text) > 16000:
         raise ValueError("Auto planning needs a nonempty story under 16,000 characters. Split longer stories into episodes.")
@@ -55,7 +92,9 @@ def plan_story(text, title, context, target_seconds, scene_seconds, runtime_root
         return json.loads(result.read_text(encoding="utf-8"))
     request_file = folder / "request.json"
     atomic_json(request_file, request)
-    subprocess.run([str(Path(runtime_root) / "venv/bin/python"), __file__, str(request_file)], check=True)
+    run_planner([str(Path(runtime_root) / "venv/bin/python"), "-u", __file__, str(request_file)], folder / "planner.log")
+    if not result.exists():
+        raise RuntimeError(f"Planner exited without producing plan.json. Inspect {folder / 'planner.log'}")
     return json.loads(result.read_text(encoding="utf-8"))
 
 

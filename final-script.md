@@ -35,26 +35,31 @@ backward compatibility with that dashboard.
 
 ## 2. Using the format with the current Colab notebook
 
-`plan_script()` in `tools/colab_drama.py` splits paragraphs; it does not parse the structured
-`DRAMA SCRIPT` grammar. `auto-story` can adapt a story, but does not guarantee preservation
-of these fields, exact dialogue, shot boundaries or timing. **Creating this guide does not
-add strict structured-format support to Colab.**
+The notebook detects a file whose first line is `DRAMA SCRIPT` and imports supported
+one-shot scenes directly, even when `auto-story` is selected. It bypasses Qwen and keeps
+supplied dialogue, per-scene durations, cast identities, appearance variants and beat cues.
+The source title is retained. `SCENE_SECONDS` and `TARGET_SECONDS` do not overwrite a
+structured script's own timing.
 
 For the current workflow:
 
 1. Keep a master script following this standard.
-2. For `scene-paragraphs` mode, export each render shot as one self-contained English prompt
-   paragraph. Include character look/voice, location, framing, action and exact English
-   dialogue. Resolve each `@id` to its description. Do not upload the structured master
-   directly to that mode.
+2. Upload the structured `.txt` directly for one-shot scenes. The importer validates scene
+   numbering, runtime sums, IDs, speakers and beat bounds, then creates model prompts with
+   resolved names, identity descriptions and applicable variants. Invalid scripts stop with
+   an error instead of silently falling back to an LLM rewrite.
 3. Supply shared character context and reference images separately. Match `<Picture 1>`,
    `<Picture 2>` and subsequent tags to the notebook's reference upload order.
-4. Paragraph mode takes every scene's duration from the single `SCENE_SECONDS` setting.
-   Use equal-length render shots in that mode.
+4. For ordinary prompt paragraphs without the `DRAMA SCRIPT` marker, `scene-paragraphs`
+   still uses the single `SCENE_SECONDS` setting. Ordinary stories in `auto-story` still
+   use Qwen to create a plan.
 
-Deterministic interpretation of `AT`, `CAST`, `RULE`, `VARIANT`, `REF`, `KEYFRAME`, `LIPSYNC`,
-timed beats, multi-shot scenes and individual scene durations requires a structured importer.
-Those fields express creative intent; this document does not implement an importer.
+This importer supports the one-shot profile, not every grammar feature of the source guides.
+Multi-shot `SHOT` blocks are rejected with a clear error. `REF` paths are not automatically
+loaded; upload actual images separately and map their Picture tags manually. Production
+`NOTE` lines are retained as metadata rather than sent to the model. Keyframes, voices,
+music, lip sync and timing remain prompt guidance, not guaranteed frame-accurate execution
+or separate post-production steps.
 
 ## 3. Format and file rules
 
@@ -253,7 +258,9 @@ when totaling runtime. Shot sizes: `establishing`, `wide`, `medium`, `two-shot`,
 
 Shot fields: `LIPSYNC`, `VISUAL`, `KEYFRAME`, `CAMERA`, `FRAME`, `LIGHT`, then beats. Lighting
 may inherit from the scene; give each shot its own `VISUAL`, `CAMERA`, `FRAME` and `LIPSYNC`.
-The current paragraph importer does not understand this advanced structure directly.
+The current structured importer rejects this advanced multi-shot structure. To use it now,
+convert each shot to a separate SCENE, carry its location/cast into that scene, renumber
+scenes and update affected variant ranges. No automatic flattening is implemented.
 
 ## 8. Dialogue, action and sound
 
@@ -687,4 +694,5 @@ SCENE 12 | 5s | The Promise
 - [ ] No false promises of exact render duration, native Full HD, voice locking or unsupported features.
 
 Original reference documents are preserved. Use this file as the common writing/conversion
-standard. Implementing a strict structured importer is a separate code change.
+standard. The Colab importer supports one-shot scripts; multi-shot import and automatic
+reference-path resolution remain outside its supported subset.

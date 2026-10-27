@@ -152,7 +152,7 @@ class NotebookTest(unittest.TestCase):
             for source in code_cells:
                 if source.startswith("#@title Install helper:"):
                     exec(compile(source, "helper-cell", "exec"), {"TOOLS": Path(tmp)})
-            for name in ("assemble_episode.py", "colab_runtime.py", "colab_drama.py", "colab_planner.py"):
+            for name in ("assemble_episode.py", "colab_runtime.py", "colab_drama.py", "colab_planner.py", "drama_script.py", "colab_finish.py"):
                 self.assertEqual((Path(tmp) / name).read_text(), (root / "tools" / name).read_text())
 
 

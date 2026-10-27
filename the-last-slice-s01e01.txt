@@ -1,0 +1,227 @@
+DRAMA SCRIPT
+
+TITLE: The Last Slice — S01E01
+LOGLINE: A cat, a dog, a raccoon and a tortoise battle over the last pizza slice, until the slowest diner wins the best part.
+GENRE: Animal slapstick comedy
+LANGUAGE: English
+ASPECT: 9:16
+RESOLUTION: 1080x1920
+FPS: 24
+RUNTIME: 60s
+STYLE: expressive cinematic 3D animation, tactile fur and shells, playful restrained slapstick
+SETTING: A sunny garden picnic table during one continuous lunchtime.
+STYLE PROMPT: warm daylight, clear animal silhouettes, readable facial comedy, shallow depth of field
+SPEECH RATE: 2.5
+
+== CHARACTERS ==
+
+CHARACTER @cleo | Cleo | animal
+  ROLE: Cat who considers every unattended meal her property
+  LOOK: small upright orange tabby cat, cream muzzle and paws, green eyes, triangular ears, long striped tail, no clothing
+  PERSONALITY: dramatic, possessive, easily offended
+  VOICE: adult female impression, crisp medium-high pitch, dry precise delivery
+  ACCENT: neutral British English
+
+CHARACTER @biscuit | Biscuit | animal
+  ROLE: Dog determined to eat the last slice
+  LOOK: stocky upright golden puppy, floppy ears, round brown eyes, broad cream muzzle, short wagging tail, no clothing
+  PERSONALITY: enthusiastic, literal-minded, shamelessly hungry
+  VOICE: young adult male impression, warm medium pitch, eager slightly breathless delivery
+  ACCENT: neutral American English
+
+CHARACTER @bandit | Bandit | animal
+  ROLE: Raccoon trying to steal lunch under the pretence of fairness
+  LOOK: slim upright grey raccoon, black eye mask, pointed muzzle, amber eyes, black paws, ringed tail, no clothing
+  PERSONALITY: crafty, theatrical, confidently dishonest
+  VOICE: adult male impression, smooth mid-low pitch, brisk salesman's delivery
+  ACCENT: neutral American English
+
+CHARACTER @moss | Moss | animal
+  ROLE: Patient tortoise waiting for everyone else's greed to do the work
+  LOOK: small upright olive-green tortoise, domed brown shell with hexagonal plates, round dark eyes, short limbs, no clothing
+  PERSONALITY: observant, unhurried, quietly opportunistic
+  VOICE: older male impression, mellow low pitch, measured deadpan delivery
+  ACCENT: neutral British English
+
+PROP @pizza | Last pizza slice
+  LOOK: one oversized triangular cheese pizza slice with a thick golden crust and one broad stretchy layer of melted cheese
+  RULE: The crust and triangular bread base remain attached to each other in every state.
+  VARIANT bare | scenes 11-12 | The same triangular bread base and golden crust, with the cheese topping completely absent.
+
+PROP @cheese | Single cheese layer
+  LOOK: one broad glossy golden sheet of melted cheese, thin and stretchy, matching the triangular pizza base
+  RULE: The cheese is one continuous sheet, including its stretched strands.
+  VARIANT detached | scenes 11-12 | The same single cheese sheet folded into a soft bundle, separate from the bread and held in Moss's forefeet.
+
+PROP @plate | Picnic plate
+  LOOK: one round plain blue plate, wide enough for the pizza slice
+
+LOCATION @table | Garden picnic table
+  LOOK: low square wooden picnic table on grass, hedge behind it, no other animals or people; Cleo at the left, Biscuit at the rear, Bandit at the right, Moss at the front
+  LIGHT: soft warm midday sunlight
+
+== RULES ==
+
+RULE: All four animals keep the same appearance, size, voice and position around the table throughout.
+RULE: @plate stays at the centre of the table; the point of @pizza faces Moss and its wide crust faces Biscuit.
+RULE: @cheese identifies the single topping layer belonging to @pizza; all visible cheese belongs to that same sheet.
+RULE: Grip positions along the crust are Cleo at the left end, Biscuit at the centre and Bandit at the right end; Moss keeps his forefeet clear of the bread and crust.
+NOTE: The animals use expressive forepaws and speak with animated mouth movement. Keep the competition harmless and the physical action easy to read.
+NOTE: Allow a brief reaction after each joke; no narration, captions or readable text.
+
+== SCENES ==
+
+SCENE 1 | 5s | Four Diners, One Slice
+  AT: @table
+  CAST: @cleo, @biscuit, @bandit, @moss
+  LIPSYNC: required
+  MOOD: suspicious hunger
+  VISUAL: @cleo plants one paw on the table beside @plate while @biscuit, @bandit and @moss stare at the untouched @pizza.
+  KEYFRAME: @cleo, @biscuit, @bandit and @moss stand around the table; @cheese covers @pizza on @plate; @cleo holds one paw just above the tabletop.
+  CAMERA: Static wide shot angled slightly down.
+  FRAME: @cleo left, @biscuit rear centre, @bandit right, @moss front in profile; @pizza centred
+  MUSIC: stop
+  TRANSITION: cut
+  @cleo (firmly): "One slice. Obviously, it's mine." | at: 0.5s
+  ACTION: @cleo plants her paw beside @plate. | at: 1s
+  SFX: A small paw taps wood. | at: 1s | length: 0.5s
+
+SCENE 2 | 5s | Legal Ownership
+  AT: @table
+  CAST: @biscuit
+  LIPSYNC: required
+  MOOD: absurd confidence
+  VISUAL: @biscuit proudly raises his chin, keeping his paws away from @pizza.
+  KEYFRAME: @biscuit stands behind the table, chin level and forepaws against its edge.
+  CAMERA: Static medium close-up.
+  FRAME: @biscuit centred; @pizza at the bottom of frame
+  TRANSITION: cut
+  @biscuit (proudly): "I sniffed it first. That's legally binding." | at: 0.5s
+
+SCENE 3 | 5s | The Referee
+  AT: @table
+  CAST: @bandit
+  LIPSYNC: required
+  MOOD: false authority
+  VISUAL: @bandit raises one open paw like a judge taking an oath.
+  KEYFRAME: @bandit faces left, both paws held near his chest.
+  CAMERA: Static medium close-up.
+  FRAME: @bandit centred; @plate lower left
+  TRANSITION: cut
+  @bandit (smoothly): "I'll settle this. Hand me the evidence." | at: 0.5s
+
+SCENE 4 | 5s | The Quiet Request
+  AT: @table
+  CAST: @moss
+  LIPSYNC: required
+  MOOD: calm amid greed
+  VISUAL: @moss looks at @cheese hanging slightly beyond the pointed end of @pizza.
+  KEYFRAME: @moss stands at the near edge, eyes directed at the unbroken @cheese layer on @pizza; both forefeet rest on the table edge.
+  CAMERA: Static medium close-up from table height.
+  FRAME: @moss in three-quarter profile; @cheese covering the point of @pizza in the foreground
+  TRANSITION: cut
+  @moss (mildly): "Does anyone actually want the crust?" | at: 0.5s
+
+SCENE 5 | 5s | First Claim
+  AT: @table
+  CAST: @cleo
+  LIPSYNC: required
+  MOOD: possessive determination
+  VISUAL: @cleo curls her right paw around the left end of the pizza crust without lifting it.
+  KEYFRAME: @cleo's right paw hovers just beside the left end of @pizza; @pizza lies on @plate.
+  CAMERA: Static medium shot.
+  FRAME: @cleo left; her paw and the left crust end lower centre
+  TRANSITION: cut
+  @cleo (sweetly): "Touch my lunch. Lose your paw privileges." | at: 0.5s
+  ACTION: @cleo grips the left crust end. | at: 1s
+
+SCENE 6 | 5s | Counterclaim
+  AT: @table
+  CAST: @biscuit, @cleo (glimpsed)
+  LIPSYNC: required
+  MOOD: cheerful defiance
+  VISUAL: @biscuit closes one forepaw around the centre of the crust beside @cleo's paw.
+  KEYFRAME: @biscuit holds his forepaw just above the crust centre; @cleo's paw grips its left end; @pizza remains on @plate.
+  CAMERA: Static medium shot.
+  FRAME: @biscuit centred; @cleo's paw visible lower left; crust along the lower frame
+  TRANSITION: cut
+  @biscuit (brightly): "Good thing I've still got three spares." | at: 0.5s
+  ACTION: @biscuit grips the centre crust. | at: 1s
+
+SCENE 7 | 5s | Impartial Theft
+  AT: @table
+  CAST: @bandit, @cleo (glimpsed), @biscuit (glimpsed)
+  LIPSYNC: required
+  MOOD: shameless scheming
+  VISUAL: @bandit grips the right crust end with one black paw.
+  KEYFRAME: @bandit's paw hovers above the right crust end; @cleo and @biscuit already grip the left and centre; @pizza rests on @plate.
+  CAMERA: Static medium shot.
+  FRAME: @bandit right; all three gripping positions visible across the bottom
+  TRANSITION: cut
+  @bandit (solemnly): "As referee, I must confiscate lunch." | at: 0.5s
+  ACTION: @bandit grips the right crust end. | at: 1s
+
+SCENE 8 | 5s | Tug of Lunch
+  AT: @table
+  CAST: @cleo, @biscuit, @bandit, @moss
+  LIPSYNC: none
+  MOOD: ridiculous rivalry
+  VISUAL: @cleo, @biscuit and @bandit slowly lift and pull @pizza by its crust; @cheese stretches into one downward-hanging sheet from the raised bread while @moss watches.
+  KEYFRAME: @cleo grips the left crust end, @biscuit the centre and @bandit the right end of @pizza resting on @plate; @cheese covers the bread as one intact layer; @moss watches from the front edge with empty forefeet.
+  CAMERA: Static wide shot angled slightly down.
+  FRAME: @cleo left, @biscuit rear, @bandit right, @moss front in profile; @pizza and @cheese centred; @plate directly below
+  TRANSITION: cut
+  ACTION: @cleo, @biscuit and @bandit raise @pizza several inches above @plate and lean outward in a deadlock; @cheese stretches downward while remaining attached to the bread. | at: 0.5s
+  SFX: Comical strained grunts from the three rivals. | at: 1s | length: 3s
+
+SCENE 9 | 5s | Positioning
+  AT: @table
+  CAST: @moss
+  LIPSYNC: required
+  MOOD: patient anticipation
+  VISUAL: @moss cups both forefeet directly beneath the dangling @cheese without touching it.
+  KEYFRAME: @moss watches @cheese dangling from the raised tip of @pizza, still connected to the bread; his forefeet rest on the table edge, and the crust holders stay outside the crop.
+  CAMERA: Static close-up at table height.
+  FRAME: @moss in profile; the tip of @pizza at the upper edge; @cheese above his empty forefeet; @plate below; the other diners off camera
+  TRANSITION: cut
+  @moss (quietly): "Take your time. I'm very good at waiting." | at: 0.5s
+  ACTION: @moss raises his empty cupped forefeet beneath @cheese, leaving a small gap. | at: 1s
+
+SCENE 10 | 5s | Cheese Liberation
+  AT: @table
+  CAST: @cleo, @biscuit, @bandit, @moss
+  LIPSYNC: none
+  MOOD: slapstick surprise
+  VISUAL: The single @cheese sheet slips off @pizza and folds into @moss's cupped forefeet; @cleo, @biscuit and @bandit freeze with their original grips on the now-bare bread and crust.
+  KEYFRAME: @cleo grips the left crust end, @biscuit the centre and @bandit the right end of @pizza above @plate; @cheese hangs from the bread by one thin strand over @moss's empty cupped forefeet.
+  CAMERA: Static medium wide shot angled slightly down.
+  FRAME: @cleo upper left, @biscuit upper centre, @bandit upper right; @moss lower centre in profile; @pizza above @plate; the single @cheese strand clearly visible
+  TRANSITION: cut
+  ACTION: The last strand of @cheese parts from @pizza; the same sheet folds into @moss's forefeet while @cleo, @biscuit and @bandit retain their crust grips. | at: 1s
+  SFX: A soft stretchy pop followed by a wet plop. | at: 1s | length: 1s
+
+SCENE 11 | 5s | The Prize
+  AT: @table
+  CAST: @cleo, @biscuit, @bandit
+  LIPSYNC: required
+  MOOD: offended disbelief
+  VISUAL: @cleo stares at the bare @pizza while @biscuit and @bandit stare at her; all three retain their crust grips, and Moss with the detached cheese stays off camera.
+  KEYFRAME: @cleo, @biscuit and @bandit hold the bare @pizza above @plate with stunned expressions.
+  CAMERA: Static medium three-shot.
+  FRAME: @cleo left, @biscuit centre rear, @bandit right; bare @pizza centred below their faces
+  TRANSITION: cut
+  @cleo (appalled): "We fought over a bread triangle?" | at: 0.5s
+
+SCENE 12 | 5s | The Handle
+  AT: @table
+  CAST: @moss
+  LIPSYNC: required
+  MOOD: triumphant deadpan
+  VISUAL: @moss addresses the others off camera, then takes a tiny satisfied bite from @cheese folded in his forefeet; the untouched bread and its holders remain off camera.
+  KEYFRAME: @moss holds the single detached @cheese bundle below his chin, with no bite missing, mouth closed and eyes serenely pleased.
+  CAMERA: Static close-up.
+  FRAME: @moss centred; the single folded @cheese bundle fully visible in his forefeet
+  TRANSITION: cut
+  @moss (helpfully): "You can keep the handle." | at: 0.5s
+  ACTION: @moss takes one tiny bite from @cheese and closes his eyes contentedly; the remainder stays in his forefeet. | at: 3s
+  SFX: A soft satisfied munch. | at: 3s | length: 0.5s
