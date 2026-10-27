@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * ConsoleDialog — панель «Консоль» (правка 567): весь вывод реальной консоли
- * приложения внутри UI: логи server.js, ComfyUI и самого Electron-процесса.
+ * ConsoleDialog — "Console" panel (edit 567): all real console output
+ * of the application inside the UI: server.js, ComfyUI, and the Electron process itself.
  *
- * Источник — кольцевой буфер главного процесса (electron/main.js, захват
- * через pipe) → preload window.h3desktop.console: полный текст по запросу +
- * живые дополнения (батч 400 мс). Реальная консоль start.bat при этом
- * продолжает получать всё то же самое.
+ * Source — circular buffer in the main process (electron/main.js, captured
+ * via pipe) → preload window.h3desktop.console: full text on request +
+ * live appends (400ms batch). The physical console from start.bat
+ * continues to receive everything as well.
  *
- * Кнопки: «Скопировать всё» (буфер обмена) и «Сохранить в файл» (нативный
- * диалог выбора места; в браузерном фолбэке — скачивание .txt).
- * В браузерном режиме (без Electron) консоль недоступна — честная заглушка.
+ * Buttons: "Copy all" (clipboard) and "Save to file" (native
+ * save file dialog; in browser fallback — download .txt).
+ * In browser mode (without Electron), console is unavailable — informative placeholder.
  */
 import { useEffect, useRef, useState } from 'react'
 import { CopyIcon, SaveIcon, Loader2Icon } from 'lucide-react'
@@ -45,17 +45,17 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     void api.get().then((t) => { if (alive) setText(t) })
     const off = api.onAppend((ops) => {
       setText((prev) => {
-        // (правка 588) Применяем операции батча по порядку — та же семантика,
-        // что у кольцевого буфера в main-процессе: 'a' — дописать, 'r' —
-        // записать с начала последней строки (перезапись \r, как в консоли:
-        // старый хвост длиннее — остаётся видимым, tqdm добивает пробелами).
+        // (edit 588) Apply batch operations in order — same semantics
+        // as the ring buffer in the main process: 'a' — append, 'r' —
+        // overwrite from start of last line (\r overwrite, as in console:
+        // older longer tail remains visible, tqdm pads with spaces).
         let next = prev
         for (const [op, text] of ops) {
           if (op === 'r') {
             const nl = next.lastIndexOf('\n')
             const oldLine = next.slice(nl + 1)
-            // Хвост старой строки затираем пробелами (как clear-to-line-end):
-            // короткая новая строка не оставляет «призраки» прошлой.
+            // Overwrite tail of old line with spaces (like clear-to-line-end):
+            // a shorter new line does not leave ghost characters of the previous line.
             const pad = oldLine.length > text.length ? ' '.repeat(oldLine.length - text.length) : ''
             next = next.slice(0, nl + 1) + text + pad
           } else {
@@ -68,7 +68,7 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     return () => { alive = false; off() }
   }, [open])
 
-  // Автоскролл к хвосту, пока пользователь у низа (как лента ассистента).
+  // Auto-scroll to tail while user is at the bottom (like assistant stream).
   useEffect(() => {
     const el = preRef.current
     if (el && stickRef.current) el.scrollTop = el.scrollHeight
@@ -80,9 +80,9 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (!text) return
     try {
       await navigator.clipboard.writeText(text)
-      toast.success(`Скопировано: ${lineCount} строк лога`)
+      toast.success(`Copied: ${lineCount} log lines`)
     } catch {
-      toast.error('Не удалось скопировать в буфер обмена')
+      toast.error('Failed to copy to clipboard')
     }
   }
 
@@ -93,11 +93,11 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       const api = window.h3desktop?.console
       if (api) {
         const r = await api.save(text)
-        if (r.ok) toast.success(`Лог сохранён: ${r.path}`)
-        else if (!r.canceled) toast.error(r.error || 'Не удалось сохранить файл')
+        if (r.ok) toast.success(`Log saved: ${r.path}`)
+        else if (!r.canceled) toast.error(r.error || 'Failed to save file')
       } else {
-        // Браузерный фолбэк — скачать .txt (консоль там недоступна, но на
-        // случай будущих источников оставляем рабочий путь).
+        // Browser fallback — download .txt (console is not available there,
+        // but kept as working path for potential future sources).
         const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -113,19 +113,19 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* (правка 568/570) Ширина: ОБЯЗАТЕЛЬНО sm:max-w — базовый DialogContent
-          тащит sm:max-w-lg (512px), который перебивает max-w без sm:-префикса
-          (разные варианты для tailwind-merge) — из-за этого окно было узким.
-          Паттерн как у диалога настроек: w + max-w + sm:max-w. */}
+      {/* (edit 568/570) Width: MUST use sm:max-w — base DialogContent
+          brings sm:max-w-lg (512px) which overrides max-w without sm: prefix
+          (different variants in tailwind-merge) — caused window to be narrow.
+          Pattern matches settings dialog: w + max-w + sm:max-w. */}
       <DialogContent
         className="w-[95vw] max-w-[95vw] sm:max-w-[1200px] h-[82vh] flex flex-col p-0 gap-0 overflow-hidden"
       >
         <DialogHeader className="shrink-0 flex-row items-center justify-between gap-3 border-b border-border px-4 py-2 pr-12 text-left">
           <div className="flex min-w-0 flex-1 items-baseline gap-3">
-            <DialogTitle className="shrink-0 text-base font-semibold">Консоль</DialogTitle>
+            <DialogTitle className="shrink-0 text-base font-semibold">Console</DialogTitle>
             <DialogDescription className="min-w-0 truncate text-xs">
-              Весь вывод приложения: веб-сервер, ComfyUI и процесс окна
-              {lineCount > 0 && ` · ${lineCount.toLocaleString('ru-RU')} строк`}
+              All application output: web server, ComfyUI, and window process
+              {lineCount > 0 && ` · ${lineCount.toLocaleString('en-US')} lines`}
             </DialogDescription>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -137,7 +137,7 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               className="gap-1.5 text-xs"
             >
               <CopyIcon className="w-3.5 h-3.5" />
-              Скопировать всё
+              Copy all
             </Button>
             <Button
               variant="outline"
@@ -147,7 +147,7 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               className="gap-1.5 text-xs"
             >
               {saving ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <SaveIcon className="w-3.5 h-3.5" />}
-              Сохранить в файл…
+              Save to file…
             </Button>
           </div>
         </DialogHeader>
@@ -156,10 +156,10 @@ export function ConsoleDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="max-w-md text-center space-y-2">
               <p className="text-sm text-muted-foreground">
-                Консоль доступна в оконном режиме приложения (Electron).
+                Console is available in desktop window mode (Electron).
               </p>
               <p className="text-xs text-muted-foreground/70">
-                В браузерном фолбэке логи смотрите в консоли запуска (start.bat).
+                In browser mode, view logs in the launch console (start.bat).
               </p>
             </div>
           </div>

@@ -18,8 +18,8 @@ import { persist } from 'zustand/middleware'
 
 export type GenPhase = 'idle' | 'submitting' | 'queued' | 'running' | 'done' | 'error'
 
-/** (правка 696) Тип stageKind, зафиксированный на момент старта генерации.
- *  Соответствует пропсу stageKind в generation-status.tsx. */
+/** (fix 696) The stageKind type fixed at generation start time.
+ *  Corresponds to the stageKind prop in generation-status.tsx. */
 export type GenStageKind = 'passes' | 'clips' | 'clips2' | 'chunks' | 'single' | 'tile' | 'controlnet'
 
 export interface GenerationState {
@@ -36,9 +36,9 @@ export interface GenerationState {
   startedAt: number | null
   /** Status message from the backend. */
   statusMessage: string | null
-  /** (правка 696) Зафиксированный на момент старта генерации stageKind.
-      Не меняется при переключении «Драфт/Полное» во время генерации —
-      шаблон подписи остаётся тем, что был на момент отправки. */
+  /** (fix 696) The stageKind fixed at generation start time.
+      Does not change when toggling "Draft/Full" during generation —
+      caption template remains what it was at submission time. */
   frozenStageKind?: GenStageKind
 }
 
@@ -59,15 +59,15 @@ const IDLE_STATE: GenerationState = {
 interface GenStore {
   video: GenerationState
 
-  /** (правка 696) Зафиксировать stageKind на момент старта генерации.
-      Вызывается вкладкой до/после отправки, чтобы подпись прогресса не
-      менялась при переключении «Драфт/Полное» во время генерации. */
+  /** (fix 696) Fix stageKind at generation start time.
+      Called by the tab before/after submit so progress caption does not
+      change when toggling "Draft/Full" during generation. */
   setVideoFrozenStageKind: (kind: GenStageKind | undefined) => void
   setVideoPhase: (phase: GenPhase) => void
-  /** Новая отправка задачи: карточка немедленно показывает «Отправка…»,
-   *  БЕЗ остатков прошлой задачи (её promptId/прогресс/таймер). Если
-   *  карточка уже следит за АКТИВНОЙ (queued/running) задачей — не трогаем
-   *  её: параллельная отправка не должна красть карточку у исполняемой. */
+  /** New task submission: card immediately shows "Submitting...",
+   *  WITHOUT leftovers from previous task (its promptId/progress/timer). If
+   *  the card is already tracking an ACTIVE (queued/running) task — leave it
+   *  alone: parallel submission must not steal the card from running job. */
   beginVideoSubmit: () => void
   setVideoError: (error: string | null) => void
   setVideoPromptId: (id: string | null) => void
@@ -78,7 +78,7 @@ interface GenStore {
    *  Without `force`, an already-tracked ACTIVE prompt is kept — a newly
    *  submitted job must not steal the card (previews are keyed to the
    *  EXECUTING prompt, so a card tracking a merely-queued prompt would show
-   *  "Ожидание preview…" forever). pollUntilDone passes force=true when its
+   *  "Waiting for preview..." forever). pollUntilDone passes force=true when its
    *  prompt actually starts running. */
   startVideoGen: (promptId: string, force?: boolean) => void
   resetVideoGen: () => void
@@ -91,7 +91,7 @@ export const useGenProgress = create<GenStore>()(
 
   // ──── Video Gen ────
 
-  // (правка 696) Явный фикс stageKind — не сбрасывается на 'running'.
+  // (fix 696) Explicit stageKind fix — not reset on 'running'.
   setVideoFrozenStageKind: (kind) =>
     set((s) => ({ video: { ...s.video, frozenStageKind: kind } })),
 
@@ -100,9 +100,9 @@ export const useGenProgress = create<GenStore>()(
       video: {
         ...s.video,
         phase,
-        // (правка 716) Ошибка очищается при переходе в активную фазу:
-        // раньше она оставалась в состоянии и показывалась при следующей
-        // генерации, уже успешной.
+        // (fix 716) Error is cleared upon transition to active phase:
+        // previously it remained in state and was displayed during the next
+        // generation, even if successful.
         ...(phase === 'running' || phase === 'done' ? { error: null } : {}),
         // Reset elapsed timer when a new generation starts running
         ...(phase === 'running' && s.video.phase !== 'running' ? { startedAt: Date.now() } : {}),
@@ -119,8 +119,8 @@ export const useGenProgress = create<GenStore>()(
           ...IDLE_STATE,
           phase: 'submitting',
           startedAt: Date.now(),
-          // (правка 696) Сохраняем текущий frozenStageKind — вкладка уже
-          // успела вызвать setVideoFrozenStageKind до beginVideoSubmit.
+          // (fix 696) Preserve current frozenStageKind — the tab already
+          // called setVideoFrozenStageKind before beginVideoSubmit.
           frozenStageKind: s.video.frozenStageKind,
         },
       }

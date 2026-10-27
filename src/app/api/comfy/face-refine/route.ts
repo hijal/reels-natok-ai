@@ -24,39 +24,39 @@ import { resolveFaceDetectors } from '@/lib/comfy/face-detectors'
 import { enabledCustomLoras, TURBO_LORA_NAME } from '@/lib/loras-config'
 
 /**
- * POST /api/comfy/face-refine — перерисовка мелких лиц в готовом видео
- * (набор нод ComfyUI-H3-FaceRefine).
+ * POST /api/comfy/face-refine — redraw small faces in finished video
+ * (set of ComfyUI-H3-FaceRefine nodes).
  *
  * Body:
- *   sourceFilename/sourceSubfolder — ролик из галереи (или inputSource — файл
- *                                    с диска, уже в ComfyUI input/)
- *   prompt?            — caption; по умолчанию берётся цепочка промптов из
- *                        сайдкара исходника (сцена и персонажи те же)
+ *   sourceFilename/sourceSubfolder — video from gallery (or inputSource — file
+ *                                    from disk, already in ComfyUI input/)
+ *   prompt?            — caption; by default prompt chain is taken from
+ *                        source sidecar (scene and characters remain same)
  *   seed?              — (-1 = random)
- *   canvas?            — канва H3, px (512 дешевле 768 в 2.25×). Default 512
- *   denoise?           — базовый denoise. Default 0.35
- *   steps?             — шаги (должны совпадать с турбо-лорой). Default 4
- *   select?            — правило выбора субъекта
- *   selectIndex?       — номер лица в рейтинге правила
- *   facePoint?         — (правка 723) {x, y, frame}: клик по лицу в превью
- *                        исходника; правило при этом игнорируется
- *   identityReference? — файл в input/: «перерисуй ЭТОГО человека»
+ *   canvas?            — H3 canvas, px (512 is 2.25x cheaper than 768). Default 512
+ *   denoise?           — base denoise. Default 0.35
+ *   steps?             — steps (must match turbo LoRA). Default 4
+ *   select?            — subject selection rule
+ *   selectIndex?       — face index in rule ranking
+ *   facePoint?         — (fix 723) {x, y, frame}: click on face in source preview;
+ *                        rule is ignored when this is set
+ *   identityReference? — file in input/: "redraw THIS person"
  *   identityModel?     — insightface | clip_vision | ccip
- *   refImages?         — картинки-референсы персонажа (файлы в input/)
+ *   refImages?         — character reference images (files in input/)
  */
 export const dynamic = 'force-dynamic'
 
 /**
- * (правка 722) GET — какие детекторы реально доступны. Значения комбо у
- * ComfyUI зависят от регистрации models/ultralytics, поэтому хардкод имени
- * face_yolov8m.pt после регистрации перестаёт быть валидным (появляется
- * bbox\face_yolov8m.pt). Вкладка спрашивает список, чтобы показать чекбокс
- * «далёкие планы» только когда модель человека есть.
+ * (fix 722) GET — which detectors are actually available. ComfyUI combo
+ * values depend on models/ultralytics registration, so hardcoded name
+ * face_yolov8m.pt after registration ceases to be valid (becomes
+ * bbox\face_yolov8m.pt). Tab queries the list to show the checkbox
+ * "distant shots" only when human model is present.
  *
- * (правка 723) Ещё отдаёт параметры исходника (width/height/fps/frames), если
- * передать файл: ?input=<имя в input/> или ?filename=&subfolder= (output).
- * Вкладке нужен fps, чтобы превратить таймкод клика по превью в номер кадра:
- * X/Y в ноде — пиксели КАДРА, а frame_index — кадр, на котором мерить.
+ * (fix 723) Also returns source parameters (width/height/fps/frames) if
+ * file is provided: ?input=<name in input/> or ?filename=&subfolder= (output).
+ * Tab needs fps to convert preview click timecode into frame number:
+ * X/Y in node are FRAME pixels, and frame_index is the frame to measure on.
  */
 export async function GET(req: NextRequest) {
   const { detector, fallbackDetector } = await resolveFaceDetectors()
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
   try {
     return NextResponse.json({ detector, fallbackDetector, probe: await probeVideoFile(file) })
   } catch {
-    // Превью всё равно откроется: клик по нему посчитается по fps=24.
+    // Preview will still open: click on it will be calculated using fps=24.
     return NextResponse.json({ detector, fallbackDetector, probe: null })
   }
 }
@@ -115,14 +115,14 @@ export async function POST(req: NextRequest) {
       denoiseLarge?: number
       refImages?: string[]
       refImageSize?: 'match' | 'max'
-      /** (правка 722) Детектор человека на кадрах, где лица не видно. */
+      /** (fix 722) Person detector on frames where face is not visible. */
       fallback?: boolean
-      /** (правка 723) Клик по лицу в превью: пиксели кадра + его номер. */
+      /** (fix 723) Click on face in preview: frame pixels + its number. */
       facePoint?: { x?: number; y?: number; frame?: number }
     }
 
     if (!body?.sourceFilename && !body?.inputSource) {
-      return NextResponse.json({ error: 'sourceFilename (или inputSource) обязателен' }, { status: 400 })
+      return NextResponse.json({ error: 'sourceFilename (or inputSource) is required' }, { status: 400 })
     }
 
     const quickBlock = assertGenerationAllowed()
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     const cfg = getAppConfig()
 
-    // ─── Источник: файл с диска (input/) или копия из галереи ───
+    // ─── Source: file from disk (input/) or copy from gallery ───
     const sub = sanitizeFolderPath(body.sourceSubfolder || '')
     const safeName = path.basename(body.sourceFilename ?? '')
     let inName: string
@@ -144,13 +144,13 @@ export async function POST(req: NextRequest) {
       inName = path.basename(body.inputSource)
       const inPath = path.join(cfg.inputDir, inName)
       if (!existsSync(inPath)) {
-        return NextResponse.json({ error: `Файл не найден в input: ${inName}` }, { status: 404 })
+        return NextResponse.json({ error: `File not found in input: ${inName}` }, { status: 404 })
       }
       try {
         probe = await probeVideoFile(inPath)
       } catch (e) {
         return NextResponse.json(
-          { error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}` },
+          { error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}` },
           { status: 400 },
         )
       }
@@ -161,9 +161,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
       }
       if (!existsSync(sourcePath)) {
-        return NextResponse.json({ error: `Файл не найден: ${safeName}` }, { status: 404 })
+        return NextResponse.json({ error: `File not found: ${safeName}` }, { status: 404 })
       }
-      // Копия output → input (без перезаписи чужих файлов — суффикс при коллизии).
+      // Copy output → input (without overwriting others' files — suffix on collision).
       await fs.mkdir(cfg.inputDir, { recursive: true })
       inName = safeName
       let destPath = path.join(cfg.inputDir, inName)
@@ -186,32 +186,32 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         await fs.unlink(destPath).catch(() => {})
         return NextResponse.json(
-          { error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}` },
+          { error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}` },
           { status: 400 },
         )
       }
-      // Промпт и референсы — из сайдкара исходника: Face Refine перерисовывает
-      // ЛИЦО, сцена и персонажи должны остаться теми же.
+      // Prompt and references from source sidecar: Face Refine redraws
+      // FACE, scene and characters should remain the same.
       const chain = readPromptChain(sub, safeName)
       if (chain && !body.prompt?.trim()) promptSource = 'draft-meta'
       metaRefs = readMetaImageRefs(sub, safeName)
     }
 
-    // ─── Промпт: пользовательский > цепочка из меты исходника ───
+    // ─── Prompt: user > chain from source meta ───
     const userPrompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     const chainPrompt = body.inputSource ? null : readPromptChain(sub, safeName)
     const prompt = userPrompt || chainPrompt || ''
     if (!userPrompt) promptSource = chainPrompt ? 'draft-meta' : 'default'
 
-    // ─── Референсы персонажа: заданные > из меты исходника ───
+    // ─── Character references: specified > from source meta ───
     const refImages = (body.refImages ?? []).filter((n) => typeof n === 'string' && n.length > 0)
     const usedRefs = refImages.length > 0
       ? refImages
       : metaRefs.map((r) => r.path)
 
-    // (правка 723) Точка клика: клампим к реальному кадру — ComfyUI отклонит
-    // промпт, только если значение выйдет за max виджета (16384), а промах
-    // на десяток пикселей из-за масштаба превью безвреден.
+    // (fix 723) Click point: clamp to real frame — ComfyUI only rejects
+    // prompt if value exceeds widget max (16384), and being off
+    // by a dozen pixels due to preview scale is harmless.
     const fp = body.facePoint
     const facePoint = fp && Number.isFinite(fp.x) && Number.isFinite(fp.y)
       ? {
@@ -221,21 +221,21 @@ export async function POST(req: NextRequest) {
         }
       : undefined
 
-    // Референс лица «этого человека» должен лежать в input/.
+    // Face reference of "this person" must reside in input/.
     //
-    // (правка 723) Точка клика главнее фото: при подключённом identity_reference
-    // нода вообще не смотрит на X/Y — в отчёте это строка «ignored -
-    // identity_reference decides», и в живом прогоне так и получилось чужое
-    // лицо (совпадение с фото 0.48 прошло порог 0.28). Пока лицо выбрано
-    // кликом, референс в воркфлоу не подаём; в мете он остаётся с пометкой,
-    // поэтому снять точку и вернуться к фото можно тем же повтором.
+    // (fix 723) Click point takes precedence over photo: with identity_reference
+    // connected, the node does not look at X/Y at all — in the report this is the line
+    // "ignored - identity_reference decides", and in live run this ended up picking the wrong
+    // face (match with photo 0.48 passed threshold 0.28). While a face is selected
+    // by click, do not pass reference into workflow; in meta it stays flagged,
+    // so clearing the point and returning to photo is possible on rerun.
     const identityReference = body.identityReference
       ? path.basename(body.identityReference)
       : undefined
     const identityReferenceForRun = facePoint ? undefined : identityReference
     if (identityReferenceForRun && !existsSync(path.join(cfg.inputDir, identityReferenceForRun))) {
       return NextResponse.json(
-        { error: `Референс лица не найден в input: ${identityReferenceForRun}` },
+        { error: `Face reference not found in input: ${identityReferenceForRun}` },
         { status: 404 },
       )
     }
@@ -243,21 +243,21 @@ export async function POST(req: NextRequest) {
     const steps = Math.max(1, Math.min(64, Math.round(body.steps ?? DEFAULT_FACE_STEPS)))
     const denoise = Math.max(0.01, Math.min(1, body.denoise ?? DEFAULT_FACE_DENOISE))
     const canvas = Math.max(128, Math.min(1344, Math.round((body.canvas ?? 512) / 32) * 32))
-    // RandomNoise требует неотрицательный сид: -1 ComfyUI не принимает.
-    // Конкретный сид разрешаем сами (как вкладка «Генерация») и пишем его в
-    // метаданные — иначе повтор не воспроизвести.
+    // RandomNoise requires a non-negative seed: ComfyUI rejects -1.
+    // Resolve concrete seed ourselves (same as "Generation" tab) and write it to
+    // metadata — otherwise rerun cannot be reproduced.
     const seed = (body.seed ?? -1) < 0 ? Math.floor(Math.random() * 2 ** 31) : (body.seed ?? -1)
 
-    // (правка 722) Детекторы берём из комбо живого ComfyUI: после регистрации
-    // папки models/ultralytics имена приходят с подпапкой (bbox\face_yolov8m.pt),
-    // и старое значение без подпапки валидация промпта отклонила бы.
+    // (fix 722) Fetch detectors from live ComfyUI combo: after registering
+    // models/ultralytics directory names come with subfolder (bbox\face_yolov8m.pt),
+    // and old value without subfolder would be rejected by prompt validation.
     const detectors = await resolveFaceDetectors()
     const fallbackDetector =
       body.fallback === true && detectors.fallbackDetector ? detectors.fallbackDetector : 'none'
     const fallbackUnavailable = body.fallback === true && !detectors.fallbackDetector
 
-    // Встроенная турбо-лора — ON по умолчанию, как и в остальных режимах.
-    // Шаги face-refine по умолчанию 4 — ровно под эту 4-шаговую лору.
+    // Built-in turbo LoRA — ON by default, same as other modes.
+    // Default face-refine steps is 4 — tailored for this 4-step LoRA.
     const turboLoraEntry = enabledCustomLoras().find((e) => e.name === TURBO_LORA_NAME)
     const turboLora = turboLoraEntry?.name
 
@@ -292,9 +292,9 @@ export async function POST(req: NextRequest) {
       denoiseLarge: body.denoiseLarge,
       refImages: usedRefs,
       refImageSize: body.refImageSize,
-      // Размеры/длина исходника — для .latent-сайдкара итога (ceil32-канва,
-      // тишина нужной длины у беззвучных): повторный рефайн этого видео
-      // пойдёт по lossless-латентному пути.
+      // Source dimensions/length — for .latent result sidecar (ceil32 canvas,
+      // silence of proper length for silent videos): repeated refine of this video
+      // will follow lossless latent path.
       width: probe.width,
       height: probe.height,
       frames: probe.frames,
@@ -321,9 +321,9 @@ export async function POST(req: NextRequest) {
         prompt_source: promptSource,
         canvas,
         denoise,
-        // Шаги — в поле pass1_steps (единый контракт сайдкаров: его читает
-        // строка «Шаги» в MetaDialog; так же пишет refine-роут). Старые
-        // сайдкары с полем steps диалог понимает через fallback.
+        // Steps — in pass1_steps field (unified sidecar contract: read by
+        // "Steps" row in MetaDialog; refine route writes same). Old
+        // sidecars with steps field are supported by dialog fallback.
         pass1_steps: steps,
         ...(turboLora && { lora: turboLora }),
         sampler: body.sampler || 'euler',

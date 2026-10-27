@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { deleteThumbsFor } from '@/lib/thumb'
 
 /**
@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Sanitize: prevent path traversal
-    // (правка 495) subfolder — многоуровневый относительный путь ('a/b').
+    // (fix 495) subfolder is a multi-level relative path ('a/b').
     const safeName = path.basename(filename)
     const subfolder = body.subfolder ? sanitizeFolderPath(String(body.subfolder)) : ''
-    // (правка 350) OUTPUT_DIR нормализуем resolve'ом ДО сравнения — иначе
-    // относительный/ненормализованный outputDir ломал startsWith-проверку.
+    // (fix 350) Normalize OUTPUT_DIR with resolve BEFORE comparison — otherwise
+    // relative/unnormalized outputDir broke the startsWith check.
     const outputRoot = path.resolve(OUTPUT_DIR)
     const target = path.resolve(path.join(outputRoot, subfolder, safeName))
 
@@ -33,14 +33,14 @@ export async function POST(req: NextRequest) {
     }
 
     await fs.unlink(target)
-    // (правки 378/391) Латент-пайплайн: сохранённый AV-латент (.latent из
-    // поля latent_file меты) живёт, пока жив его mp4 — удаляем вместе с
-    // ним, иначе файлы-сироты копятся в output/<sub>/latents/. Путь строго
-    // внутри output/ (resolve + нижний регистр на win32, паттерн правки 348).
-    // (правка 391) Мету читаем ДО удаления сайдкара — правка 378 удаляла
-    // его первым, чтение всегда давало ENOENT и .latент не удалялся никогда.
-    // latent_file хранится относительно output/ ('<sub>/latents/<file>' —
-    // так пишет pending-meta finalizePendingMeta), как у resolveSourceLatent.
+    // (fixes 378/391) Latent pipeline: saved AV-latent (.latent from
+    // meta's latent_file field) lives while its mp4 lives — delete it along
+    // with it, otherwise orphan files accumulate in output/<sub>/latents/. Path strictly
+    // inside output/ (resolve + lowercase on win32, pattern of fix 348).
+    // (fix 391) Read meta BEFORE deleting sidecar — fix 378 deleted
+    // it first, reading always yielded ENOENT and the .latent was never deleted.
+    // latent_file is stored relative to output/ ('<sub>/latents/<file>' —
+    // written by pending-meta finalizePendingMeta), same as resolveSourceLatent.
     let latentFile: string | null = null
     try {
       const metaRaw = await fs.readFile(target + '.meta.json', 'utf-8')
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       if (typeof meta.latent_file === 'string' && meta.latent_file) {
         latentFile = meta.latent_file
       }
-    } catch { /* нет меты / битая — латент просто не трогаем */ }
+    } catch { /* no meta / corrupted — simply leave latent untouched */ }
     // Also delete .meta.json sidecar if present
     await fs.unlink(target + '.meta.json').catch(() => {})
     if (latentFile) {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         await fs.unlink(latentPath).catch(() => {})
       }
     }
-    // (правка 355) Чистим дисковый кэш превью (.thumbs) удалённого файла.
+    // (fix 355) Clear disk preview cache (.thumbs) of the deleted file.
     await deleteThumbsFor(`output_${subfolder ? subfolder + '_' : ''}${safeName}`)
     return NextResponse.json({ ok: true })
   } catch (err) {

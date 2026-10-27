@@ -1,25 +1,22 @@
 'use client'
 
 /**
- * (правка 65/74) VoiceInputButton — круглая кнопка-микрофон ВНУТРИ текстового
- * поля (поверх него, в правом нижнем углу) — как принято в мессенджерах.
+ * VoiceInputButton — circular microphone button INSIDE the text field
+ * (overlay on top of it, in the bottom right corner) — similar to messaging apps.
  *
- * Клик:
- *  idle       → начать запись (модель STT стартует сама при первом
- *               обращении, если ещё не запущена);
- *  recording  → остановить и расшифровать; текст уходит в onText;
- *  processing → спиннер (расшифровка на CPU может идти десятки секунд).
+ * Click:
+ *  idle       → start recording (STT model starts automatically on first call
+ *               if not already running);
+ *  recording  → stop and transcribe; text is passed to onText;
+ *  processing → spinner (CPU transcription can take several seconds).
  *
- * (правка 118) Горячая клавиша R (англ. раскладка) / К (рус. раскладка) —
- * та же физическая клавиша; тоггл диктовки кнопки: нажать — запись,
- * нажать ещё раз — стоп и вставка текста. Не срабатывает при печати в
- * полях ввода и при зажатых Ctrl/Alt/Meta (не ломает Ctrl+R и т.п.).
+ * Hotkey: R key — toggle dictation button: press to record, press again to stop
+ * and insert text. Ignored during typing in input fields and when Ctrl/Alt/Meta
+ * are pressed.
  *
- * Ошибки показываем тостом на русском — кнопка никогда не «молчит».
- *
- * Позиционирование: родительский контейнер поля обязан быть `relative`;
- * кнопка сама вешается `absolute bottom-2 right-2`. Для использования
- * вне поля (например, тест в настройках) — `variant="inline"`.
+ * Positioning: parent container must be `relative`;
+ * the button positions itself as `absolute bottom-2 right-2`.
+ * For usage outside inputs (e.g. settings test) — use `variant="inline"`.
  */
 import { useEffect, useRef, useState } from 'react'
 import { MicIcon, Loader2Icon, SquareIcon } from 'lucide-react'
@@ -27,17 +24,14 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useVoiceDictation } from '@/lib/use-voice-dictation'
 
-/* ─── (правка 118) Горячая клавиша: R (англ.) / К (рус.) ───
- * R и К — ОДНА физическая клавиша → ловим e.code === 'KeyR'
- * (независимо от активной раскладки). Слушатель ГЛОБАЛЬНЫЙ, один;
- * владелец — самый свежемонтированный VoiceInputButton с hotkey
- * (верх стека): открыт полноэкранный редактор — клавишу принимает он,
- * закрыт — поле под ним. Если какая-то кнопка уже ведёт запись /
- * расшифровку — клавиша уходит ЕЙ (стоп + вставка), чтобы диктовка
- * не «терялась» по середине. */
+/* ─── Hotkey: R key ───
+ * Physical key KeyR (regardless of active layout).
+ * Global single listener; owner is the latest mounted VoiceInputButton
+ * with hotkey enabled (top of stack). If any button is already recording
+ * or processing, the key goes to that button (stop + insert). */
 interface HotkeyEntry {
   run: () => void
-  /** true — инстанс ведёт запись или расшифровку. */
+  /** true — instance is recording or processing. */
   active: () => boolean
 }
 const hotkeyStack: HotkeyEntry[] = []
@@ -66,22 +60,20 @@ function ensureHotkeyBound(): void {
 }
 
 interface VoiceInputButtonProps {
-  /** Куда отправить распознанный текст. */
+  /** Callback for recognized text. */
   onText: (text: string) => void
   disabled?: boolean
   className?: string
   title?: string
   /**
-   * 'overlay' (по умолчанию) — круглая кнопка поверх поля ввода
-   * (absolute bottom-2 right-2; родитель должен быть relative);
-   * 'inline' — статичная круглая кнопка в потоке (тест в настройках).
+   * 'overlay' (default) — circular button overlaying input field
+   * (absolute bottom-2 right-2; parent must be relative);
+   * 'inline' — static circular button in flow (e.g. test in settings).
    */
   variant?: 'overlay' | 'inline'
   /**
-   * (правка 118) Включить горячую клавишу R / К (одна физическая клавиша
-   * в обеих раскладках): нажать — начать диктовку, нажать ещё раз —
-   * остановить и вставить текст. Не срабатывает, пока печатаете в
-   * поле (чтобы не мешать набору), и с Ctrl/Alt/Meta.
+   * Enable hotkey R: press to start dictation, press again to stop and insert text.
+   * Does not trigger while typing in an input field, or with Ctrl/Alt/Meta.
    */
   hotkey?: boolean
 }
@@ -95,9 +87,7 @@ export function VoiceInputButton({
   hotkey = false,
 }: VoiceInputButtonProps) {
   const { state, start, stop } = useVoiceDictation()
-  // (правка 65) Переключатель «Голосовой ввод» в настройках (stt.enabled):
-  // раньше кнопки диктовки рисовались всегда, и при выключенном вводе
-  // клик давал рантайм-ошибку вместо того, чтобы кнопки исчезли.
+  // STT toggle in settings (stt.enabled)
   const [sttOn, setSttOn] = useState(true)
   useEffect(() => {
     fetch('/api/config')
@@ -112,12 +102,10 @@ export function VoiceInputButton({
   const handleClick = async () => {
     if (state === 'processing') return
     if (state === 'recording') {
-      // error берём из результата stop(): значение из замыкания (стейта на
-      // момент клика) не видит ошибку, установленную внутри stop()
       const { text, error: stopError } = await stop()
       if (text) {
         onText(text)
-        toast.success('Голосовой ввод: текст добавлен')
+        toast.success('Voice input: text added')
       } else if (stopError) {
         toast.error(stopError)
       }
@@ -131,11 +119,10 @@ export function VoiceInputButton({
       }
     }
   }
-  // Свежее замыкание для горячей клавиши (ref — стабильный адрес,
-  // содержимое обновляется каждый рендер).
+
   toggleRef.current = handleClick
 
-  // (правка 118) Регистрация в стеке горячей клавиши.
+  // Register hotkey in stack
   useEffect(() => {
     if (!hotkey || disabled) return
     ensureHotkeyBound()
@@ -152,10 +139,9 @@ export function VoiceInputButton({
 
   const recording = state === 'recording'
   const processing = state === 'processing'
-  const hk = hotkey ? ' · R/К' : ''
+  const hk = hotkey ? ' · R' : ''
 
-  // Ввод выключен в настройках — кнопки диктовки не показываем
-  // (после всех хуков, чтобы не нарушать правила хуков).
+  // STT disabled in settings — don't render dictation button
   if (!sttOn) return null
 
   return (
@@ -166,12 +152,12 @@ export function VoiceInputButton({
       title={
         title
         ?? (recording
-          ? `Остановить запись${hk ? ` (${hk.trim()})` : ''}`
+          ? `Stop recording${hk ? ` (${hk.trim()})` : ''}`
           : processing
-            ? 'Распознавание…'
-            : `Голосовой ввод — нажмите и говорите${hk ? ` (горячая клавиша ${hk.trim()})` : ''}`)
+            ? 'Transcribing…'
+            : `Voice input — click to speak${hk ? ` (hotkey ${hk.trim()})` : ''}`)
       }
-      aria-label="Голосовой ввод"
+      aria-label="Voice input"
       className={cn(
         'inline-flex items-center justify-center rounded-full border transition-all select-none',
         variant === 'overlay'

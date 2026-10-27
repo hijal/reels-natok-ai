@@ -1,18 +1,14 @@
 'use client'
 
 /**
- * (правка 497) ControlNetView — вкладка «ControlNet»: генерация видео,
- * следующего движению контрольного ролика (3D-болванка, превиз, референс)
- * покадрово — через стандартный References-воркфлоу MiniMax H3.
- * Контрольное видео подаётся как обычный video-референс (depth/canny карта).
+ * ControlNetView — "ControlNet" tab: video generation following the motion
+ * of a control video (3D puppet, previz, or reference) frame-by-frame
+ * via the standard MiniMax H3 References workflow.
+ * Control video is passed as a video reference (depth/canny map).
  *
- * (правка 502) Layout как у «Генерации»: слева — параметры + статус,
- * по центру сверху — карточка промпта (с кнопкой «Улучшить» в ассистент),
- * ниже — галерея, справа — панель ассистента в режиме 'controlnet'.
- * Источник: drag&drop карточки из галереи (application/x-h3-video) или файл
- * с диска (uploadInputFile → ComfyUI input/). Состояние джоба — в модульном
- * controlnet-job-store, промпт/seed/референсы — в controlnet-target-store
- * (оба переживают unmount при переключении вкладок).
+ * Layout similar to "Generation": left — parameters + status,
+ * top center — prompt card (with assistant improvement button),
+ * below — gallery, right — assistant panel in 'controlnet' mode.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -37,15 +33,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import { MentionTextarea, type MentionItem } from './mention-textarea' // (правка 512)
-// (правка 515) Полное поле промпта — как на вкладке «Генерация»:
-// PromptEditButton + PromptEditorDialog (полноэкранный редактор),
-// VoiceInputButton (диктовка), PromptQuality (живые подсказки),
-// История промптов + Готовые примеры (портал-дропдауны).
+import { MentionTextarea, type MentionItem } from './mention-textarea'
 import { PromptEditorDialog, PromptEditButton, PromptFixButton, PromptClearButton, PromptFixDialog, PromptFieldTools } from './prompt-editor-dialog'
-import { requestImprovePrompt } from '@/hooks/use-improve-prompt' // (правка 691) «Исправить» прямо из поля
+import { requestImprovePrompt } from '@/hooks/use-improve-prompt'
 import { PromptQuality } from './prompt-quality'
-// (правка 719) Превью рефов с полноэкранным просмотром — как на «Генерации».
 import { RefPreviewThumb } from './ref-preview-thumb'
 import { VoiceInputButton } from './voice-input-button'
 import { EXAMPLES } from './learn/prompt-guide'
@@ -64,22 +55,21 @@ import { useVideoGallery } from '@/components/h3/use-video-gallery'
 import { useControlNetTarget, type ControlNetSource } from '@/lib/controlnet-target-store'
 import { useControlNetJob } from '@/lib/controlnet-job-store'
 import { uploadInputFile } from '@/lib/upload'
-import { AssistantPanel } from './assistant/assistant-panel' // (правка 502)
-import { useGenStore } from '@/lib/gen-store' // (правка 512) Veda/Sparse из настроек приложения
+import { AssistantPanel } from './assistant/assistant-panel'
+import { useGenStore } from '@/lib/gen-store'
 
-// (правка 511) Подписи сэмплеров/планировщиков — те же, что на вкладке «Генерация»
 const SAMPLER_OPTIONS = [
-  { value: 'euler', label: 'euler (по умолчанию, классика)' },
+  { value: 'euler', label: 'euler (default, classic)' },
   { value: 'er_sde', label: 'er_sde (SDE)' },
-  { value: 'dpmpp_2m', label: 'dpmpp_2m (мультистеп)' },
-  { value: 'dpmpp_3m_sde', label: 'dpmpp_3m_sde (высокое качество)' },
-  { value: 'heun', label: 'heun (2-й порядок)' },
-  { value: 'lcm', label: 'lcm (мало шагов)' },
-  { value: 'res_multistep', label: 'res_multistep (резидуальный)' },
+  { value: 'dpmpp_2m', label: 'dpmpp_2m (multistep)' },
+  { value: 'dpmpp_3m_sde', label: 'dpmpp_3m_sde (high quality)' },
+  { value: 'heun', label: 'heun (2nd order)' },
+  { value: 'lcm', label: 'lcm (few steps)' },
+  { value: 'res_multistep', label: 'res_multistep (residual)' },
 ]
 
 const SCHEDULER_OPTIONS = [
-  { value: 'simple', label: 'simple (по умолчанию)' },
+  { value: 'simple', label: 'simple (default)' },
   { value: 'sgm_uniform', label: 'sgm_uniform' },
   { value: 'karras', label: 'karras' },
   { value: 'exponential', label: 'exponential' },
@@ -95,14 +85,12 @@ export function ControlNetView() {
   const clearStoreTarget = useControlNetTarget((s) => s.clear)
   const source = useControlNetTarget((s) => s.source)
   const setSource = useControlNetTarget((s) => s.setSource)
-  // (правка 587) Отзыв предыдущего blob:-URL при замене/удалении источника
-  // (паттерн refine-view, правка 345) — URL.createObjectURL утекал.
   const prevSourceUrlRef = useRef<string | null>(null)
   const setSourceSafe = useCallback(
     (next: ControlNetSource | null) => {
       const prev = prevSourceUrlRef.current
       if (prev && prev.startsWith('blob:') && prev !== next?.url) {
-        try { URL.revokeObjectURL(prev) } catch { /* уже отозван */ }
+        try { URL.revokeObjectURL(prev) } catch { /* already revoked */ }
       }
       prevSourceUrlRef.current = next?.url ?? null
       setSource(next)
@@ -114,16 +102,11 @@ export function ControlNetView() {
 
   const params = useControlNetTarget((s) => s.params)
   const patchParams = useControlNetTarget((s) => s.patchParams)
-  // (правка 727) Папка результата — как на вкладке «Генерация».
   const outputFolder = useControlNetTarget((s) => s.outputFolder)
   const setOutputFolder = useControlNetTarget((s) => s.setOutputFolder)
   const [folderMenuOpen, setFolderMenuOpen] = useState(false)
 
-  // (правка 511) Доп. параметры — как на вкладке «Генерация»:
-  // шаги (draft: 1 слайдер, full: 2), сэмплер + планировщик (Pass 1),
-  // Sigma-профиль + сэмплер (Pass 2).
   const isDraft = params.pipeline === 'draft'
-  // (правка 719) Сводка по сплиту pass 1 — как на вкладке «Генерация».
   const cnSplit = Math.max(1, Math.round(params.firstSamplerSteps ?? 6))
   const cnTotal = Math.max(2, Math.min(64, Math.round(params.firstSamplerTotalSteps ?? cnSplit)))
   const cnEffSplit = Math.min(cnSplit, cnTotal)
@@ -140,8 +123,6 @@ export function ControlNetView() {
   const [showPass1, setShowPass1] = useState(false)
   const [showPass2, setShowPass2] = useState(false)
 
-  // (правка 502) Промпт/seed/референсы — из стора вкладки: раньше жили в
-  // локальном useState и сбрасывались при каждом переключении вкладок.
   const prompt = useControlNetTarget((s) => s.prompt)
   const setPrompt = useControlNetTarget((s) => s.setPrompt)
   const seed = useControlNetTarget((s) => s.seed)
@@ -149,16 +130,11 @@ export function ControlNetView() {
   const [dragOver, setDragOver] = useState(false)
   const [uploadingSrc, setUploadingSrc] = useState(false)
 
-  // (правка 498) Картинки-референсы (персонаж/локация/кадр) — как в режиме
-  // «Референсы» генерации, только картинки, до 9. Не сбрасываются при смене
-  // источника (рефы обычно живут дольше конкретного контрольного видео).
-  // (правка 502) Массив — в сторе вкладки (см. выше).
   const refImages = useControlNetTarget((s) => s.refImages)
   const [uploadingRefs, setUploadingRefs] = useState(false)
   const [refsDragOver, setRefsDragOver] = useState(false)
   const refsInputRef = useRef<HTMLInputElement>(null)
 
-  // Состояние джоба — из модульного стора (переживает unmount).
   const busy = useControlNetJob((s) => s.busy)
   const phase = useControlNetJob((s) => s.phase)
   const progress = useControlNetJob((s) => s.progress)
@@ -171,13 +147,7 @@ export function ControlNetView() {
 
   const gallery = useVideoGallery()
 
-  // ── Готовность моделей: стандартный References-воркфлоу — нужны базовые H3
-  //    модели (diffusion, text_encoder, vae_video) + upscaler в режиме «полный».
-  //    Для «карты» depth нужна лишь depth_anything_v2_vits.
-  //    Турбо-лора обязательна в Настройках → Модели (баннер + «Скачать все»),
-  //    но эту вкладку не блокирует: без файла генерация пойдёт без неё.
   const [missingModels, setMissingModels] = useState<string[]>([])
-  // Свёрнутые доп. параметры (Seed), как на вкладке «Генерация»
   const [showAdvanced, setShowAdvanced] = useState(false)
   useEffect(() => {
     let cancelled = false
@@ -200,7 +170,7 @@ export function ControlNetView() {
             models.filter((m) => need.includes(m.id) && m.status !== 'ready').map((m) => m.label),
           )
         })
-        .catch(() => { /* API недоступен — не блокируем */ })
+        .catch(() => {})
     }
     check()
     const t = setInterval(check, 15_000)
@@ -208,7 +178,6 @@ export function ControlNetView() {
   }, [params.controlType, params.preprocessOnly, params.pipeline])
   const modelsMissing = missingModels.length > 0
 
-  // Цель из стора галереи (кнопка «ControlNet (движение)» на карточке)
   useEffect(() => {
     if (!storeTarget) return
     const file = gallery.files.find(
@@ -216,7 +185,7 @@ export function ControlNetView() {
     )
     if (file) {
       setSourceSafe(file as ControlNetSource)
-      toast.success(`Источник: ${file.filename}`)
+      toast.success(`Source: ${file.filename}`)
     } else {
       setSourceSafe({
         url: `/api/comfy/file?filename=${encodeURIComponent(storeTarget.filename)}&subfolder=${encodeURIComponent(storeTarget.subfolder)}`,
@@ -227,10 +196,6 @@ export function ControlNetView() {
     clearStoreTarget()
   }, [storeTarget, gallery.files, clearStoreTarget, setSourceSafe])
 
-  // (правка 502) Сброс промпта при смене источника УДАЛЁН (был useEffect
-  // setPrompt('') по [source]): промпт пользователя ценнее источника.
-
-  // Клик-выбор файла: <input type='file'> + ref
   const fileInputRef = useRef<HTMLInputElement>(null)
   const VIDEO_EXTS = '.mp4,.m4v,.mov,.mkv,.avi,.webm,.m2ts,.mts,.mxf,.vob,.wmv,.flv,.mpg,.mpeg,.ogv'
 
@@ -244,23 +209,14 @@ export function ControlNetView() {
         subfolder: '',
         inputSource: path,
       })
-      toast.success(`Источник: ${file.name}`)
+      toast.success(`Source: ${file.name}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки видео')
+      toast.error(e instanceof Error ? e.message : 'Error uploading video')
     } finally {
       setUploadingSrc(false)
     }
   }, [setSourceSafe])
 
-  // (правка 510) Референсы для ControlNet уменьшаем до 1024px по короткой
-  // стороне ПЕРЕД загрузкой. Режим ref_image_size='max' у ноды
-  // MiniMaxH3ReferenceToVideo реф не уменьшает (потолок 2048px): квадрат
-  // 2048² после патчификации — ~4k визуальных токенов, сопоставимо со всем
-  // видеорядом (~8.6k на 5 с) — при SLA-спарсити рефы вытесняли контрольные
-  // токены depth/canny (камера уплывала от болванки, картинка
-  // деформировалась). 1024px ≈ 1k токенов: идентичность лица заметно лучше
-  // 'match' (~400 токенов при 480p), а контроль движения не страдает.
-  // На 'match' не влияет: нода всё равно уменьшает реф до площади кадра.
   const REF_SHORT_EDGE_CAP = 1024
   const downscaleRef = useCallback(async (file: File): Promise<File> => {
     try {
@@ -281,23 +237,21 @@ export function ControlNetView() {
       if (!blob) return file
       return new File([blob], file.name.replace(/\.[a-z0-9]+$/i, '') + '.png', { type: 'image/png' })
     } catch {
-      return file // не смогли прочитать — грузим как есть
+      return file
     }
   }, [])
 
   const addRefFiles = useCallback(async (files: File[]) => {
     const images = files.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(f.name))
-    if (!images.length) { toast.error('Референсы — только картинки (png, jpg, webp)'); return }
-    // (правка 502) Актуальный список — из стора (реактивный refImages здесь
-    // мог бы устареть в момент длительной загрузки).
+    if (!images.length) { toast.error('References must be images (png, jpg, webp)'); return }
     const room = 9 - useControlNetTarget.getState().refImages.length
-    if (room <= 0) { toast.error('Максимум 9 картинок-референсов'); return }
-    if (images.length > room) toast.error(`Максимум 9 референсов — добавлено ${room}`)
+    if (room <= 0) { toast.error('Maximum of 9 reference images'); return }
+    if (images.length > room) toast.error(`Maximum 9 references — added ${room}`)
     setUploadingRefs(true)
     try {
       for (const raw of images.slice(0, room)) {
         try {
-          const file = await downscaleRef(raw) // (правка 510)
+          const file = await downscaleRef(raw)
           const { path } = await uploadInputFile(file)
           useControlNetTarget.getState().addRefImages([{
             id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -306,7 +260,7 @@ export function ControlNetView() {
             previewUrl: `/api/comfy/file?filename=${encodeURIComponent(path)}&type=input&width=200`,
           }])
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Ошибка загрузки референса')
+          toast.error(e instanceof Error ? e.message : 'Error uploading reference')
         }
       }
     } finally {
@@ -321,20 +275,18 @@ export function ControlNetView() {
   const start = useCallback(async () => {
     const src = sourceRef.current
     if (!src) {
-      toast.error('Сначала выберите контрольное видео')
+      toast.error('First select a control video')
       return
     }
     if (uploadingSrc) {
-      toast.error('Видео ещё загружается')
+      toast.error('Video is still uploading')
       return
     }
     if (modelsMissing) {
-      toast.error('Сначала скачайте модели ControlNet (Настройки → Модели)')
+      toast.error('First download ControlNet models (Settings → Models)')
       return
     }
 
-    // Промпт/seed/референсы — свежие из стора (submit-body собирается в момент
-    // клика, реактивные значения тут не обязательны).
     const st = useControlNetTarget.getState()
     const body: Record<string, unknown> = {
       ...(src.inputSource
@@ -346,16 +298,12 @@ export function ControlNetView() {
       targetShortSide: params.targetShortSide,
       controlType: params.controlType,
       preprocessOnly: params.preprocessOnly || undefined,
-      // (правка 727) Куда класть результат: по умолчанию папка исходника,
-      // пользователь может выбрать другую (как на вкладке «Генерация»).
       outputSubfolder: st.outputFolder,
       refImageSize: params.refImageSize,
       compress: params.compressSource || undefined,
       pipeline: params.pipeline,
-      // (правка 511) Доп. параметры — как на вкладке «Генерация»
       draftSteps: params.draftSteps,
       firstSamplerSteps: params.firstSamplerSteps,
-      // Всего шагов в расписании pass 1 (по умолчанию = точке сплита, «6 из 6»).
       firstSamplerTotalSteps: params.firstSamplerTotalSteps ?? params.firstSamplerSteps ?? 6,
       pass1Sampler: params.pass1Sampler,
       pass1Scheduler: params.pass1Scheduler,
@@ -363,7 +311,6 @@ export function ControlNetView() {
       sigmaVariant: params.sigmaVariant,
       lowResMP: params.lowResMP,
       ...(st.refImages.length > 0 && { refImages: st.refImages.map((r) => r.path) }),
-      // (правка 512) Veda/Sparse/lowVRAM — из настроек приложения (useGenStore.video)
       ...(() => {
         const v = useGenStore.getState().video
         return {
@@ -392,19 +339,7 @@ export function ControlNetView() {
   const cancel = useCallback(() => { void jobCancel() }, [jobCancel])
   const reset = useCallback(() => { jobReset() }, [jobReset])
 
-  // (правка 515) Полное поле промпта — как на вкладке «Генерация»:
-  //  • MentionTextarea с onKeyDown Ctrl+Enter → start (как в generate-view);
-  //  • PromptEditButton (карандаш) + PromptEditorDialog (полноэкранный
-  //    редактор: вставка тегов, реплики, кинематографический словарь,
-  //    скелеты сцен, история, примеры, «Улучшить промпт»);
-  //  • VoiceInputButton (микрафон + hotkey R/К) — диктовка в поле;
-  //  • PromptQuality — живые подсказки по тегам/репликам/длине;
-  //  • История + Готовые примеры — портал-дропдауны (как в generate-view);
-  //  • Запись в usePromptHistory.add() при каждом успешном сабмите
-  //    (в generate-view — там же, в handleGenerate, до POST).
   const [promptEditorOpen, setPromptEditorOpen] = useState(false)
-  // (правка 691) «Исправить промпт» прямо из поля: задание + промпт уходят
-  // в controlnet-чат ассистента (requestImprovePrompt).
   const [fixOpen, setFixOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [examplesOpen, setExamplesOpen] = useState(false)
@@ -429,15 +364,14 @@ export function ControlNetView() {
       useControlNetTarget.getState().setPrompt(text)
       setExamplesOpen(false)
       if (old.trim()) {
-        toast.success('Пример вставлен (прежний промпт заменён)', {
-          action: { label: 'Отменить', onClick: () => useControlNetTarget.getState().setPrompt(old) },
+        toast.success('Example inserted (previous prompt replaced)', {
+          action: { label: 'Undo', onClick: () => useControlNetTarget.getState().setPrompt(old) },
         })
       }
     },
     [],
   )
 
-  // Ctrl+Enter — запустить (как в generate-view.handleKeyDown)
   const canStart = Boolean(source) && !modelsMissing && !params.preprocessOnly
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -449,8 +383,6 @@ export function ControlNetView() {
     [start, canStart],
   )
 
-  // (правка 515) Запись в историю — при каждом успешном сабмите (как в
-  // generate-view: usePromptHistory.add(prompt) до POST). Обёртка над start().
   const startWithHistory = useCallback(async () => {
     const p = useControlNetTarget.getState().prompt.trim()
     if (p) usePromptHistory.getState().add(p)
@@ -472,18 +404,18 @@ export function ControlNetView() {
           filename: parsed.filename ?? '',
           subfolder: parsed.subfolder ?? '',
         })
-        toast.success(`Источник: ${parsed.filename}`)
-      } catch { toast.error('Не удалось прочитать перетащенное видео') }
+        toast.success(`Source: ${parsed.filename}`)
+      } catch { toast.error('Failed to read dragged video') }
       return
     }
     const f = e.dataTransfer.files?.[0]
     if (f) void uploadLocalFile(f)
-    else toast.error('Нужно видео')
+    else toast.error('A video file is required')
   }
 
   return (
     <div className="flex h-full w-full min-w-0">
-      {/* ═══ Панель параметров ═══ */}
+      {/* ═══ Parameter Panel ═══ */}
       <aside className="w-[360px] shrink-0 border-r border-border bg-[var(--surface-1)] flex flex-col">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center gap-2">
@@ -491,49 +423,42 @@ export function ControlNetView() {
             <h2 className="text-sm font-semibold text-foreground">ControlNet</h2>
           </div>
           <p className="text-[10px] text-muted-foreground/70 -mt-2">
-            Генерация видео, следующего движению контрольного ролика (3D-болванка, превиз или референс) покадрово.
+            Video generation following the motion of a control video (3D puppet, previz, or reference) frame-by-frame.
           </p>
 
-          {/* Баннер недостающих моделей */}
+          {/* Missing models banner */}
           {modelsMissing && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
               <AlertTriangleIcon className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-300">
-                Для режима ControlNet нужно скачать модели: {missingModels.join(', ')} — Настройки → Модели (категория Препроцессоры)
+                To use ControlNet mode, download models: {missingModels.join(', ')} — Settings → Models (Preprocessors category)
               </p>
             </div>
           )}
 
-          {/* (правка 504) Режим: полный (генерация Minimax по контролю) или
-              «только карта» — сохранить depth/canny-видео без генерации,
-              для переиспользования вне программы. */}
+          {/* Mode */}
           <div className="space-y-1">
             <Label
               className="text-xs text-muted-foreground"
-              title="Драфт — один проход (быстро). Полный — два прохода: черновик в низком разрешении, затем апскейл латента и дорисовка в полном (дольше, качественнее). Карта — просто сохранить Depth/Canny-видео без генерации, чтобы использовать его в других программах."
+              title="Draft — single pass (fast). Full — two passes: low-res draft, then latent upscale and refinement at full resolution (longer, higher quality). Map — save Depth/Canny video without generation for use in external tools."
             >
-              Режим
+              Mode
             </Label>
-            {/* (правка 508) Три режима: драфт (однопроходный), полный
-                (двухпроходный, бейдж «ControlNet x2»), карта (только
-                препроцессинг, preprocessOnly).
-                (правка 511) «Карта» недоступна в режиме «Прямой» — карта не строится. */}
             <div className="grid grid-cols-3 gap-1.5">
               {([
-                ['draft', 'Драфт', 'Один проход — быстро'],
-                ['full', 'Полный', 'Два прохода: low-res черновик → апскейл латента → дорисовка в полном разрешении'],
-                ['map', 'Карта', 'Сохранить Depth/Canny-видео без генерации'],
+                ['draft', 'Draft', 'Single pass — fast'],
+                ['full', 'Full', 'Two passes: low-res draft → latent upscale → refinement at full resolution'],
+                ['map', 'Map', 'Save Depth/Canny video without generation'],
               ] as const).map(([v, label, hint]) => {
                 const active = v === 'map'
                   ? params.preprocessOnly
                   : !params.preprocessOnly && params.pipeline === v
-                // (правка 511) «Карта» недоступна в режиме «Прямой»
                 const mapDisabled = busy || (v === 'map' && params.controlType === 'direct')
                 return (
                   <button
                     key={v}
                     type="button"
-                    title={v === 'map' && params.controlType === 'direct' ? 'Недоступно в режиме «Прямой»' : hint}
+                    title={v === 'map' && params.controlType === 'direct' ? 'Not available in Direct mode' : hint}
                     disabled={mapDisabled}
                     onClick={() => patchParams(
                       v === 'map'
@@ -555,9 +480,9 @@ export function ControlNetView() {
             </div>
           </div>
 
-          {/* Источник */}
+          {/* Source */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground font-medium">Источник (контрольное видео)</Label>
+            <Label className="text-xs text-muted-foreground font-medium">Source (control video)</Label>
             {source ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -568,17 +493,12 @@ export function ControlNetView() {
                   dragOver ? 'border-orange-400 ring-1 ring-orange-400/50' : 'border-border',
                 )}
               >
-                {/* Превью: src — САМО видео (source.url); JPEG-постер в poster=
-                    (URL с &width=320 отдаёт картинку, не видео). У blob:-URL
-                    (файл с диска) постера нет.
-                    (правка 719) Клик — просмотр во весь экран (как на
-                    вкладке «Генерация»). */}
                 <RefPreviewThumb
                   kind="video"
                   name={source.filename}
                   url={source.url}
                   className="w-20 h-12 rounded object-cover bg-black shrink-0"
-                  title="Открыть контрольное видео во весь экран"
+                  title="Open control video in full screen"
                 >
                   <video
                     src={source.url}
@@ -591,12 +511,12 @@ export function ControlNetView() {
                 </RefPreviewThumb>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-foreground truncate">{source.filename}</p>
-                  {uploadingSrc && <p className="text-[10px] text-orange-400">загрузка…</p>}
+                  {uploadingSrc && <p className="text-[10px] text-orange-400">uploading…</p>}
                 </div>
                 {!busy && (
                   <button onClick={() => setSourceSafe(null)}
                     className="text-[10px] text-muted-foreground hover:text-foreground shrink-0">
-                    убрать
+                    remove
                   </button>
                 )}
               </div>
@@ -615,7 +535,7 @@ export function ControlNetView() {
                 )}
               >
                 <FileVideoIcon className="w-4 h-4 shrink-0" />
-                <span>Кликните для выбора, перетащите карточку из галереи или файл с диска</span>
+                <span>Click to select, drag a card from gallery or drop a file from disk</span>
               </div>
             )}
             <input
@@ -629,12 +549,9 @@ export function ControlNetView() {
                 e.target.value = ''
               }}
             />
-            {/* (правка 506) Сжатие болванки до 480p — как у видео-рефов
-                «Генерации» (правка 493): depth/canny не нужно высокое
-                разрешение, а препроцессинг и VAE-энкод заметно легче. */}
             <label
               className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer"
-              title="Перед обработкой видео ресайзится до 480p с сохранением пропорций (сервер, кэш) — быстрее препроцессинг и меньше VRAM. Для переноса движения высокое разрешение болванки не нужно."
+              title="Before processing, video is resized to 480p preserving aspect ratio (cached on server) — faster preprocessing and less VRAM. High resolution is not needed for motion transfer."
             >
               <input
                 type="checkbox"
@@ -642,21 +559,17 @@ export function ControlNetView() {
                 onChange={(e) => patchParams({ compressSource: e.target.checked })}
                 className="accent-orange-500"
               />
-              Сжать видео до 480p
+              Compress video to 480p
             </label>
           </div>
 
-          {/* (правка 502) Поле промпта переехало наверх центральной колонки
-              (как на вкладке «Генерация») — в левой панели его больше нет. */}
-
-          {/* (правка 498) Картинки-референсы: персонаж/локация/кадр.
-              (правка 504) В режиме «только карта» не используются. */}
+          {/* Reference images */}
           <div className={cn('space-y-1.5', params.preprocessOnly && 'opacity-40 pointer-events-none select-none')}>
             <Label
               className="text-xs text-muted-foreground font-medium flex items-center justify-between"
-              title="Картинки персонажа, локации или кадра — модель сохранит их внешность в каждом кадре. В промпте ссылайтесь на них как <Picture 1>, <Picture 2> и т.д."
+              title="Images of character, location, or scene — the model preserves their visual appearance in every frame. Refer to them as <Picture 1>, <Picture 2>, etc. in prompt."
             >
-              <span>Референсы (персонаж / локация / кадр){params.preprocessOnly ? ' — не используются в режиме карты' : ''}</span>
+              <span>References (character / location / frame){params.preprocessOnly ? ' — not used in Map mode' : ''}</span>
               {refImages.length > 0 && <span className="text-[10px] font-normal">{refImages.length}/9</span>}
             </Label>
             <div
@@ -688,11 +601,11 @@ export function ControlNetView() {
                 }}
               />
               {uploadingRefs ? (
-                <span className="text-orange-400">Загрузка референсов…</span>
+                <span className="text-orange-400">Uploading references…</span>
               ) : (
                 <span className="flex items-center justify-center gap-1.5">
                   <UploadIcon className="w-3.5 h-3.5" />
-                  Перетащите или выберите картинки (до 9)
+                  Drag & drop or select images (up to 9)
                 </span>
               )}
             </div>
@@ -700,15 +613,13 @@ export function ControlNetView() {
               <div className="grid grid-cols-4 gap-1.5">
                 {refImages.map((r, i) => (
                   <div key={r.id} className="relative group rounded-md overflow-hidden border border-border bg-black/40 aspect-square">
-                    {/* (правка 719) Клик по превью — просмотр во весь экран
-                        (как на вкладке «Генерация»). */}
                     <RefPreviewThumb
                       kind="image"
                       name={r.name}
                       path={r.path}
                       url={r.previewUrl}
                       className="w-full h-full block"
-                      title="Открыть референс во весь экран"
+                      title="Open reference in full screen"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={r.previewUrl} alt={r.name} className="w-full h-full object-cover" />
@@ -720,7 +631,7 @@ export function ControlNetView() {
                       <button
                         onClick={() => removeRef(r.id)}
                         className="absolute right-0.5 top-0.5 p-0.5 rounded bg-black/70 text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title={`Удалить (${r.name})`}
+                        title={`Delete (${r.name})`}
                       >
                         <XIcon className="w-3 h-3" />
                       </button>
@@ -730,17 +641,16 @@ export function ControlNetView() {
               </div>
             )}
             <p className="text-[10px] text-muted-foreground/60">
-              В промпте ссылайтесь на них как &lt;Picture 1&gt;, &lt;Picture 2&gt;…
+              In prompt, refer to them as &lt;Picture 1&gt;, &lt;Picture 2&gt;…
             </p>
 
-            {/* (правка 505) Рефы: режим размера — как на вкладке «Генерация»
-                (правка 277): Match — быстрее, Max — точнее детали. */}
+            {/* Reference size mode */}
             <div className="space-y-1 pt-1">
               <Label
                 className="text-xs text-muted-foreground"
-                title="Как обрабатывать загруженные картинки. Match — уменьшает референс до размера кадра (быстрее, но лицо может терять сходство). Max — сохраняет детали референса (точнее идентичность, медленнее). В ControlNet референсы ограничены 1024px при загрузке — иначе в режиме Max они вытесняют контроль движения и ломают картинку."
+                title="How to process uploaded images. Match — downscales reference to frame size (faster, but face may lose resemblance). Max — preserves reference details (better identity, slower). In ControlNet, references are capped at 1024px during upload to prevent crowding out motion control."
               >
-                Рефы: режим размера
+                Refs: size mode
               </Label>
               <div className="grid grid-cols-2 gap-1.5">
                 {(['match', 'max'] as const).map((m) => (
@@ -755,26 +665,25 @@ export function ControlNetView() {
                         : 'border-border text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    {m === 'match' ? 'Match (быстро)' : 'Max (детально)'}
+                    {m === 'match' ? 'Match (fast)' : 'Max (detailed)'}
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Тип контроля (правка 511) — добавлен «Прямой» */}
+          {/* Control type */}
           <div className="space-y-1">
             <Label
               className="text-xs text-muted-foreground"
-              title="Глубина — карта расстояний (сцены, объёмы). Контуры — линии краёв (рисунки, чертежи). Поза — скелет тела (DWPose). Прямой — видео подаётся как обычный видео-референс, без карт (как на вкладке «Генерация»)."
+              title="Depth — distance map (scenes, volume). Canny — edge contours (drawings, blueprints). Pose — body skeleton (DWPose). Direct — video passed as standard reference without maps."
             >
-              Тип контроля
+              Control type
             </Label>
             <Select
               value={params.controlType}
               onValueChange={(v) => patchParams({
-                controlType: v as 'depth' | 'canny' | 'direct' | 'pose', // (правка 512)
-                // (правка 511) «Прямой» несовместим с режимом «Карта» (карта не строится)
+                controlType: v as 'depth' | 'canny' | 'direct' | 'pose',
                 ...(v === 'direct' && params.preprocessOnly ? { preprocessOnly: false } : {}),
               })}
             >
@@ -782,38 +691,38 @@ export function ControlNetView() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-[var(--surface-3)] border-border">
-                <SelectItem value="depth">Глубина (Depth)</SelectItem>
-                <SelectItem value="canny">Контуры (Canny)</SelectItem>
-                <SelectItem value="pose">Поза (DWPose)</SelectItem>
-                <SelectItem value="direct">Прямой (без карт)</SelectItem>
+                <SelectItem value="depth">Depth</SelectItem>
+                <SelectItem value="canny">Contours (Canny)</SelectItem>
+                <SelectItem value="pose">Pose (DWPose)</SelectItem>
+                <SelectItem value="direct">Direct (no maps)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Длительность */}
+          {/* Duration */}
           <div className="space-y-1">
             <SettingSlider
-              label="Длительность, сек"
-              labelTitle="Длительность результата в секундах."
+              label="Duration, sec"
+              labelTitle="Result duration in seconds."
               value={params.duration}
               min={1}
               max={30}
               step={1}
               onChange={(v) => patchParams({ duration: Math.round(v) })}
-              formatValue={(v) => `${v} с`}
+              formatValue={(v) => `${v} s`}
             />
             <p className="text-[10px] text-muted-foreground/60">
-              Если контрольное видео короче — длительность обрежется под него.
+              If control video is shorter, duration will be trimmed to match it.
             </p>
           </div>
 
-          {/* Короткая сторона */}
+          {/* Short side */}
           <div className="space-y-1">
             <Label
               className="text-xs text-muted-foreground"
-              title="Короткая сторона результата. Длинная считается по пропорции контрольного видео."
+              title="Short side of result. Long side is computed by control video aspect ratio."
             >
-              Короткая сторона результата
+              Short side of result
             </Label>
             <Select
               value={String(params.targetShortSide)}
@@ -828,14 +737,14 @@ export function ControlNetView() {
             </Select>
           </div>
 
-          {/* Дополнительные параметры: Seed */}
+          {/* Advanced parameters */}
           <div className="space-y-2">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-border hover:border-orange-500/30 transition-all text-left"
             >
-              <span className="text-xs font-medium text-muted-foreground">Дополнительные параметры</span>
+              <span className="text-xs font-medium text-muted-foreground">Advanced Parameters</span>
               <span className={cn('text-[10px] text-muted-foreground transition-transform', showAdvanced && 'rotate-180')}>▼</span>
             </button>
 
@@ -848,7 +757,7 @@ export function ControlNetView() {
                     <button
                       onClick={() => setSeed(-1)}
                       className="p-1 rounded hover:bg-[var(--surface-3)] transition-colors"
-                      title="Случайный seed (-1)"
+                      title="Random seed (-1)"
                     >
                       <DicesIcon className="w-4 h-4 text-muted-foreground" />
                     </button>
@@ -866,8 +775,7 @@ export function ControlNetView() {
                   />
                 </div>
 
-                {/* (правка 511) Шаги + сэмплер + планировщик — как на вкладке «Генерация» */}
-                {/* Pass 1 (в драфте — единственный проход) */}
+                {/* Pass 1 */}
                 <div className="space-y-1.5">
                   <button
                     type="button"
@@ -875,19 +783,18 @@ export function ControlNetView() {
                     className="w-full flex items-center justify-between px-3 py-1.5 rounded-md bg-[var(--surface-3)] border border-border/60 hover:border-orange-500/30 transition-all text-left"
                   >
                     <span className="text-xs font-medium text-muted-foreground">
-                      {isDraft ? 'Драфт — единственный проход' : 'Pass 1 — Low-res'}
+                      {isDraft ? 'Draft — single pass' : 'Pass 1 — Low-res'}
                     </span>
                     <span className={cn('text-[10px] text-muted-foreground transition-transform', showPass1 && 'rotate-180')}>▼</span>
                   </button>
 
                   {showPass1 && (
                     <div className="space-y-3 pl-1">
-                      {/* Full: low-res разрешение канвы pass 1 */}
                       {!isDraft && (
                         <div className="space-y-1">
                           <SettingSlider
-                            label="Low-res разрешение (MP)"
-                            labelTitle="Размер чернового прохода: чем меньше, тем быстрее. В конце видео всё равно доводится до полного разрешения."
+                            label="Low-res resolution (MP)"
+                            labelTitle="Draft pass size: smaller is faster. Video is brought to full resolution at the end regardless."
                             value={params.lowResMP}
                             onChange={(v) => patchParams({ lowResMP: Math.min(2, Math.max(0.2, Math.round(v * 100) / 100)) })}
                             min={0.2}
@@ -895,18 +802,17 @@ export function ControlNetView() {
                             step={0.05}
                             inputMin={0.1}
                             inputMax={2}
-                            inputHint={`0.1–2.0 MP — размер чернового прохода`}
+                            inputHint="0.1–2.0 MP — draft pass size"
                           />
                         </div>
                       )}
 
-                      {/* Шаги */}
                       <div className="space-y-1">
                         <SettingSlider
-                          label={isDraft ? 'Шаги драфта' : 'Шаги сэмплера (Pass 1)'}
+                          label={isDraft ? 'Draft steps' : 'Sampler steps (Pass 1)'}
                           labelTitle={isDraft
-                            ? 'Сколько шагов делает модель, рисуя видео. 4 — стандарт: быстро и хорошо; больше — аккуратнее, но медленнее.'
-                            : 'Сколько шагов делает черновой проход. Больше — точнее, но медленнее.'}
+                            ? 'How many steps the model performs. 4 is standard: fast and good; more is cleaner, but slower.'
+                            : 'How many steps the draft pass performs. More is more accurate, but slower.'}
                           value={isDraft ? params.draftSteps : params.firstSamplerSteps}
                           onChange={(v) => {
                             const n = Math.round(v)
@@ -918,21 +824,15 @@ export function ControlNetView() {
                           step={1}
                           inputMin={1}
                           inputMax={128}
-                          inputHint={isDraft ? '2–30 шагов единственного прохода (стандарт — 4)' : '1–128 шагов. Выше 30 — заметно дольше генерация'}
+                          inputHint={isDraft ? '2–30 steps for single pass (standard is 4)' : '1–128 steps. Above 30 takes noticeably longer'}
                         />
                       </div>
 
-                      {/* Всего шагов в расписании pass 1 — задаётся отдельно
-                          от точки сплита: по умолчанию «6 из 6». */}
                       {!isDraft && (
                         <div className="space-y-1">
                           <SettingSlider
-                            label="Всего шагов (pass 1)"
-                            labelTitle={
-                              'Длина расписания BasicScheduler, из которого SplitSigmas берёт ' +
-                              'верхнюю часть для чернового прохода. По умолчанию — столько же, ' +
-                              'сколько у сплита («6 из 6»).'
-                            }
+                            label="Total steps (pass 1)"
+                            labelTitle="Length of BasicScheduler schedule from which SplitSigmas takes the top portion for draft pass. Default is equal to split ('6 of 6')."
                             value={cnTotal}
                             onChange={(v) => patchParams({ firstSamplerTotalSteps: Math.round(v) })}
                             min={2}
@@ -940,29 +840,28 @@ export function ControlNetView() {
                             step={1}
                             inputMin={2}
                             inputMax={128}
-                            inputHint="2–128 шагов расписания. По умолчанию — как у сплита (6/6)"
+                            inputHint="2–128 schedule steps. Default is same as split (6/6)"
                           />
                           <p className="text-[10px] text-muted-foreground/70 leading-snug">
-                            Pass 1: {cnSplit} из {cnTotal} · σ 1.0 → {cnSigmaEnd.toFixed(3)} ·
-                            Pass 2: σ {cnPass2Start} → 0 ({cnPass2Steps} шага)
+                            Pass 1: {cnSplit} of {cnTotal} · σ 1.0 → {cnSigmaEnd.toFixed(3)} ·
+                            Pass 2: σ {cnPass2Start} → 0 ({cnPass2Steps} steps)
                           </p>
                         </div>
                       )}
 
-                      {/* Сэмплер Pass 1 */}
                       <div className="space-y-1">
                         <Label
                           className="text-xs text-muted-foreground"
-                          title="Способ, которым модель рисует кадры. Влияет на детализацию и стабильность; если не уверены — оставьте euler."
+                          title="Sampling method for drawing frames. Influences detail and stability; if unsure, keep euler."
                         >
-                          Сэмплер
+                          Sampler
                         </Label>
                         <Select
                           value={params.pass1Sampler}
                           onValueChange={(v) => patchParams({ pass1Sampler: v })}
                         >
                           <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
-                            <SelectValue placeholder="Выберите" />
+                            <SelectValue placeholder="Select" />
                           </SelectTrigger>
                           <SelectContent className="bg-[var(--surface-3)] border-border">
                             {SAMPLER_OPTIONS.map((o) => (
@@ -972,20 +871,19 @@ export function ControlNetView() {
                         </Select>
                       </div>
 
-                      {/* Планировщик Pass 1 */}
                       <div className="space-y-1">
                         <Label
                           className="text-xs text-muted-foreground"
-                          title="Как модель распределяет работу между шагами. Обычно лучше оставить simple."
+                          title="How model distributes work across steps. Usually best to keep simple."
                         >
-                          Планировщик
+                          Scheduler
                         </Label>
                         <Select
                           value={params.pass1Scheduler}
                           onValueChange={(v) => patchParams({ pass1Scheduler: v })}
                         >
                           <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
-                            <SelectValue placeholder="Выберите" />
+                            <SelectValue placeholder="Select" />
                           </SelectTrigger>
                           <SelectContent className="bg-[var(--surface-3)] border-border">
                             {SCHEDULER_OPTIONS.map((o) => (
@@ -998,7 +896,7 @@ export function ControlNetView() {
                   )}
                 </div>
 
-                {/* Pass 2 — только пайплайн 'full' */}
+                {/* Pass 2 (Full pipeline only) */}
                 {!isDraft && (
                   <div className="space-y-1.5">
                     <button
@@ -1012,45 +910,43 @@ export function ControlNetView() {
 
                     {showPass2 && (
                       <div className="space-y-3 pl-1">
-                        {/* Sigma-профиль (шаги pass 2) */}
                         <div className="space-y-1">
                           <Label
                             className="text-xs text-muted-foreground"
-                            title="Сколько шагов делает финальный проход детализации. Больше — чётче картинка, но дольше."
+                            title="Sampling steps for final refinement pass. More is clearer, but takes longer."
                           >
-                            Sigma-профиль (шаги)
+                            Sigma profile (steps)
                           </Label>
                           <Select
                             value={params.sigmaVariant}
                             onValueChange={(v) => patchParams({ sigmaVariant: v })}
                           >
                             <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
-                              <SelectValue placeholder="Выберите" />
+                              <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent className="bg-[var(--surface-3)] border-border">
-                              <SelectItem value="3step">3 шага (быстрее)</SelectItem>
-                              <SelectItem value="4step">4 шага (баланс)</SelectItem>
-                              <SelectItem value="5step">5 шагов (высокое)</SelectItem>
-                              <SelectItem value="6step">6 шагов (оч. высокое)</SelectItem>
-                              <SelectItem value="7step">7 шагов (макс.)</SelectItem>
+                              <SelectItem value="3step">3 steps (faster)</SelectItem>
+                              <SelectItem value="4step">4 steps (balanced)</SelectItem>
+                              <SelectItem value="5step">5 steps (high)</SelectItem>
+                              <SelectItem value="6step">6 steps (very high)</SelectItem>
+                              <SelectItem value="7step">7 steps (max)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
-                        {/* Сэмплер Pass 2 */}
                         <div className="space-y-1">
                           <Label
                             className="text-xs text-muted-foreground"
-                            title="Способ, которым модель рисует кадры. Влияет на детализацию и стабильность; если не уверены — оставьте euler."
+                            title="Sampling method for drawing frames. Influences detail and stability; if unsure, keep euler."
                           >
-                            Сэмплер
+                            Sampler
                           </Label>
                           <Select
                             value={params.pass2Sampler}
                             onValueChange={(v) => patchParams({ pass2Sampler: v })}
                           >
                             <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
-                              <SelectValue placeholder="Выберите" />
+                              <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent className="bg-[var(--surface-3)] border-border">
                               {SAMPLER_OPTIONS.map((o) => (
@@ -1067,16 +963,14 @@ export function ControlNetView() {
             )}
           </div>
 
-          {/* (правка 727) Папка результата — как на вкладке «Генерация».
-              По умолчанию — папка контрольного видео: переиспользование
-              ролика из папки не разбрасывает результаты по корню. */}
+          {/* Output folder */}
           {gallery.folders.length > 0 && (
             <div className="space-y-1.5">
               <Label
                 className="text-xs text-muted-foreground"
-                title="Куда сохранять результат. По умолчанию — папка исходного видео."
+                title="Where to save results. Default is source video folder."
               >
-                Папка результата
+                Output folder
               </Label>
               <div className="relative">
                 <button
@@ -1091,11 +985,11 @@ export function ControlNetView() {
                     busy && 'opacity-50 pointer-events-none',
                   )}
                   title={outputFolder
-                    ? `Папка результата: ${outputFolder}`
-                    : 'Папка результата: общая папка output'}
+                    ? `Output folder: ${outputFolder}`
+                    : 'Output folder: general output folder'}
                 >
                   <FolderIcon className="w-3.5 h-3.5" />
-                  <span className="flex-1 text-left truncate">{outputFolder || 'Общая папка'}</span>
+                  <span className="flex-1 text-left truncate">{outputFolder || 'General folder'}</span>
                   <ChevronDownIcon className={cn('w-3 h-3 transition-transform', folderMenuOpen && 'rotate-180')} />
                 </button>
                 {folderMenuOpen && (
@@ -1111,10 +1005,9 @@ export function ControlNetView() {
                         )}
                       >
                         <FilmIcon className="w-3.5 h-3.5 shrink-0" />
-                        <span className="flex-1 truncate">Общая папка</span>
+                        <span className="flex-1 truncate">General folder</span>
                       </button>
                       {gallery.folders.map((f) => {
-                        // (правка 495) Вложенные папки: отступ по глубине.
                         const depth = f.split('/').length - 1
                         const leaf = f.slice(f.lastIndexOf('/') + 1)
                         return (
@@ -1141,17 +1034,17 @@ export function ControlNetView() {
             </div>
           )}
 
-          {/* Запуск */}
+          {/* Launch */}
           <div className="flex gap-2 pt-1">
             <Button onClick={startWithHistory} disabled={!source || modelsMissing || uploadingSrc} className="flex-1 gap-1.5">
               <PlayIcon className="w-4 h-4" />
-              {busy ? 'Ещё в очередь' : params.preprocessOnly ? 'Сохранить карту' : 'Сгенерировать'}
+              {busy ? 'Queue another' : params.preprocessOnly ? 'Save map' : 'Generate'}
             </Button>
           </div>
 
         </div>
 
-        {/* Статус */}
+        {/* Status */}
         <div className="shrink-0 border-t border-border p-3 bg-[var(--surface-1)]/90 backdrop-blur-sm">
           <GenerationStatus
             isGenerating={busy}
@@ -1163,31 +1056,24 @@ export function ControlNetView() {
             onReset={reset}
             startedAt={startedAt}
             promptId={promptId}
-            // (правка 512) Pass 1/2 показываем как на вкладке «Генерация».
-            // 'passes': full → «Pass 1/2 · черновик» / «Pass 2/2 · детализация»;
-            //            draft → «Проход» (totalStages=1).
             stageKind="passes"
           />
         </div>
       </aside>
 
-      {/* ═══ Центральная колонка: промпт + галерея (правка 502) ═══ */}
+      {/* ═══ Center Column: Prompt + Gallery ═══ */}
       <section className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[var(--surface-1)]">
-        {/* (правка 515) Карточка промпта — ТОЧНО как на вкладке «Генерация»:
-            MentionTextarea + PromptEditButton (карандаш) + VoiceInputButton
-            (диктовка) + PromptEditorDialog (полноэкранный редактор) +
-            PromptQuality (живые подсказки) + История + Готовые примеры. */}
         <div className="p-5 pb-3 space-y-3 aurora-bg shrink-0">
           <div className="flex items-center justify-between shrink-0">
             <Label className="text-sm font-medium text-foreground flex items-center gap-2">
               <SparklesIcon className="w-4 h-4 text-orange-400" />
-              Описание видео
+              Video description
             </Label>
             <span className="text-[10px] text-muted-foreground/70 hidden sm:block">
               <kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Ctrl</kbd>
               {' + '}
               <kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Enter</kbd>
-              {' — запустить'}
+              {' — generate'}
             </span>
           </div>
 
@@ -1207,19 +1093,14 @@ export function ControlNetView() {
               }))}
               className="h-[220px] pr-12"
             />
-            {/* (правка 717) Кнопки поля — вертикальная колонка с ровными
-                интервалами (PromptFieldTools). */}
             <PromptFieldTools>
-              {/* (правка 515) Карандаш — открывает полноэкранный редактор промпта */}
               <PromptEditButton onOpen={() => setPromptEditorOpen(true)} />
-              {/* (правка 691) «Очистить» + «Исправить» — над микрофоном */}
               <PromptClearButton
                 disabled={!prompt.trim()}
                 onClear={() => setPrompt('')}
               />
               <PromptFixButton onFix={() => setFixOpen(true)} />
             </PromptFieldTools>
-            {/* (правка 515) Микрафон — диктовка в поле (hotkey R/К) */}
             <VoiceInputButton
               hotkey
               onText={(t) => {
@@ -1227,9 +1108,6 @@ export function ControlNetView() {
                 setPrompt((cur ? cur.trimEnd() : '') ? `${cur.trimEnd()} ${t}` : t)
               }}
             />
-            {/* (правка 515) Полноэкранный редактор — как на вкладке «Генерация»:
-                вставка тегов/реплик/кинословаря/скелетов, история, примеры,
-                «Улучшить промпт» (уходит в controlnet-чат ассистента). */}
             <PromptEditorDialog
               open={promptEditorOpen}
               onOpenChange={setPromptEditorOpen}
@@ -1247,20 +1125,16 @@ export function ControlNetView() {
               }))}
               improveOptions={{ mode: 'controlnet' }}
             />
-            {/* (правка 691) Диалог «Исправить промпт» из поля: задание +
-                промпт уходят в controlnet-чат ассистента. */}
             <PromptFixDialog
               open={fixOpen}
               onOpenChange={setFixOpen}
-              hint="Промпт и ваше задание уйдут в чат ассистента вкладки «ControlNet» — ответ можно будет вставить обратно кнопкой «В промпт». Ctrl+Enter — отправить, Esc — отмена."
+              hint="The prompt and your request will be sent to the ControlNet tab assistant chat — you can paste the response back with 'To Prompt'. Ctrl+Enter to send, Esc to cancel."
               onSubmit={(req) => requestImprovePrompt(prompt, { mode: 'controlnet', fixRequest: req })}
             />
           </div>
 
-          {/* (правка 515) Живые подсказки качества — как на вкладке «Генерация» */}
           <PromptQuality prompt={prompt} refsCount={refImages.length} />
 
-          {/* (правка 515) История + Готовые примеры — портал-дропдауны, как в generate-view */}
           <div className="flex items-center gap-1.5">
             <button
               ref={historyBtnRef}
@@ -1277,7 +1151,7 @@ export function ControlNetView() {
               )}
             >
               <HistoryIcon className="w-3 h-3" />
-              История
+              History
               {historyEntries.length > 0 && (
                 <span className="ml-0.5 px-1 rounded-full bg-[var(--surface-3)] text-[10px] text-muted-foreground">
                   {historyEntries.length}
@@ -1299,7 +1173,7 @@ export function ControlNetView() {
               )}
             >
               <SparklesIcon className="w-3 h-3" />
-              Примеры
+              Examples
             </button>
           </div>
 
@@ -1320,20 +1194,20 @@ export function ControlNetView() {
                 style={dropdownPos(historyBtnRef.current)}
               >
                 <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border sticky top-0 bg-[var(--surface-3)]">
-                  <span className="text-[10px] font-semibold text-foreground">История промптов</span>
+                  <span className="text-[10px] font-semibold text-foreground">Prompt history</span>
                   {historyEntries.length > 0 && (
                     <button
                       type="button"
                       onClick={clearHistory}
                       className="text-[10px] text-muted-foreground hover:text-red-400"
                     >
-                      очистить всё
+                      clear all
                     </button>
                   )}
                 </div>
                 {historyEntries.length === 0 && (
                   <p className="px-2.5 py-3 text-xs text-muted-foreground">
-                    Пока пусто — запущенные промпты сохраняются здесь автоматически.
+                    Empty so far — generated prompts are saved here automatically.
                   </p>
                 )}
                 {historyEntries.map((e) => (
@@ -1343,7 +1217,7 @@ export function ControlNetView() {
                     onClick={() => {
                       setPrompt(e.text)
                       setHistoryOpen(false)
-                      toast.success('Промпт вставлен из истории')
+                      toast.success('Prompt inserted from history')
                     }}
                   >
                     <button
@@ -1352,7 +1226,7 @@ export function ControlNetView() {
                         ev.stopPropagation()
                         toggleHistoryFavorite(e.id)
                       }}
-                      title={e.favorite ? 'Убрать из избранного' : 'В избранное'}
+                      title={e.favorite ? 'Remove from favorites' : 'Add to favorites'}
                       className={cn(
                         'shrink-0 mt-0.5 w-4 h-4 flex items-center justify-center transition-colors',
                         e.favorite ? 'text-amber-400' : 'text-muted-foreground/40 hover:text-amber-400',
@@ -1370,7 +1244,7 @@ export function ControlNetView() {
                         removeHistoryEntry(e.id)
                       }}
                       className="shrink-0 mt-0.5 w-4 h-4 flex items-center justify-center text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Удалить из истории"
+                      title="Delete from history"
                     >
                       <XIcon className="w-3 h-3" />
                     </button>
@@ -1387,7 +1261,7 @@ export function ControlNetView() {
                 style={dropdownPos(examplesBtnRef.current)}
               >
                 <div className="px-2.5 py-1.5 border-b border-border sticky top-0 bg-[var(--surface-3)]">
-                  <span className="text-[10px] font-semibold text-foreground">Готовые примеры</span>
+                  <span className="text-[10px] font-semibold text-foreground">Ready-made examples</span>
                 </div>
                 {EXAMPLES.map((ex) => (
                   <div
@@ -1402,7 +1276,7 @@ export function ControlNetView() {
                   </div>
                 ))}
                 <p className="px-2.5 py-2 text-[10px] text-muted-foreground/60 border-t border-border">
-                  Заменяет текущий промпт (с возможностью отменить). Промпты — на английском: модель понимает его лучше всего.
+                  Replaces current prompt (can be undone). Prompts are in English: model understands it best.
                 </p>
               </div>,
               document.body
@@ -1415,13 +1289,12 @@ export function ControlNetView() {
             loading={gallery.loading}
             onRefresh={() => void gallery.load()}
             onDeleteFile={gallery.deleteFile}
-            emptyHint="Результаты ControlNet появятся здесь"
+            emptyHint="ControlNet results will appear here"
           />
         </div>
       </section>
 
-      {/* (правка 502) Ассистент — правая боковая панель (чаты режима
-          «ControlNet»; resize за левую границу, сворачивается в рейл) */}
+      {/* Assistant panel */}
       <AssistantPanel mode="controlnet" />
     </div>
   )

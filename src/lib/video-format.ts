@@ -1,24 +1,24 @@
 /**
- * video-format (правка 386) — ЕДИНЫЕ настройки кодирования видео-выходов
- * студии (config.ini → [video]). Применяются во ВСЕХ режимах:
- * генерация (draft/full), рефайн «Целый»/«Частями», продление
- * (комбинированный вывод и безыходные клипы), тайловый апскейл, FPS и
- * ffmpeg-пути (обрезка, склейка, сшивка).
+ * video-format (fix 386) — UNIFIED encoding settings for studio video outputs
+ * (config.ini → [video]). Applied in ALL modes:
+ * generation (draft/full), refine "Full"/"Tiled", extend
+ * (combined output and headless clips), tiled upscale, FPS, and
+ * ffmpeg paths (trim, concat, stitch).
  *
- * Кодеки (форматы VHS VideoHelperSuite, ffmpeg — те же энкодеры):
- *  • h264       — libx264, максимум совместимости (default)
- *  • h265       — libx265, файлы на ~30–50% меньше при том же CRF
- *  • nvenc_h264 — h264_nvenc, аппаратный энкодер NVIDIA (быстро, качество
- *                 задаётся битрейтом, не CRF)
- *  • nvenc_h265 — hevc_nvenc, то же + компактность
+ * Codecs (VHS VideoHelperSuite formats, ffmpeg — same encoders):
+ *  • h264       — libx264, maximum compatibility (default)
+ *  • h265       — libx265, files ~30–50% smaller at the same CRF
+ *  • nvenc_h264 — h264_nvenc, NVIDIA hardware encoder (fast, quality
+ *                 specified by bitrate, not CRF)
+ *  • nvenc_h265 — hevc_nvenc, same + compactness
  *
- * Качество: CRF 0–30 (меньше = лучше; дефолт 12 — как было в студии).
- * Для nvenc — битрейт в Мбит/с (дефолт 16).
+ * Quality: CRF 0–30 (lower = better; default 12 — as previously in studio).
+ * For nvenc — bitrate in Mbps (default 16).
  *
- * МОДУЛЬ ЧИСТЫЙ (без fs/config): импортируется и клиентскими модулями
- * (шаблоны воркфлоу тянутся в use-video-gen ради framesForDuration).
- * Чтение config.ini — в video-format-server.ts (только сервер): роуты и
- * minimax-h3-client передают готовые настройки параметром videoFormat.
+ * PURE MODULE (no fs/config): imported by client modules as well
+ * (workflow templates are imported into use-video-gen for framesForDuration).
+ * Reading config.ini is in video-format-server.ts (server only): routes and
+ * minimax-h3-client pass prepared settings via videoFormat parameter.
  */
 export type VideoCodec = 'h264' | 'h265' | 'nvenc_h264' | 'nvenc_h265'
 
@@ -26,9 +26,9 @@ export const VIDEO_CODECS: VideoCodec[] = ['h264', 'h265', 'nvenc_h264', 'nvenc_
 
 export interface VideoFormatSettings {
   codec: VideoCodec
-  /** CRF для программных кодеков (h264/h265), 0–30. */
+  /** CRF for software codecs (h264/h265), 0–30. */
   crf: number
-  /** Битрейт для NVENC, Мбит/с (4–40). */
+  /** Bitrate for NVENC, Mbps (4–40). */
   nvencBitrate: number
 }
 
@@ -40,9 +40,9 @@ export function normalizeVideoFormat(raw: {
   const codec = VIDEO_CODECS.includes(raw.codec as VideoCodec)
     ? (raw.codec as VideoCodec)
     : 'h264'
-  // (правка 587) crf=0 валиден (правка 556): дефолт 12 — только если значения
-  // нет (undefined/null/пустая строка/NaN); || 12 молча превращал честный 0 в 12
-  // (Number('') и Number(null) тоже 0, поэтому проверяем до преобразования).
+  // (fix 587) crf=0 is valid (fix 556): default 12 — only if value is
+  // absent (undefined/null/empty string/NaN); || 12 silently turned genuine 0 into 12
+  // (Number('') and Number(null) are also 0, so check before conversion).
   const emptyCrf = raw.crf === undefined || raw.crf === null ||
     (typeof raw.crf === 'string' && raw.crf.trim() === '')
   const crfNum = emptyCrf ? NaN : Number(raw.crf)
@@ -52,12 +52,12 @@ export function normalizeVideoFormat(raw: {
 }
 
 /**
- * Входы ноды VHS_VideoCombine для выбранного кодека/качества — спредом в
- * inputs воркфлоу (заменяют format/pix_fmt/crf/trim_to_audio).
- * Нюанс: trim_to_audio есть только у форматов, где он объявлен в JSON
- * (h264); h265/nvenc его не имеют — лишний вход роняет валидацию ноды.
+ * Inputs for VHS_VideoCombine node for the selected codec/quality — spread into
+ * workflow inputs (replaces format/pix_fmt/crf/trim_to_audio).
+ * Caveat: trim_to_audio exists only for formats where it is declared in JSON
+ * (h264); h265/nvenc don't have it — extra input fails node validation.
  */
-/** Дефолт (без настроек): прежнее поведение студии — h264 / CRF 12. */
+/** Default (without settings): previous studio behavior — h264 / CRF 12. */
 export const DEFAULT_VIDEO_FORMAT: VideoFormatSettings = { codec: 'h264', crf: 12, nvencBitrate: 16 }
 
 export function vhsEncodeInputs(fmt?: VideoFormatSettings): Record<string, unknown> {
@@ -75,8 +75,8 @@ export function vhsEncodeInputs(fmt?: VideoFormatSettings): Record<string, unkno
 }
 
 /**
- * Аргументы ffmpeg для кодирования видео (роуты trim/concat/stitch).
- * Вызывающий добавляет свой -preset и специфичные флаги (pix_fmt и т.п.).
+ * ffmpeg arguments for video encoding (trim/concat/stitch routes).
+ * Caller adds its own -preset and specific flags (pix_fmt etc.).
  */
 export function ffmpegVideoArgs(fmt?: VideoFormatSettings): string[] {
   const f = fmt ?? DEFAULT_VIDEO_FORMAT

@@ -1,44 +1,44 @@
 /**
- * (правка 103) Потоковый разбор multipart/form-data для Next.js API-роутов.
+ * (fix 103) Streaming multipart/form-data parser for Next.js API routes.
  *
- * ЗАЧЕМ: `req.formData()` (undici) собирает ВСЁ тело запроса в Blob в RAM
- * (Blob → arrayBuffer() → Buffer — ещё одна полная копия). На файлах в
- * десятки ГБ это гарантированный OOM процесса Node: клиент «догружает
- * до 100 %», а сервер уже мёртв — файл не дописан, «модели нет».
+ * WHY: `req.formData()` (undici) collects the ENTIRE request body into a Blob in RAM
+ * (Blob → arrayBuffer() → Buffer — yet another full copy). On multi-gigabyte
+ * files this guarantees a Node process OOM: client "loads
+ * up to 100%", while the server is already dead — file not written, "model missing".
  *
- * Решение: тело разбираем по потоку. Заголовки первой части читаются до
- * начала передачи байтов тела (имя файла известно сразу — можно отказать
- * 400/409 ДО записи), затем тело части отдаётся Readable-стримом, который
- * вызывающий pipe'ит прямо в файл. Память O(чанк), а не O(файл).
+ * Solution: stream-parse the request body. Headers of the first part are read
+ * before transmitting body bytes (filename is known upfront — can reject
+ * 400/409 BEFORE writing), then the part body is yielded as a Readable stream, which
+ * caller pipes directly to file. Memory is O(chunk), not O(file).
  *
- * Используется в: /api/comfy/diffusion-models (модели), /api/loras (LoRAs).
- * Аналогичная логика «вручную» есть в /api/upscale/upload — при изменении
- * этого либа сверить оба подхода.
+ * Used in: /api/comfy/diffusion-models (models), /api/loras (LoRAs).
+ * Similar "manual" logic exists in /api/upscale/upload — if modifying
+ * this lib, cross-check both approaches.
  *
- * (правка 105) Фикс «утечки» закрывающего boundary в тело части:
- * до фикса байты, уже лежавшие в аккумуляторе carry (например, весь хвост
- * файла + "\r\n--boundary--\r\n"), выгружались как есть, без поиска
- * разделителя — тело части оказывалось длиннее файла, и файл получался
- * повреждённым. Теперь и выгрузка carry, и обработка нового чанка идут
- * через ОДИН хелпер drainCarry(), который всегда сначала ищет закрывающий
- * разделитель.
+ * (fix 105) Fix boundary "leak" into part body:
+ * before this fix, bytes already in carry accumulator (e.g. entire tail
+ * of file + "\r\n--boundary--\r\n") were drained as is, without searching for
+ * delimiter — part body ended up longer than the file, causing corruption.
+ * Now both carry draining and new chunk processing go
+ * through ONE helper drainCarry(), which always checks for closing
+ * delimiter first.
  *
- * (правка 106) Источник чтения — СОБСТВЕННЫЙ reader Web-потока
- * (req.body.getReader()), а НЕ Readable.fromWeb(req.body).
- * Причина: `Readable.fromWeb` оборачивает тело запроса в адаптер
- * Node↔Web поверх Web-потока, который сам Next построил из IncomingMessage
- * (Readable.toWeb) — двойная конвертация. На больших загрузках этот
- * мост «спотыкался» под бэкпресуром: сервер сбрасывал сокет (ECONNRESET),
- * тогда как тот же самый разбор через req.body.getReader() (как в
- * /api/upscale/upload — рабочем роуте на 32 ГБ) шёл до конца. Теперь
- * источник читаем тем же способом, что и роут, который В РАБОТЕ:
- * reader.read() по одному чанку, без промежуточного Node-адаптера.
- * Node-Readable по-прежнему принимается (для тестов вне Next) —
- * нормализуется через Readable.toWeb.
+ * (fix 106) Read source — OWN reader of Web stream
+ * (req.body.getReader()), NOT Readable.fromWeb(req.body).
+ * Reason: `Readable.fromWeb` wraps request body in a Node↔Web adapter
+ * on top of Web stream, which Next itself built from IncomingMessage
+ * (Readable.toWeb) — double conversion. Under heavy uploads this
+ * bridge stumbled under backpressure: server reset socket (ECONNRESET),
+ * whereas the same parsing via req.body.getReader() (as in
+ * /api/upscale/upload — working 32 GB route) finished successfully. Now
+ * source is read using the same method as the working route:
+ * reader.read() one chunk at a time, without intermediate Node adapter.
+ * Node Readable is still accepted (for tests outside Next) —
+ * normalized via Readable.toWeb.
  */
 import { Readable, type Readable as NodeReadable } from 'stream'
 
-/** Ошибка валидации multipart-тела — роуты отдают её как 400, не 500. */
+/** Multipart body validation error — routes return it as 400, not 500. */
 export class MultipartParseError extends Error {
   constructor(message: string) {
     super(message)
@@ -47,9 +47,9 @@ export class MultipartParseError extends Error {
 }
 
 /**
- * (правка 106) Web-поток в структурном типе: у нас есть req.body (DOM-
- * ReadableStream) и Readable.toWeb (stream/web) — формально разные типы,
- * а нужен только getReader().read().
+ * (fix 106) Structural type for Web stream: we have req.body (DOM
+ * ReadableStream) and Readable.toWeb (stream/web) — formally different types,
+ * while all we need is getReader().read().
  */
 type WebBody = {
   getReader(): {
@@ -58,7 +58,7 @@ type WebBody = {
   }
 }
 
-/** (правка 106) Принимаем и Web-поток (Next), и Node Readable (тесты). */
+/** (fix 106) Accepts both Web stream (Next) and Node Readable (tests). */
 export type MultipartSource = WebBody | NodeReadable
 
 function isWebStream(x: unknown): x is WebBody {
@@ -66,25 +66,25 @@ function isWebStream(x: unknown): x is WebBody {
 }
 
 /**
- * Первая часть multipart/form-data.
- * `stream` — тело части (без заголовков и без закрывающего boundary);
- * `cancel()` — прервать чтение тела запроса (reader.cancel): сокет
- * закроется, браузер перестанет слать байты.
+ * First part of multipart/form-data.
+ * `stream` — body of the part (without headers and without closing boundary);
+ * `cancel()` — abort reading request body (reader.cancel): socket
+ * will close, browser will stop sending bytes.
  */
 export interface MultipartFilePart {
-  /** filename из Content-Disposition (null, если у части нет filename). */
+  /** filename from Content-Disposition (null if part has no filename). */
   filename: string | null
-  /** Сырые заголовки части (до пустой строки). */
+  /** Raw part headers (up to empty line). */
   headers: string
-  /** Потоковое тело части. */
+  /** Streaming body of the part. */
   stream: Readable
-  /** (правка 106) Отменить чтение тела запроса (безопасно вызывать дважды). */
+  /** (fix 106) Cancel reading request body (safe to call twice). */
   cancel: () => void
 }
 
 const EMPTY = Buffer.alloc(0)
 
-/** boundary из Content-Type: multipart/form-data; boundary=... */
+/** boundary from Content-Type: multipart/form-data; boundary=... */
 function getBoundary(contentType: string | null): string | null {
   if (!contentType) return null
   const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType)
@@ -92,7 +92,7 @@ function getBoundary(contentType: string | null): string | null {
   return b || null
 }
 
-/** filename из заголовков части (Content-Disposition), экранированные \\X разэкранируются. */
+/** filename from part headers (Content-Disposition), unescapes \\X. */
 function parseFileName(headers: string): string | null {
   const cd = headers
     .split(/\r?\n/)
@@ -105,15 +105,15 @@ function parseFileName(headers: string): string | null {
 }
 
 /**
- * Читает первую часть multipart/form-data: заголовки + (возможно) начало
- * тела — и возвращает часть со стримом тела. Тело целиком в память НЕ
- * берётся: после возврата дальше читает только кто-то, кто pipe'ит
+ * Reads the first part of multipart/form-data: headers + (possibly) start
+ * of body — and returns part with body stream. Body is NOT loaded into memory
+ * as a whole: after return, further reading happens only when someone pipes
  * `part.stream`.
  *
- * @param body — тело запроса: Web ReadableStream (req.body из Next) или
- *              Node Readable (тесты; нормализуется через Readable.toWeb)
- * @param contentType — заголовок Content-Type запроса
- * @throws MultipartParseError — не multipart / нет частей / нет filename
+ * @param body — request body: Web ReadableStream (req.body from Next) or
+ *              Node Readable (tests; normalized via Readable.toWeb)
+ * @param contentType — request Content-Type header
+ * @throws MultipartParseError — not multipart / no parts / no filename
  */
 export async function readFirstMultipartPart(
   body: MultipartSource,
@@ -121,14 +121,14 @@ export async function readFirstMultipartPart(
 ): Promise<MultipartFilePart> {
   const boundary = getBoundary(contentType)
   if (!boundary) {
-    throw new MultipartParseError('Ожидается multipart/form-data с boundary')
+    throw new MultipartParseError('Expected multipart/form-data with boundary')
   }
 
   const delim = Buffer.from(`\r\n--${boundary}`)
 
-  // (правка 106) Читаем СОБСТВЕННЫМ reader'ом Web-потока — так же, как
-  // /api/upscale/upload (рабочий роут). Node Readable переводим в Web
-  // (Readable.toWeb — штатное направление, а не от обратного fromWeb).
+  // (fix 106) Read using OWN Web stream reader — same as
+  // /api/upscale/upload (working route). Convert Node Readable to Web
+  // (Readable.toWeb — standard direction, rather than inverse fromWeb).
   const webBody: WebBody = isWebStream(body)
     ? body
     : Readable.toWeb(body as NodeReadable)
@@ -144,13 +144,13 @@ export async function readFirstMultipartPart(
     cancelled = true
     try {
       const p = reader.cancel()
-      if (p && typeof p.catch === 'function') void p.catch(() => { /* уже закрыт */ })
-    } catch { /* уже закрыт */ }
+      if (p && typeof p.catch === 'function') void p.catch(() => { /* already closed */ })
+    } catch { /* already closed */ }
   }
 
-  // ── 1) первая граница ──
-  // Виртуальный ведущий CRLF: первый «--boundary» в самом начале тела
-  // матчится тем же разделителем, что и все последующие.
+  // ── 1) first boundary ──
+  // Virtual leading CRLF: the first "--boundary" at the very start of the body
+  // matches the same delimiter as all subsequent ones.
   let carry = Buffer.from('\r\n')
   for (;;) {
     const i = carry.indexOf(delim)
@@ -159,25 +159,25 @@ export async function readFirstMultipartPart(
       break
     }
     const value = await readChunk()
-    if (!value) throw new MultipartParseError('Пустое тело запроса (нет частей)')
+    if (!value) throw new MultipartParseError('Empty request body (no parts)')
     carry = Buffer.concat([carry, Buffer.from(value)])
   }
 
-  // После разделителя: «--» = конец тела multipart (частей не было).
+  // After delimiter: "--" = end of multipart body (no parts were found).
   if (carry.length >= 2 && carry.subarray(0, 2).toString() === '--') {
-    throw new MultipartParseError('Часть с файлом не найдена')
+    throw new MultipartParseError('File part not found')
   }
   if (carry.length >= 2 && carry.subarray(0, 2).toString() === '\r\n') {
     carry = carry.subarray(2)
   }
 
-  // ── 2) заголовки части (до пустой строки) ──
+  // ── 2) part headers (up to empty line) ──
   let headerEnd = -1
   for (;;) {
     headerEnd = carry.indexOf('\r\n\r\n')
     if (headerEnd >= 0) break
     const value = await readChunk()
-    if (!value) throw new MultipartParseError('Неполные заголовки multipart-части')
+    if (!value) throw new MultipartParseError('Incomplete multipart part headers')
     carry = Buffer.concat([carry, Buffer.from(value)])
   }
   const headers = carry.subarray(0, headerEnd).toString('utf8')
@@ -185,32 +185,32 @@ export async function readFirstMultipartPart(
 
   const filename = parseFileName(headers)
 
-  // Состояние машины (carry — тот же аккумулятор: после заголовков в нём
-  // уже лежит возможное начало тела части).
-  let pendingEnd = false // разделитель найден, остаток выгружен — ждём push(null)
-  let finished = false   // стрим завершён (null выгружен)
-  let reading = false     // идёт async-чтение из источника
-  let destroyed = false   // ошибка — больше не читаем
+  // State machine (carry is the same accumulator: after headers it
+  // already contains possible beginning of part body).
+  let pendingEnd = false // delimiter found, remainder drained — waiting for push(null)
+  let finished = false   // stream finished (null pushed)
+  let reading = false     // async read from source is in flight
+  let destroyed = false   // error — read no more
 
-  // ── 3) стрим тела части ──
-  // (правка 105) Единый хелпер для ОБОИХ путей выгрузки (carry и новый
-  // чанк): сначала ищем закрывающий разделитель в накопленном буфере.
-  //   - разделитель на позиции i → выдаём carry[0..i), pendingEnd = true;
-  //   - разделителя нет → выдаём всё, кроме последних (delim-1) байтов
-  //     (они могут быть началом разделителя, разрезанного границей
-  //     чанков), хвост оставляем в carry.
-  // До фикса путь «carry уже не пуст» выгружал буфер целиком БЕЗ поиска
-  // разделителя — закрывающий «\r\n--boundary--\r\n» попадал в тело.
+  // ── 3) part body stream ──
+  // (fix 105) Unified helper for BOTH drain paths (carry and new
+  // chunk): first look for closing delimiter in accumulated buffer.
+  //   - delimiter at index i → push carry[0..i), pendingEnd = true;
+  //   - no delimiter → push everything except last (delim-1) bytes
+  //     (they may be the beginning of a delimiter split across chunks),
+  //     keep tail in carry.
+  //     chunks), keep tail in carry.
+  // Before fix, path "carry is not empty" pushed entire buffer WITHOUT checking
+  // for delimiter — closing "\r\n--boundary--\r\n" leaked into body.
   //
-  // Возврат drainCarry():
-  //   - false → backpressure (данные во внутреннем буфере стрима — их
-  //     дождётся потребитель; больше НЕ читаем источник);
-  //   - true  → либо стрим завершён (push null), либо ничего не выдали
-  //     (весь буфер — потенциальный хвост разделителя); в этом случае
-  //     читающий цикл обязан взять следующий чанк из источника, иначе
-  //     потребитель будет ждать «readable» вечно (event loop пустеет —
-  //     процесс Node просто тихо выходит, загрузка «молча» не
-  //     завершается).
+  // drainCarry() return:
+  //   - false → backpressure (data in stream internal buffer — consumer
+  //     will drain it; do NOT read source anymore);
+  //   - true  → either stream finished (push null), or nothing was pushed
+  //     (entire buffer is potential delimiter tail); in this case
+  //     reading loop must fetch next chunk from source, otherwise
+  //     consumer will wait for "readable" forever (event loop empties —
+  //     Node process silently exits, upload quietly hangs).
   const drainCarry = (): boolean => {
     if (carry.length === 0) return true
     const i = carry.indexOf(delim)
@@ -227,11 +227,11 @@ export async function readFirstMultipartPart(
     const chunk = carry.subarray(0, carry.length - keep)
     carry = carry.subarray(carry.length - keep)
     if (chunk.length === 0) return true
-    return stream.push(chunk) // false → backpressure, carry дождётся read()
+    return stream.push(chunk) // false → backpressure, carry will wait for read()
   }
 
-  // Читаем из источника, пока не выдали данные, не наступил backpressure
-  // или не завершились. Вызывается и из read(), и продолжением цикла.
+  // Read from source until data is pushed, backpressure occurs,
+  // or stream is finished. Called from read() and loop continuation.
   const startReading = () => {
     if (reading || finished || destroyed) return
     reading = true
@@ -240,9 +240,9 @@ export async function readFirstMultipartPart(
         for (;;) {
           const value = await readChunk()
           if (value == null) {
-            // Источник иссяк без закрывающего boundary (например, клиент
-            // оборвал загрузку) — выдаём, что накопилось, и завершаем;
-            // то, что уже выгружено, остаётся валидным.
+            // Source exhausted without closing boundary (e.g., client
+            // aborted upload) — push whatever was accumulated and finish;
+            // already drained data remains valid.
             if (carry.length > 0) {
               const chunk = carry
               carry = EMPTY
@@ -252,14 +252,14 @@ export async function readFirstMultipartPart(
             stream.push(null)
             return
           }
-          // Доливаем чанк в аккумулятор и выгружаем до разделителя
-          // (или допустимую часть) — та же логика, что в read().
+          // Append chunk to accumulator and drain up to delimiter
+          // (or safe prefix) — same logic as in read().
           carry = Buffer.concat([carry, Buffer.from(value)])
           const cont = drainCarry()
           if (finished || destroyed) return
-          if (!cont) return // backpressure — read() продолжит позже
-          // true, но не finished: чанк целиком ушёл в «хвост» — берём
-          // следующий (иначе потребитель ждёт данные вечно).
+          if (!cont) return // backpressure — read() will continue later
+          // true, but not finished: chunk fully went into "tail" — fetch
+          // next one (otherwise consumer waits for data forever).
         }
       } catch (err) {
         destroyed = true
@@ -275,27 +275,26 @@ export async function readFirstMultipartPart(
     read() {
       if (finished || destroyed) return
       if (pendingEnd) {
-        // Разделитель найден, остаток уже выгружен — завершаем стрим.
+        // Delimiter found, remainder already pushed — finish stream.
         finished = true
         stream.push(null)
         return
       }
       if (carry.length > 0) {
-        // Выгружаем накопленное (С поиском разделителя — правка 105).
-        if (!drainCarry()) return // backpressure — продолжим в read()
+        // Drain accumulated buffer (WITH delimiter search — fix 105).
+        if (!drainCarry()) return // backpressure — continue in read()
         if (finished) return
       }
-      // Данных для выдачи нет (carry пуст или только хвост разделителя),
-      // а стрим не завершён — обязательно берём следующий чанк из
-      // источника (правка 105), иначе цикл «ожидания» никогда не
-      // завершится.
+      // No data to push (carry is empty or only delimiter tail),
+      // and stream is not finished — must fetch next chunk from
+      // source (fix 105), otherwise "waiting" loop never ends.
       startReading()
     },
   })
 
-  // (правка 106) При разрушении part.stream (отмена загрузки) сразу же
-  // гасим и источник — иначе браузер продолжал бы слать гигабайты в
-  // никуда.
+  // (fix 106) When part.stream is destroyed (upload cancelled), immediately
+  // cancel source as well — otherwise browser would continue sending gigabytes into
+  // nowhere.
   stream.on('close', () => {
     destroyed = true
     cancel()

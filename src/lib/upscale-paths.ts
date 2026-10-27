@@ -1,17 +1,17 @@
 /**
- * (правка 716) Разрешённые корни локальных файлов для вкладки Upscale.
+ * (fix 716) Allowed local file roots for the Upscale tab.
  *
- * Вынесено в отдельный модуль, а не в api/upscale/file/route.ts: файлы
- * route.ts в Next.js App Router могут экспортировать только обработчики
- * и конфигурацию — любой другой экспорт ломает сборку.
+ * Moved to a separate module rather than api/upscale/file/route.ts: route.ts
+ * files in Next.js App Router can only export handlers and configuration —
+ * any other export breaks the build.
  */
 import path from 'path'
 import { getAppConfig } from '@/lib/app-config'
 
-/** Корни, из которых upscale может читать и писать файлы. */
+/** Roots from which upscale can read and write files. */
 export function upscaleAllowedRoots(): string[] {
   return [
-    // (правка 74.2) основные результаты пишутся в общую папку output ComfyUI
+    // (fix 74.2) main results are written to the shared ComfyUI output folder
     path.resolve(getAppConfig().outputDir),
     path.resolve(process.cwd(), 'data', 'upscale-output'),
     path.resolve(process.cwd(), 'data', 'upscale-input'),

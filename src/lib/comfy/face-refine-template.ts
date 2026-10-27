@@ -1,20 +1,20 @@
 import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format'
 
 /**
- * Face Refine — перерисовка мелких лиц в готовом видео MiniMax H3.
+ * Face Refine — repainting small faces in finished MiniMax H3 video.
  *
- * Набор нод ComfyUI-H3-FaceRefine (Carasibana, MIT) — «FaceDetailer для видео»:
- * детектим лицо покадрово → кропим так, чтобы голова занимала ~40 % холста →
- * отдаём кропы в H3 (MiniMaxH3ReferenceToVideo + H3InjectVideoLatent) →
- * перегенерируем их с низким denoise (H3PerFrameDenoise, denoise масштабируется
- * по размеру лица в кадре) → вклеиваем обратно ТОЛЬКО область лица
- * (H3FaceStitch, feather + колор-матч).
+ * Node suite ComfyUI-H3-FaceRefine (Carasibana, MIT) — "FaceDetailer for video":
+ * detect face per frame → crop so that the head occupies ~40% of canvas →
+ * pass crops to H3 (MiniMaxH3ReferenceToVideo + H3InjectVideoLatent) →
+ * regenerate them with low denoise (H3PerFrameDenoise, denoise scales
+ * according to face size in frame) → paste back ONLY the face area
+ * (H3FaceStitch, feather + color match).
  *
- * Граф (по example_workflows пака, без NativeAudioLock — его пакета у нас нет,
- * звук берётся из исходника):
+ * Graph (according to pack example_workflows, without NativeAudioLock — we don't have its package,
+ * audio is taken from source):
  *
  *   VHS_LoadVideo ─→ H3FaceTrackCrop ─┬─ crops ─→ H3InjectVideoLatent ─┐
- *                     │                │              (av_latent из H3) │
+ *                     │                │              (av_latent from H3)│
  *                     │                ├─ canvas_w/h ─┐                │
  *                     │                ├─ frame_count ┤                │
  *                     │                └─ transform ─┤                │
@@ -22,19 +22,19 @@ import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format'
  *   CLIPLoader ────────────────────────────────────┐  │        │
  *   VAELoader(video) ───────────────────────┐      │  │  av_latent
  *   VAELoader(audio) ──────────────────┐   │      │  │
- *   LoadImage (референсы) ───────────┐ │   │      │  │
+ *   LoadImage (references) ──────────┐ │   │      │  │
  *                                     ▼ ▼   ▼      ▼  ▼
  *                     MiniMaxH3ReferenceToVideo → positive/LATENT
  *                                             → BasicGuider / SamplerCustomAdvanced
  *                                             → VAEDecode → H3FaceStitch
  *                                             → VHS_VideoCombine
  *
- * Денойз НЕ переносится из SDXL-семейства: H3 — flow matching со сдвигом 12,
- * denoise 0.25 → эффективная sigma 0.800 (переписывает кадр). Базовое
- * значение 0.35–0.40 — по рекомендации пака.
+ * Denoise is NOT transferable from SDXL family: H3 uses flow matching with shift 12,
+ * denoise 0.25 → effective sigma 0.800 (rewrites frame). Base
+ * value 0.35–0.40 is recommended by the pack.
  *
- * Число шагов обязано совпадать с турбо-лорой: у нас 4-шаговая, поэтому
- * steps по умолчанию 4 (в example-workflow пака — 8-шаговая лора и 8 шагов).
+ * Step count must match turbo LoRA: we have 4-step, so
+ * steps defaults to 4 (pack example-workflow uses 8-step LoRA and 8 steps).
  */
 
 export type FaceSelectMode =
@@ -53,108 +53,107 @@ export type FacePasteRegion = 'face_only' | 'face_ellipse' | 'full_crop'
 export type FaceUndetected = 'fade_out' | 'skip' | 'composite_anyway'
 
 export interface FaceRefineParams {
-  /** Имя файла в ComfyUI input/ (роут копирует туда исходник). */
+  /** Filename in ComfyUI input/ (route copies source there). */
   sourceVideo: string
-  /** Caption — промпт исходного ролика (его сцены и персонажи). */
+  /** Caption — source clip prompt (its scenes and characters). */
   prompt?: string
   /** Seed (-1 = random). */
   seed?: number
-  /** Канва H3, px. 512 дешевле 768 в 2.25× по latent-токенам. Default 512. */
+  /** H3 canvas, px. 512 is 2.25× cheaper than 768 in latent tokens. Default 512. */
   canvas?: number
-  /** Базовый denoise для BasicScheduler. Default 0.35. */
+  /** Base denoise for BasicScheduler. Default 0.35. */
   denoise?: number
-  /** Шаги сэмплирования. Default 4 (турбо-лора 4-шаговая). */
+  /** Sampling steps. Default 4 (turbo LoRA is 4-step). */
   steps?: number
-  /** Сэмплер KSamplerSelect. Default 'euler'. */
+  /** KSamplerSelect sampler. Default 'euler'. */
   sampler?: string
-  /** Правило выбора субъекта. */
+  /** Subject selection rule. */
   select?: FaceSelectMode
-  /** Номер лица в рейтинге правила (0-based). */
+  /** Face rank index in rule rating (0-based). */
   selectIndex?: number
   /**
-   * (правка 723) Точка на лице, указанная кликом по кадру исходника: пиксели
-   * самого видео + номер кадра. Задана — правило игнорируется, select
-   * становится closest_to_xy, а нода берёт ближайшее к точке лицо и ведёт его
-   * через весь ролик.
+   * (fix 723) Face point specified by clicking on a source frame: source video
+   * pixels + frame number. If set, rule is ignored, select becomes closest_to_xy,
+   * and node picks the face closest to the point and tracks it across the entire clip.
    */
   facePoint?: { x: number; y: number; frame: number }
-  /** Имя файла картинки-референса в input/ — «этот конкретный человек». */
+  /** Reference image filename in input/ — "this specific person". */
   identityReference?: string
-  /** Чем сравнивать лица: insightface (фото) | clip_vision | ccip (аниме). */
+  /** Face comparison method: insightface (photo) | clip_vision | ccip (anime). */
   identityModel?: FaceIdentityModel
-  /** Порог совпадения личности (0 = дефолт модели). */
+  /** Identity match threshold (0 = model default). */
   identityThreshold?: number
-  /** Держать одного субъекта через толпу (identity_track). */
+  /** Keep single subject across crowds (identity_track). */
   identityTrack?: boolean
-  /** Сторона кропа как кратное высоты лица. Default 2.5. */
+  /** Crop side as multiple of face height. Default 2.5. */
   cropFactor?: number
-  /** Порог детектора лиц. Default 0.35. */
+  /** Face detector confidence threshold. Default 0.35. */
   confidence?: number
-  /** Модель детектора (значение комбо H3FaceTrackCrop, напр. 'bbox\\face_yolov8m.pt'). */
+  /** Detector model (H3FaceTrackCrop combo value, e.g. 'bbox\\face_yolov8m.pt'). */
   detector?: string
   /**
-   * (правка 722) Детектор «на случай, когда лица не видно» (спина, капюшон):
-   * модель человека/тела — голова берётся от верха бокса. 'none' — без него.
+   * (fix 722) Fallback detector "in case face is not visible" (back, hood):
+   * person/body model — head is taken from top of bounding box. 'none' — disabled.
    */
   fallbackDetector?: string
-  /** (правка 722) Центр головы как доля высоты лица ниже верха бокса человека. */
+  /** (fix 722) Head center as fraction of face height below top of person box. */
   fallbackHeadFrac?: number
-  /** Режим канвы: 'manual' — ровно canvas×canvas; 'auto_capped_768' — по кропу. */
+  /** Canvas mode: 'manual' — exactly canvas×canvas; 'auto_capped_768' — from crop. */
   canvasMode?: 'manual' | 'auto_no_downscale' | 'auto_capped_768'
-  /** Что вклеивать обратно. Default 'face_only'. */
+  /** Region to paste back. Default 'face_only'. */
   pasteRegion?: FacePasteRegion
-  /** Расширение маски лица, px в канве. Default 16. */
+  /** Face mask dilation, px in canvas. Default 16. */
   maskDilation?: number
-  /** Размытие края вклейки, px исходника. Default 6. */
+  /** Paste boundary blur, px in source. Default 6. */
   feather?: number
-  /** Колор-матч вклейки (0–1). Default 1. */
+  /** Paste color match (0–1). Default 1. */
   colourMatch?: number
-  /** Общая непрозрачность вклейки (0–1). Default 1. */
+  /** Overall paste opacity (0–1). Default 1. */
   blend?: number
-  /** Что делать с кадрами без найденного лица. Default 'fade_out'. */
+  /** Action for frames without a detected face. Default 'fade_out'. */
   undetectedFrames?: FaceUndetected
-  /** Множитель denoise для самых мелких лиц. Default 1.0. */
+  /** Denoise multiplier for smallest faces. Default 1.0. */
   denoiseSmall?: number
-  /** Множитель denoise для крупных лиц. Default 0.35. */
+  /** Denoise multiplier for large faces. Default 0.35. */
   denoiseLarge?: number
-  /** Высота лица (px исходника), ниже которой — полный denoise. Default 30. */
+  /** Face height (source px) below which full denoise applies. Default 30. */
   facePxSmall?: number
-  /** Высота лица (px исходника), выше которой — множитель large. Default 120. */
+  /** Face height (source px) above which large multiplier applies. Default 120. */
   facePxLarge?: number
-  /** Кривая интерполяции силы. Default 1.0. */
+  /** Strength interpolation gamma curve. Default 1.0. */
   gamma?: number
-  /** Сглаживание кривой силы, кадры. Default 9. */
+  /** Strength curve smoothing window, frames. Default 9. */
   smoothFrames?: number
-  /** Картинки-референсы персонажа (имена файлов в input/). */
+  /** Character reference images (filenames in input/). */
   refImages?: string[]
-  /** Размер референсов: 'match' | 'max' (max — лучше идентичность). */
+  /** Reference size: 'match' | 'max' (max gives better identity). */
   refImageSize?: 'match' | 'max'
   /** Diffusion model name. */
   diffusionModel?: string
-  /** Турбо-LoRA (шаги должны совпадать с ней). */
+  /** Turbo LoRA (steps must match it). */
   lora?: string
-  /** Сила турбо-LoRA (из loras.json; по умолчанию 1.0). */
+  /** Turbo LoRA strength (from loras.json; default 1.0). */
   loraStrength?: number
   /**
-   * Размеры/длина исходника (probe роута). Нужны для .latent-сайдкара:
-   * итоговые кадры кодируются на канве ceil32 (латент обязан быть кратен
-   * 32 — его проверяет validateLatentFile), а длина — для тишины, когда
-   * исходник беззвучный. Не заданы — латент не сохраняется (старый behaviour).
+   * Source dimensions/duration (probe from route). Needed for .latent sidecar:
+   * final frames are encoded on ceil32 canvas (latent must be divisible
+   * by 32 — verified by validateLatentFile), and duration is for silence when
+   * source has no audio. If omitted, latent is not saved (legacy behavior).
    */
   width?: number
   height?: number
   frames?: number
-  /** Подпапка вывода. */
+  /** Output subfolder. */
   outputSubfolder?: string
-  /** Формат/качество видео-выхода ([video] config.ini). */
+  /** Output video format/quality ([video] config.ini). */
   videoFormat?: VideoFormatSettings
 }
 
 export const DEFAULT_FACE_DETECTOR = 'face_yolov8m.pt'
 
-/** Шаги по умолчанию — под нашу 4-шаговую турбо-лору. */
+/** Default steps — tailored to our 4-step turbo LoRA. */
 export const DEFAULT_FACE_STEPS = 4
-/** Базовый denoise: 0.35–0.40 — рекомендованный диапазон пака. */
+/** Base denoise: 0.35–0.40 — recommended range of the pack. */
 export const DEFAULT_FACE_DENOISE = 0.35
 
 function pick<T extends string>(allowed: readonly T[], value: T | undefined, fallback: T): T {
@@ -170,9 +169,9 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     p.select,
     'largest_face',
   )
-  // (правка 723) Клик по лицу главнее правила: он и есть «кто именно». Без
-  // точки closest_to_xy нечем мерить (X/Y = 0,0 — левый верхний угол), поэтому
-  // в этом случае откатываемся на самое крупное лицо.
+  // (fix 723) Face click takes precedence over rule: it is "who specifically". Without
+  // a point closest_to_xy has nothing to measure against (X/Y = 0,0 — top left corner), so
+  // in that case we fall back to largest face.
   const point = p.facePoint
   const selectMode: FaceSelectMode = point
     ? 'closest_to_xy'
@@ -189,10 +188,10 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
   const sub = p.outputSubfolder ? `${p.outputSubfolder}/` : ''
   const vhsEnc = vhsEncodeInputs(p.videoFormat)
 
-  // Модельная цепочка: UNET → [турбо-LoRA] → H3PerFrameDenoise.
-  // Патченная модель уходит и в BasicGuider, и в BasicScheduler — иначе
-  // пер-кадровая маска денойза не применится (нода не ругается, результат
-  // просто будет «почти чистым»).
+  // Model chain: UNET → [turbo LoRA] → H3PerFrameDenoise.
+  // Patched model goes to both BasicGuider and BasicScheduler — otherwise
+  // per-frame denoise mask will not be applied (node won't complain, result
+  // will simply be "almost clean").
   let modelSrc: [string, number] = ['fr_unet', 0]
 
   const modelNodes: Record<string, unknown> = {
@@ -235,20 +234,19 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     modelNodes[`fr_ref_${i}`] = {
       inputs: { image: name },
       class_type: 'LoadImage',
-      _meta: { title: `Референс ${i + 1}` },
+      _meta: { title: `Reference ${i + 1}` },
     }
   })
 
-  // (правка 722) Живое превью генерации — как на вкладках «Генерация»,
-  // «Refine» и «Tile Upscale»: KJ-нода ModelPreviewOverrideKJ в конце
-  // model-цепочки шлёт свои kj_preview_override-события на каждый шаг
-  // сэмплинга; GenerationStatus забирает их через /api/comfy/preview.
-  // Стандартные превью в этой сборке мертвы (--preview-method NoPreviews).
-  // Модель берём у H3PerFrameDenoise (пер-кадровая маска denoise), а вот
-  // расписание (fr_sigmas) берёт модель БЕЗ обёртки — как в Refine/Tile
-  // Upscale: обёртка нужна только пути сэмплинга. preview_frames — счётчик
-  // кадров трекера (тот же INT, что уходит в length у H3), taeh3 — taesd-
-  // декодер H3.
+  // (fix 722) Live generation preview — same as on "Generation",
+  // "Refine" and "Tile Upscale" tabs: KJ node ModelPreviewOverrideKJ at the end
+  // of model chain sends its kj_preview_override events on each sampling
+  // step; GenerationStatus fetches them via /api/comfy/preview.
+  // Default previews are disabled in this build (--preview-method NoPreviews).
+  // Model is taken from H3PerFrameDenoise (per-frame denoise mask), while
+  // schedule (fr_sigmas) takes model WITHOUT wrapper — just like in Refine/Tile
+  // Upscale: wrapper is needed only for sampling path. preview_frames is tracker
+  // frame count (same INT as sent to H3 length), taeh3 is H3 taesd decoder.
   modelNodes['fr_preview'] = {
     inputs: {
       model: ['fr_denoise', 2],
@@ -261,7 +259,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
       preview_fps: 6,
     },
     class_type: 'ModelPreviewOverrideKJ',
-    _meta: { title: 'Model Preview Override (правка 722)' },
+    _meta: { title: 'Model Preview Override (fix 722)' },
   }
 
   return {
@@ -279,7 +277,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
         select_every_nth: 1,
       },
       class_type: 'VHS_LoadVideo',
-      _meta: { title: 'Исходное видео' },
+      _meta: { title: 'Source Video' },
     },
 
     // ═══════════════════════════════════════════════
@@ -298,23 +296,23 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
         size_smooth_window: 51,
         smooth_method: 'gaussian',
         size_mode: 'per_frame',
-        // «Этот конкретный человек»: референс-картинка + сопоставление лиц.
+        // "This specific person": reference image + face matching.
         ...(p.identityReference
           ? { identity_reference: ['fr_identity', 0] }
           : {}),
         identity_track: p.identityTrack !== false,
         identity_threshold: p.identityThreshold ?? 0.28,
         select: selectMode,
-        // (правка 723) Точка клика: X/Y — пиксели кадра исходника, frame_index —
-        // кадр, на котором она поставлена. Нода меряет на нём и уходит вперёд
-        // до первого кадра с лицами, дальше ведёт выбранное лицо непрерывностью.
+        // (fix 723) Click point: X/Y — source frame pixels, frame_index —
+        // frame on which it was clicked. Node measures on it and advances forward
+        // to first frame with faces, then tracks selected face by continuity.
         X: pointX,
         Y: pointY,
         frame_index: pointFrame,
-        // (правка 722) «Далёкие планы»: если лицо не нашлось (человек спиной,
-        // в капюшоне) — берём бокс человека и считаем головой его верх.
-        // Значение обязано быть из списка комбо (его собирает роут по
-        // /object_info), иначе ComfyUI отклонит промпт.
+        // (fix 722) "Distant shots": if face not found (person turned away,
+        // in hood) — take person box and treat its top as head.
+        // Value must be from combo list (gathered by route via
+        // /object_info), otherwise ComfyUI will reject prompt.
         fallback_detector: p.fallbackDetector || 'none',
         fallback_head_frac: Math.max(0, Math.min(1.5, p.fallbackHeadFrac ?? 0.5)),
         select_index: Math.max(0, p.selectIndex ?? 0),
@@ -328,7 +326,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     },
 
     // ═══════════════════════════════════════════════
-    //  H3 CONDITIONING (референсы персонажа + промпт)
+    //  H3 CONDITIONING (character references + prompt)
     // ═══════════════════════════════════════════════
     fr_h3: {
       inputs: {
@@ -343,11 +341,11 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
         ...Object.fromEntries(refImages.map((_, i) => [`ref_images.ref_image_${i}`, ['fr_ref_' + i, 0]])),
       },
       class_type: 'MiniMaxH3ReferenceToVideo',
-      _meta: { title: 'H3 (промпт + референсы)' },
+      _meta: { title: 'H3 (prompt + references)' },
     },
 
     // ═══════════════════════════════════════════════
-    //  КРОПЫ → ВИДЕО-ПОТОК AV-ЛАТЕНТА
+    //  CROPS → AV-LATENT VIDEO STREAM
     // ═══════════════════════════════════════════════
     fr_inject: {
       inputs: {
@@ -360,7 +358,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     },
 
     // ═══════════════════════════════════════════════
-    //  ПЕР-КАДРОВЫЙ ДЕНОЙЗ (сила ~ размеру лица)
+    //  PER-FRAME DENOISE (strength ~ face size)
     // ═══════════════════════════════════════════════
     fr_denoise: {
       inputs: {
@@ -385,7 +383,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     fr_sampler_sel: {
       inputs: { sampler_name: p.sampler || 'euler' },
       class_type: 'KSamplerSelect',
-      _meta: { title: 'Сэмплер' },
+      _meta: { title: 'Sampler' },
     },
     fr_sigmas: {
       inputs: {
@@ -395,15 +393,15 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
         denoise,
       },
       class_type: 'BasicScheduler',
-      _meta: { title: `Расписание (${steps} шагов, denoise ${denoise})` },
+      _meta: { title: `Schedule (${steps} steps, denoise ${denoise})` },
     },
     fr_noise: {
       inputs: { noise_seed: p.seed ?? -1 },
       class_type: 'RandomNoise',
-      _meta: { title: 'Шум' },
+      _meta: { title: 'Noise' },
     },
     fr_guider: {
-      // (правка 722) модель с KJ-обёрткой превью; fr_sigmas — без неё.
+      // (fix 722) model with KJ preview wrapper; fr_sigmas — without it.
       inputs: { model: ['fr_preview', 0], conditioning: ['fr_h3', 0] },
       class_type: 'BasicGuider',
       _meta: { title: 'Guider' },
@@ -417,7 +415,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
         latent_image: ['fr_denoise', 0],
       },
       class_type: 'SamplerCustomAdvanced',
-      _meta: { title: 'Сэмплирование' },
+      _meta: { title: 'Sampling' },
     },
 
     // ═══════════════════════════════════════════════
@@ -445,7 +443,7 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     },
 
     // ═══════════════════════════════════════════════
-    //  OUTPUT (звук — из исходника)
+    //  OUTPUT (audio from source)
     // ═══════════════════════════════════════════════
     fr_out: {
       inputs: {
@@ -464,17 +462,17 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
     },
 
     // ═══════════════════════════════════════════════
-    //  SAVE AV LATENT — для lossless-переиспользования
+    //  SAVE AV LATENT — for lossless reuse
     // ═══════════════════════════════════════════════
-    // Латент сэмплера (fr_sample) — это латент КРОПОВ лиц, а не итога:
-    // результатом face-refine служат исходные кадры с вклеенными лицами
-    // (fr_stitch). Поэтому .latent-сайдкар строим отдельно — VAE-кодируем
-    // именно итоговые кадры (тот же паттерн, что mp4-ветка рефайна:
-    // ресайз на канву ceil32 ≥ исходника → VAEEncode) + аудио исходника
-    // (AudioOrSilent защищает от беззвучных) → AV-латент → safetensors.
-    // Финализация меты подхватит .latent из outputs и запишет latent_file
-    // в сайдкар mp4 — следующий рефайн/апскейл этого видео пойдёт по
-    // lossless-пути, минуя h264-декод и повторный VAEEncode.
+    // Sampler latent (fr_sample) is latent of face CROPS, not the final result:
+    // the face-refine result consists of source frames with stitched faces
+    // (fr_stitch). Therefore we construct .latent sidecar separately — VAE-encode
+    // the final frames (same pattern as mp4 refine branch:
+    // resize to ceil32 canvas >= source → VAEEncode) + source audio
+    // (AudioOrSilent protects against silent sources) → AV latent → safetensors.
+    // Metadata finalization will pick up .latent from outputs and write latent_file
+    // to mp4 sidecar — subsequent refine/upscale of this video will follow
+    // lossless path, bypassing h264 decode and repeated VAEEncode.
     ...(p.width && p.height
       ? {
           fr_ls_res: {
@@ -490,12 +488,12 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
               device: 'cpu',
             },
             class_type: 'ImageResizeKJv2',
-            _meta: { title: `Итог → ceil32-канва (кодирование)` },
+            _meta: { title: `Output → ceil32 canvas (encoding)` },
           },
           fr_ls_enc: {
             inputs: { pixels: ['fr_ls_res', 0], vae: ['fr_vae_video', 0] },
             class_type: 'VAEEncode',
-            _meta: { title: 'VAE-кодирование итога' },
+            _meta: { title: 'VAE Encode Output' },
           },
           fr_ls_asafe: {
             inputs: {
@@ -503,17 +501,17 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
               fallback_seconds: Number(((p.frames ?? 120) / 24).toFixed(2)),
             },
             class_type: 'MiniMaxH3AudioOrSilent',
-            _meta: { title: 'Аудио исходника (или тишина)' },
+            _meta: { title: 'Source audio (or silence)' },
           },
           fr_ls_aenc: {
             inputs: { audio: ['fr_ls_asafe', 0], vae: ['fr_vae_audio', 0] },
             class_type: 'VAEEncodeAudio',
-            _meta: { title: 'Аудио → латент' },
+            _meta: { title: 'Audio → latent' },
           },
           fr_ls_cat: {
             inputs: { video_latent: ['fr_ls_enc', 0], audio_latent: ['fr_ls_aenc', 0] },
             class_type: 'LTXVConcatAVLatent',
-            _meta: { title: 'AV-латент итога' },
+            _meta: { title: 'Final AV Latent' },
           },
           fr_ls_save: {
             inputs: {
@@ -522,20 +520,20 @@ export function buildFaceRefineWorkflow(p: FaceRefineParams): Record<string, unk
               vae_name: 'minimax_h3_video_vae_int8_convrot.safetensors',
             },
             class_type: 'MiniMaxStudioSaveAVLatent',
-            _meta: { title: 'Save AV Latent (для lossless-переиспользования)' },
+            _meta: { title: 'Save AV Latent (for lossless reuse)' },
           },
         }
       : {}),
 
     ...modelNodes,
 
-    // Картинка-референс «этого человека» (для identity_reference).
+    // Character reference image (for identity_reference).
     ...(p.identityReference
       ? {
           fr_identity: {
             inputs: { image: p.identityReference },
             class_type: 'LoadImage',
-            _meta: { title: 'Кто именно (референс лица)' },
+            _meta: { title: 'Identity Face Reference' },
           },
         }
       : {}),

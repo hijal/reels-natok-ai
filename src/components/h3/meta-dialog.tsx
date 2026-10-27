@@ -4,7 +4,7 @@
  * MetaDialog — modal that displays WanGP generation metadata.
  * Renders the generation params in a human-readable layout: prompt block,
  * key parameters grid, references summary; everything else collapses
- * under "Ещё" as raw JSON.
+ * under "More" as raw JSON.
  */
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -28,21 +28,21 @@ interface MetaDialogProps {
 type MetaValue = string | number | boolean | null | undefined | Record<string, unknown> | unknown[]
 
 const IMAGE_INTENT_LABELS: Record<string, string> = {
-  identity: 'персонаж / объект',
-  scene: 'сцена',
-  style: 'стиль',
-  composition: 'композиция',
+  identity: 'character / object',
+  scene: 'scene',
+  style: 'style',
+  composition: 'composition',
 }
 
 const AUDIO_INTENT_LABELS: Record<string, string> = {
-  voice: 'голос',
-  drive: 'темп / ритм',
-  style: 'стиль',
+  voice: 'voice',
+  drive: 'tempo / rhythm',
+  style: 'style',
 }
 
 const DETAIL_LABELS: Record<string, string> = {
-  match: 'Соответствовать выходу (match)',
-  max: 'Максимальная детализация (max)',
+  match: 'Match output (match)',
+  max: 'Maximum detail (max)',
 }
 
 function formatDuration(seconds: number): string {
@@ -53,15 +53,15 @@ function formatDuration(seconds: number): string {
 
 function formatSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '—'
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} ГБ`
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} МБ`
-  return `${(bytes / 1024).toFixed(0)} КБ`
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  return `${(bytes / 1024).toFixed(0)} KB`
 }
 
 function formatCreatedAt(raw: unknown): string | null {
   const n = typeof raw === 'number' ? raw : Number(raw)
   if (!Number.isFinite(n) || n <= 0) return null
-  return new Date(n * 1000).toLocaleString('ru-RU')
+  return new Date(n * 1000).toLocaleString('en-US')
 }
 
 function basename(p: unknown): string {
@@ -82,7 +82,7 @@ interface RefEntry {
 function RefRow({ ref, index, onView }: { ref: RefEntry; index: number; onView?: (r: RefEntry) => void }) {
   const type = (ref.type || '').toLowerCase()
   const Icon = type === 'image' ? ImageIcon : type === 'video' ? FilmIcon : AudioLinesIcon
-  // (правка 476) Картинки и видео открываются во вьювере по клику на строку
+  // Images and videos open in viewer on row click
   const viewable = !!ref.path && (type === 'image' || type === 'video')
   // New schema keeps the intent in `role`; old WanGP used image_intent/audio_intent
   const intent =
@@ -91,8 +91,8 @@ function RefRow({ ref, index, onView }: { ref: RefEntry; index: number; onView?:
       : type === 'audio'
         ? AUDIO_INTENT_LABELS[ref.audio_intent || 'voice']
         : ref.include_audio === false
-          ? 'без звука'
-          : 'со звуком'
+          ? 'muted'
+          : 'with sound'
 
   // Live thumbnail: server extracts a poster/frame for image/video
   // references straight from ComfyUI's input/ dir.
@@ -112,7 +112,7 @@ function RefRow({ ref, index, onView }: { ref: RefEntry; index: number; onView?:
         viewable && 'cursor-pointer hover:border-cyan-500/40 transition-colors',
       )}
       onClick={viewable ? () => onView?.(ref) : undefined}
-      title={viewable ? 'Открыть во вьювере' : undefined}
+      title={viewable ? 'Open in viewer' : undefined}
     >
       <span className="text-[10px] font-mono text-muted-foreground shrink-0 mt-0.5">#{index + 1}</span>
       {showThumb ? (
@@ -137,7 +137,7 @@ function RefRow({ ref, index, onView }: { ref: RefEntry; index: number; onView?:
         <p className="text-xs text-foreground/90 truncate" title={basename(ref.path)}>{basename(ref.path)}</p>
         <p className="text-[10px] text-muted-foreground">
           {intent}
-          {ref.role ? ` · роль: ${ref.role}` : ''}
+          {ref.role ? ` · role: ${ref.role}` : ''}
         </p>
       </div>
     </div>
@@ -157,7 +157,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
   const [data, setData] = useState<Record<string, MetaValue> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // (правка 476) открытый во вьювере референс (картинка/видео)
+  // Opened reference in viewer (image/video)
   const [viewingRef, setViewingRef] = useState<RefViewerData | null>(null)
 
   useEffect(() => {
@@ -187,7 +187,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
     return () => { cancelled = true }
   }, [filePath])
 
-  // Esc закрывает диалог (как и в VideoLightbox); когда открыт вьювер рефа — его закроет сам Dialog
+  // Esc closes dialog; when ref viewer is open — Dialog handles closing itself
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !viewingRef) onClose() }
     window.addEventListener('keydown', h)
@@ -202,30 +202,30 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
     : data) as Record<string, unknown> | null
 
   const prompt = typeof params?.prompt === 'string' ? params.prompt : null
-  // (правка 147) Режим генерации (правка 146): ref | t2v | flf.
-  // Показываем явно в сетке и убираем из «Ещё», чтобы не затерялся в JSON.
+  // Generation mode: ref | t2v | flf, etc.
+  // Display explicitly in grid and remove from "More" so it is not lost in JSON.
   const MODE_LABELS: Record<string, string> = {
-    t2v: 'Текст в видео',
-    flf: 'Первый/последний кадр',
-    ref: 'Референсы',
-    extend: 'Продление видео', // (правка 161)
-    refine: 'Рефайн видео', // (правка 264)
-    controlnet: 'ControlNet (движение)',
-    upscale: 'Апскейл / DLSS',
-    facerefine: 'Face Refine (лица)',
-    tileupscale: 'Тайловый апскейл',
-    fps: 'FPS (интерполяция)',
+    t2v: 'Text to Video',
+    flf: 'First/Last Frame',
+    ref: 'References',
+    extend: 'Video Extension',
+    refine: 'Video Refine',
+    controlnet: 'ControlNet (motion)',
+    upscale: 'Upscale / DLSS',
+    facerefine: 'Face Refine',
+    tileupscale: 'Tile Upscale',
+    fps: 'FPS (interpolation)',
   }
   const generationMode = typeof params?.generation_mode === 'string'
     ? params.generation_mode.trim().toLowerCase()
     : ''
   const modeLabel = MODE_LABELS[generationMode] ?? (generationMode ? generationMode : null)
-  // (правка 147) FL2VA: первый/последний кадр — отдельные файлы в input/.
+  // FL2VA: first/last frame — separate files in input/.
   const firstFrame = typeof params?.first_frame === 'string' && params.first_frame ? params.first_frame : null
   const lastFrame = typeof params?.last_frame === 'string' && params.last_frame ? params.last_frame : null
   // References: current schema `references`, legacy WanGP `minimax_h3_references`
-  // (правка 470) flf-меты пишут первый кадр и в references (якорь для
-  // рефайна) — в диалоге он уже показан блоком «Первый кадр», не дублируем.
+  // flf metadata also writes first frame to references (anchor for refine) —
+  // already shown in "First Frame" block in dialog, do not duplicate.
   const references = (
     Array.isArray(params?.references)
       ? (params.references as RefEntry[])
@@ -234,19 +234,16 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
         : []
   ).filter((r) => r?.path !== firstFrame && r?.path !== lastFrame)
   const videoLength = typeof params?.video_length === 'number' ? params.video_length : null
-  // fps не выдумываем: если его нет в метаданных — не считаем длительность
-  // из числа кадров по дефолтным 24 (получалось неверное значение).
+  // Do not guess fps: if missing from metadata, don't compute duration from
+  // frame count at default 24.
   const fps = typeof params?.fps === 'number' && params.fps > 0 ? params.fps : null
   const durationSeconds =
     typeof params?.duration_seconds === 'number' ? params.duration_seconds : null
   // Steps: two-pass workflow stores pass1_steps/pass2_steps; legacy stores num_inference_steps
   const pass1 = typeof params?.pass1_steps === 'number' ? params.pass1_steps : null
   const pass2 = typeof params?.pass2_steps === 'number' ? params.pass2_steps : null
-  // (правка 440) Pass 2 реально идёт НЕ всегда: pipeline 'draft' — один
-  // проход (шаги = draft_steps), extend с extend_two_pass=false —
-  // однопроходный (правка 247). Сайдкар пишет pass1_steps/pass2_steps
-  // безусловно — без этой проверки диалог показывал «4 + 3» и сэмплер
-  // pass 2 даже там, где второго прохода не было.
+  // Pass 2 does not always run: 'draft' pipeline is single-pass,
+  // extend with extend_two_pass=false is single-pass.
   const isDraft = params?.pipeline === 'draft'
   const extendSinglePass = generationMode === 'extend' && params?.extend_two_pass === false
   const pass2Ran = pass2 != null && !isDraft && !extendSinglePass
@@ -257,19 +254,17 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
       ? pass2Ran ? `${pass1 ?? '—'} + ${pass2 ?? '—'}` : `${pass1 ?? '—'}`
       : params?.num_inference_steps != null
         ? String(params.num_inference_steps)
-        : // Однопроходные режимы (face-refine, тайловый апскейл) пишут шаги
-          // полем steps — старые сайдкары до появления pass1_steps.
+        : // Single-pass modes write steps in `steps` field — legacy sidecars.
           params?.steps != null && typeof params.steps === 'number'
             ? String(params.steps)
             : null
 
-  // "Ещё": everything except the fields already rendered above
+  // "More": everything except the fields already rendered above
   const restJson = (() => {
     if (!data) return null
     const shallow = { ...data }
     delete shallow.params
-    // (правка 377) вычисляемое поле meta-роута (наличие .latent-файла) —
-    // в «Ещё» не дублируем; сам путь остаётся в latent_file
+    // Computed field of meta route — do not duplicate in "More"
     delete shallow.latent_available
     const p = params && params !== data ? { ...params } : null
     if (p) {
@@ -281,7 +276,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
       delete p.num_inference_steps
       delete p.pass1_steps
       delete p.pass2_steps
-      delete p.steps // показан строкой «Шаги» (fallback однопроходных режимов)
+      delete p.steps // shown in "Steps" row
       delete p.guidance_scale
       delete p.activated_loras
       delete p.loras_multipliers
@@ -291,14 +286,14 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
       delete p.minimax_h3_turbo_mode
       delete p.minimax_h3_reference_detail
       delete p.minimax_h3_text_encoder
-      delete p.pass2_sampler // (правка 69) — показан явно выше
-      delete p.pass1_sampler // (правка 70)
-      delete p.pass1_scheduler // (правка 70)
-      delete p.turbo_lora_strength // (правка 70)
-      delete p.generation_mode // (правка 147) — показан явно выше
-      delete p.first_frame // (правка 147) — показан явно выше
-      delete p.last_frame // (правка 147) — показан явно выше
-      // (правка 94) Поля сайдкара апскейла — показаны отдельным блоком ниже
+      delete p.pass2_sampler
+      delete p.pass1_sampler
+      delete p.pass1_scheduler
+      delete p.turbo_lora_strength
+      delete p.generation_mode
+      delete p.first_frame
+      delete p.last_frame
+      // Upscale sidecar fields — shown in separate block below
       delete p.tool
       delete p.duration_seconds
       delete p.fps
@@ -311,12 +306,11 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
     return Object.keys(merged).length > 0 ? JSON.stringify(merged, null, 2) : null
   })()
 
-  /* (правка 94) Сайдкар апскейла (DLSS / RTX Video): без промпта, но с
-   * информацией о файле — показываем отдельным блоком вместо пустоты. */
+  /* Upscale sidecar (DLSS / RTX Video): without prompt, but with
+   * file info — show separate block instead of empty space. */
   const isUpscaleMeta = typeof params?.tool === 'string'
 
-  /* Порталим в body (как VideoLightbox): внутри грида предки с transform/
-     filter (framer-анимации) ломают position:fixed и обрезают модалку. */
+  /* Portal to body (like VideoLightbox): avoid transform/filter parent clipping */
   const content = (
     <motion.div
       initial={{ opacity: 0 }}
@@ -344,19 +338,19 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
         </div>
 
         {/* Body */}
-        {/* (правка 564) select-text: значения метаданных можно выделять и копировать. */}
+        {/* select-text: metadata values can be selected and copied */}
         <div className="select-text flex-1 overflow-y-auto p-4 space-y-4">
           {loading && (
             <div className="flex items-center justify-center py-8">
               <Loader2Icon className="w-5 h-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">Загрузка метаданных…</span>
+              <span className="ml-2 text-sm text-muted-foreground">Loading metadata…</span>
             </div>
           )}
 
           {error && (
             <div className="text-center py-6">
               <p className="text-sm text-amber-400">{error}</p>
-              <p className="text-xs text-muted-foreground mt-1">Файл метаданных не найден или недоступен</p>
+              <p className="text-xs text-muted-foreground mt-1">Metadata file not found or unavailable</p>
             </div>
           )}
 
@@ -367,43 +361,43 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
                 <p className="text-[10px] text-muted-foreground font-mono">job {data.job_id}</p>
               )}
 
-              {/* (правка 94) Инфо о файле апскейла (DLSS 5 / RTX Video) */}
+              {/* Upscale file info (DLSS 5 / RTX Video) */}
               {isUpscaleMeta && (
                 <div className="space-y-1">
                   <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                    Результат апскейла
+                    Upscale Result
                   </p>
                   <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-[var(--surface-2)] p-3">
-                    <ParamCell label="Инструмент">
+                    <ParamCell label="Tool">
                       <span className="text-sm">{String(params?.tool)}</span>
                     </ParamCell>
-                    <ParamCell label="Разрешение">
+                    <ParamCell label="Resolution">
                       {typeof params?.resolution === 'string' ? params.resolution : '—'}
                     </ParamCell>
-                    <ParamCell label="Длительность">
+                    <ParamCell label="Duration">
                       {typeof params?.duration_seconds === 'number'
-                        ? `${formatDuration(params.duration_seconds)} (${params.duration_seconds.toFixed(1)} с)`
+                        ? `${formatDuration(params.duration_seconds)} (${params.duration_seconds.toFixed(1)} s)`
                         : '—'}
                     </ParamCell>
                     <ParamCell label="FPS">
                       {typeof params?.fps === 'number' ? `${params.fps}` : '—'}
                     </ParamCell>
-                    <ParamCell label="Размер файла">
+                    <ParamCell label="File Size">
                       {typeof params?.file_size === 'number' ? formatSize(params.file_size) : '—'}
                     </ParamCell>
-                    <ParamCell label="Создано">
+                    <ParamCell label="Created">
                       {formatCreatedAt(params?.created_at) ?? '—'}
                     </ParamCell>
                     {typeof params?.source_file === 'string' && params.source_file && (
                       <div className="col-span-2">
-                        <ParamCell label="Исходник">
+                        <ParamCell label="Source File">
                           <span className="font-mono text-xs break-all">{params.source_file}</span>
                         </ParamCell>
                       </div>
                     )}
                     {typeof params?.upscale_feature === 'string' && (
                       <div className="col-span-2">
-                        <ParamCell label="Настройка DLSS">
+                        <ParamCell label="DLSS Setting">
                           <span className="font-mono text-xs">{String(params.upscale_feature)}</span>
                         </ParamCell>
                       </div>
@@ -416,7 +410,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
               {prompt && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Промпт</p>
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Prompt</p>
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
@@ -428,16 +422,16 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
                             store.setVideoSeed(params.seed)
                           }
                           window.dispatchEvent(new CustomEvent('h3:goto-generate'))
-                          toast.success('Промпт загружен в редактор', {
-                            description: 'Только промпт и seed. Для полного восстановления используйте «Повторить».',
+                          toast.success('Prompt loaded into editor', {
+                            description: 'Prompt and seed only. For full restoration use "Replay".',
                           })
                           onClose()
                         }}
                         className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-colors"
-                        title="Загрузить промпт и seed в форму генерации"
+                        title="Load prompt and seed into generation form"
                       >
                         <ArrowDownToLineIcon className="w-3 h-3" />
-                        В редактор
+                        To Editor
                       </button>
                       <button
                         type="button"
@@ -446,10 +440,10 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
                           if (ok) onClose()
                         }}
                         className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors"
-                        title="Восстановить ВСЕ параметры генерации (промпт, seed, референсы, сэмплеры, разрешение…)"
+                        title="Restore ALL generation parameters (prompt, seed, references, samplers, resolution…)"
                       >
                         <RotateCcwIcon className="w-3 h-3" />
-                        Повторить
+                        Replay
                       </button>
                     </div>
                   </div>
@@ -461,72 +455,70 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
 
               {/* Key parameters grid */}
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                {/* (правка 147) Режим генерации — первое в сетке, чтобы сразу
-                    было видно, какой путь модели был задействован. */}
+                {/* Generation mode — first in grid */}
                 {modeLabel && (
-                  <ParamCell label="Режим">
+                  <ParamCell label="Mode">
                     <span className="text-sm text-cyan-300">{modeLabel}</span>
                   </ParamCell>
                 )}
                 <ParamCell label="Seed">
                   <span className="font-mono">{typeof params?.seed === 'number' ? params.seed : '—'}</span>
                 </ParamCell>
-                <ParamCell label="Разрешение">{params?.resolution != null ? String(params.resolution) : '—'}</ParamCell>
-                <ParamCell label="Длительность">
+                <ParamCell label="Resolution">{params?.resolution != null ? String(params.resolution) : '—'}</ParamCell>
+                <ParamCell label="Duration">
                   {durationSeconds != null
-                    ? `${durationSeconds.toFixed(1)} c${videoLength != null ? ` · ${videoLength} кадр.` : ''}`
+                    ? `${durationSeconds.toFixed(1)} s${videoLength != null ? ` · ${videoLength} frames` : ''}`
                     : videoLength != null && fps != null
-                      ? `${(videoLength / fps).toFixed(1)} c · ${videoLength} кадр.`
+                      ? `${(videoLength / fps).toFixed(1)} s · ${videoLength} frames`
                       : '—'}
                 </ParamCell>
-                <ParamCell label={pass2Ran ? 'Шаги (pass1 + pass2)' : 'Шаги'}>
+                <ParamCell label={pass2Ran ? 'Steps (pass1 + pass2)' : 'Steps'}>
                   {stepsLabel ?? '—'}
                 </ParamCell>
-                {/* (правка 69, 440) Сэмплер pass 2 — только если pass 2 был */}
+                {/* Pass 2 sampler — only if pass 2 ran */}
                 {params?.pass2_sampler != null && pass2Ran && (
-                  <ParamCell label="Сэмплер (pass 2)">
+                  <ParamCell label="Sampler (pass 2)">
                     <span className="font-mono">{String(params.pass2_sampler)}</span>
                   </ParamCell>
                 )}
-                {/* (правка 70) Pass 1: сэмплер, планировщик */}
+                {/* Pass 1: sampler, scheduler */}
                 {params?.pass1_sampler != null && (
-                  <ParamCell label="Сэмплер (pass 1)">
+                  <ParamCell label="Sampler (pass 1)">
                     <span className="font-mono">{String(params.pass1_sampler)}</span>
                   </ParamCell>
                 )}
                 {params?.pass1_scheduler != null && (
-                  <ParamCell label="Планировщик (pass 1)">
+                  <ParamCell label="Scheduler (pass 1)">
                     <span className="font-mono">{String(params.pass1_scheduler)}</span>
                   </ParamCell>
                 )}
                 {params?.guidance_scale != null && (
                   <ParamCell label="Guidance">{String(params.guidance_scale)}</ParamCell>
                 )}
-                <ParamCell label="Дата">
+                <ParamCell label="Date">
                   {formatCreatedAt(data.created_at) ?? '—'}
                 </ParamCell>
-                <ParamCell label="Время генерации">
+                <ParamCell label="Generation Time">
                   {typeof data.generation_time === 'number' && data.generation_time > 0
                     ? formatDuration(data.generation_time)
                     : '—'}
                 </ParamCell>
               </div>
 
-              {/* (правка 147) FL2VA: первый/последний кадр — показываем рядом
-                  с референсами (это то, что реально шло в генерацию). */}
+              {/* FL2VA: first/last frame — show next to references */}
               {(firstFrame || lastFrame) && (
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Кадры (fl2va)</p>
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Frames (fl2va)</p>
                   {firstFrame && (
                     <div className="flex items-center gap-2 rounded-md bg-[var(--surface-2)] border border-border px-2 py-1.5">
                       <ImageIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                      <span className="text-xs text-foreground/90 truncate flex-1" title={firstFrame}>Первый кадр: {basename(firstFrame)}</span>
+                      <span className="text-xs text-foreground/90 truncate flex-1" title={firstFrame}>First frame: {basename(firstFrame)}</span>
                     </div>
                   )}
                   {lastFrame && (
                     <div className="flex items-center gap-2 rounded-md bg-[var(--surface-2)] border border-border px-2 py-1.5">
                       <ImageIcon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                      <span className="text-xs text-foreground/90 truncate flex-1" title={lastFrame}>Последний кадр: {basename(lastFrame)}</span>
+                      <span className="text-xs text-foreground/90 truncate flex-1" title={lastFrame}>Last frame: {basename(lastFrame)}</span>
                     </div>
                   )}
                 </div>
@@ -536,7 +528,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
               {references.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                    Референсы ({references.length})
+                    References ({references.length})
                   </p>
                   {references.map((r, i) => (
                     <RefRow
@@ -554,7 +546,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
                   ))}
                   {params?.minimax_h3_reference_detail != null && (
                     <p className="text-[10px] text-muted-foreground">
-                      Детализация:{' '}
+                      Detail:{' '}
                       {DETAIL_LABELS[String(params.minimax_h3_reference_detail)] ??
                         String(params.minimax_h3_reference_detail)}
                     </p>
@@ -566,7 +558,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
               {restJson && (
                 <details className="text-xs">
                   <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                    Ещё (остальные поля)
+                    More (other fields)
                   </summary>
                   <pre className="mt-1.5 p-2 rounded bg-[var(--surface-2)] border border-border overflow-auto max-h-48">
                     {restJson}
@@ -577,7 +569,7 @@ export function MetaDialog({ filePath, filename, onClose }: MetaDialogProps) {
           )}
         </div>
       </motion.div>
-      {/* (правка 476) вьювер прикреплённых референсов (порталится в body поверх этого диалога) */}
+      {/* Attached references viewer (portal to body above this dialog) */}
       <RefViewerDialog data={viewingRef} onOpenChange={(v) => { if (!v) setViewingRef(null) }} />
     </motion.div>
   )

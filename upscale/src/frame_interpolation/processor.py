@@ -518,12 +518,12 @@ def interpolate_video(
             controller.terminate_processes()
             if output_file is not None:
                 output_file.cleanup(rollback=True)
-            # (правка 716) Порядок проверок: сначала — ЯВЛЯЕТСЯ ли исключение
-            # отменой, потом — был ли отменён пользователем. Раньше сначала
-            # проверялся controller.cancel, и настоящая причина (Cancelled с
-            # подробным текстом, например «FFmpeg упал: …») терялась —
-            # пользователю всегда показывалось безликое «остановлено
-            # пользователем». Как в neural_rendering/video/processor.py.
+            # (fix 716) Check order: first — whether the exception IS a
+            # cancellation, then — whether cancelled by user. Previously
+            # controller.cancel was checked first, and the actual cause (Cancelled with
+            # detailed text, e.g. "FFmpeg crashed: ...") was lost —
+            # the user was always shown a generic "stopped by
+            # user". Same as in neural_rendering/video/processor.py.
             if isinstance(exc, Cancelled):
                 raise
             if controller.cancel.is_set():

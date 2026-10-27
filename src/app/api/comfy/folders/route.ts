@@ -7,11 +7,11 @@ import {
 } from '@/lib/gallery-folders'
 
 /**
- * Папки галереи (правка 91) — подпапки каталога вывода ComfyUI.
- * GET    → { folders: string[] }            (общая папка '' не входит)
- * POST   → { name } создать
- * PATCH  → { from, to } переименовать (правка 122)
- * DELETE → { name } удалить (только пустую)
+ * Gallery folders (fix 91) — subfolders of the ComfyUI output directory.
+ * GET    → { folders: string[] }            (common folder '' is not included)
+ * POST   → { name } create
+ * PATCH  → { from, to } rename (fix 122)
+ * DELETE → { name } delete (empty only)
  */
 export const dynamic = 'force-dynamic'
 

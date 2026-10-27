@@ -1,20 +1,14 @@
 'use client'
 
 /**
- * ExtendView — отдельная вкладка «Продление видео».
+ * ExtendView — standalone "Video Extension" tab.
  *
- * Двухколоночный layout (как в GenerateView):
- *   ЛЕВАЯ панель (400px): параметры — исходное видео, рефы, доп. настройки,
- *   статус генерации (закреплён внизу).
- *   ПРАВАЯ панель (flex-1): горизонтальная лента клипов продления (каждый
- *   со своим промптом и длительностью, добавляются слева направо) + badges +
- *   галерея + кнопка «Сгенерировать». Общего промпта нет — conditioning
- *   строится только из промптов клипов.
- *
- * Режим продления (extend) через ноду MiniMaxH3Extender:
- *   - Цепочка клипов (prompt + duration)
- *   - Картинки-рефы (до 9) — для сохранения персонажей/сцены
- *   - Опционально: исходное видео
+ * Two-column layout (similar to GenerateView):
+ *   LEFT panel (400px): parameters — source video, references, advanced settings,
+ *   generation status (pinned to bottom).
+ *   RIGHT panel (flex-1): horizontal ribbon of extension clips (each with its
+ *   own prompt and duration, added from left to right) + badges +
+ *   gallery + "Generate" button.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
@@ -48,11 +42,10 @@ import { VideoGalleryGrid, H3_VIDEO_DND_MIME } from './video-gallery-grid'
 import { MentionTextarea, type MentionItem } from './mention-textarea'
 import { useVideoGallery } from './use-video-gallery'
 import { isStreamActive } from '@/lib/assistant-stream'
-import { useExtendTarget } from '@/lib/extend-target-store' // (правка 370) цель «Продлить» из галереи
-import { requestImprovePrompt } from '@/hooks/use-improve-prompt' // (правка 427) «Улучшить промпт клипа» → extend-чат
-import { AssistantPanel } from './assistant/assistant-panel' // (правка 442) ассистент — правая панель вкладки
-import { PromptEditorDialog, PromptFixDialog, PromptFixButton, PromptClearButton, PromptFieldTools } from './prompt-editor-dialog' // (правка 443) редактор клипа + (правка 691) диалог «Исправить» + (правка 692) кнопки на поле
-// (правка 719) Превью с полноэкранным просмотром — как на «Генерации».
+import { useExtendTarget } from '@/lib/extend-target-store'
+import { requestImprovePrompt } from '@/hooks/use-improve-prompt'
+import { AssistantPanel } from './assistant/assistant-panel'
+import { PromptEditorDialog, PromptFixDialog, PromptFixButton, PromptClearButton, PromptFieldTools } from './prompt-editor-dialog'
 import { RefPreviewThumb } from './ref-preview-thumb'
 
 function detectKind(name: string): VideoRefItem['kind'] | null {
@@ -76,17 +69,7 @@ export function ExtendView() {
   const patchVideo = useGenStore((s) => s.patchVideo)
 
   const isGenerating = phase === 'submitting' || phase === 'queued' || phase === 'running'
-  // (правка 341) isStreamActive() в теле рендера нереактивен: кнопка
-  // оставалась разблокированной посреди ответа ассистента. Поллим
-  // /api/llm/status (как generate-view), плюс локальный override по
-  // активному стриму в этой вкладке.
   const [assistantBusy, setAssistantBusy] = useState(false)
-  // (правка 587) Те же защиты, что у generate-view (правка 110): серверный
-  // busy-флаг мог протухать (утёкший streaming-счётчик), а этот опрос брал
-  // его «как есть» — «Сгенерировать продление» оставалось заблокированным
-  // бесконечно (generate-view лечил замок, но только когда открыт он).
-  // Override: стрим в этой вкладке НЕ активен → busy считаем застарелым;
-  // 60-секундный fallback — принудительный /api/llm/release.
   const firstBusyAtRef = useRef<number | null>(null)
   const lockReleasedRef = useRef(false)
   useEffect(() => {
@@ -112,7 +95,6 @@ export function ExtendView() {
           if (firstBusyAtRef.current === null) firstBusyAtRef.current = Date.now()
           const stuckMs = Date.now() - firstBusyAtRef.current
           if (!lockReleasedRef.current && stuckMs > 60_000 && !isStreamActive()) {
-            // (правка 692) Два pass: сначала non-force, потом force.
             void fetch('/api/llm/release', { method: 'POST' }).catch(() => {})
             setTimeout(() => {
               if (!isStreamActive()) {
@@ -122,7 +104,7 @@ export function ExtendView() {
             lockReleasedRef.current = true
             firstBusyAtRef.current = null
             setAssistantBusy(false)
-            toast.warning('Ассистент', { description: 'Блокировка снята принудительно (засела после ответа).' })
+            toast.warning('Assistant', { description: 'Lock released forcibly (persisted after response).' })
           }
         } else {
           firstBusyAtRef.current = null
@@ -139,9 +121,6 @@ export function ExtendView() {
       clearInterval(id)
     }
   }, [])
-  // (правка 290) Очередь: НЕ блокируем кнопку при активной генерации —
-  // ComfyUI ставит задачи в очередь, mutex освобождается после submit.
-  // Блокируем только когда ассистент занят (VRAM-конфликт).
   const canGenerateNow = !assistantBusy
 
   /* ──────────── UI state ──────────── */
@@ -149,16 +128,8 @@ export function ExtendView() {
   const [refsDragOver, setRefsDragOver] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showPass1, setShowPass1] = useState(false)
-  const [showPass2, setShowPass2] = useState(false) // (правка 473)
-  // (правка 719) Просмотр рефов переехал в общий компонент RefPreviewThumb
-  // (у каждого превью свой просмотрщик) — своего состояния тут больше нет.
-  // (правка 443) Индекс клипа, открытого в полноэкранном редакторе промпта
-  // (null — редактор закрыт). Карточки клипов — фиксированной высоты, длинный
-  // промпт смотрим/правим в редакторе.
+  const [showPass2, setShowPass2] = useState(false)
   const [editingClip, setEditingClip] = useState<number | null>(null)
-  // (правка 691) «Исправить промпт» прямо из карточки клипа: диалог
-  // «что изменить» + промпт клипа уходят в extend-чат (requestImprovePrompt
-  // уже импортирован, правка 427).
   const [fixClip, setFixClip] = useState<number | null>(null)
   const extendImageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -167,9 +138,6 @@ export function ExtendView() {
   const sourceVideoPath = video.extendSourceVideoPath
   const [videoDragOver, setVideoDragOver] = useState(false)
 
-  // Шаги клипа «авто»: первый проход ИСХОДНИКА из его .meta.json (продление
-  // продолжает исходник — его расписание и берём). null = меты нет (фолбэк —
-  // firstSamplerSteps, как в шаблоне). Явное значение из инпута побеждает.
   const [autoClipSteps, setAutoClipSteps] = useState<number | null>(null)
   useEffect(() => {
     const name = video.extendSourceName
@@ -189,21 +157,16 @@ export function ExtendView() {
       .catch(() => { if (!cancelled) setAutoClipSteps(null) })
     return () => { cancelled = true }
   }, [video.extendSourceName, video.extendSourceSubfolder])
-  // Эффективное значение для инпута: override → авто из меты → firstSamplerSteps.
   const effectiveClipSteps = video.extendClipSteps ?? autoClipSteps ?? video.firstSamplerSteps ?? 6
 
   const extendRefs = video.extendImageRefs
   const progressPercent = progressMax > 0 ? Math.round((progressValue / progressMax) * 100) : 0
 
-  // (правка 296, 342) Синхронизация sourceVideo с store: реагируем на ЛЮБУЮ
-  // смену extendSourceVideoPath (не только «store есть, локально пусто»):
-  // новый путь → серверное превью (blob-превью при этом отзываем — правка
-  // 343), очистка пути → сбрасываем локальное состояние.
   useEffect(() => {
     if (!sourceVideoPath) {
       setSourceVideo((prev) => {
         if (prev?.previewUrl.startsWith('blob:')) {
-          try { URL.revokeObjectURL(prev.previewUrl) } catch { /* уже отозван */ }
+          try { URL.revokeObjectURL(prev.previewUrl) } catch { /* already revoked */ }
         }
         return null
       })
@@ -212,25 +175,21 @@ export function ExtendView() {
     setSourceVideo((prev) => {
       if (prev && prev.name === sourceVideoPath) return prev
       if (prev?.previewUrl.startsWith('blob:')) {
-        try { URL.revokeObjectURL(prev.previewUrl) } catch { /* уже отозван */ }
+        try { URL.revokeObjectURL(prev.previewUrl) } catch { /* already revoked */ }
       }
       return {
         name: sourceVideoPath,
         previewUrl: `/api/comfy/file?filename=${encodeURIComponent(sourceVideoPath)}&type=input`,
       }
     })
-  }, [sourceVideoPath]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sourceVideoPath])
 
-  // (правка 304) При добавлении клипа прокручиваем ленту в конец,
-  // чтобы новая карточка сразу была видна.
   const clipsCount = video.extendClips.length
   useEffect(() => {
     const el = clipsStripRef.current
     if (el) el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' })
   }, [clipsCount])
 
-  // (правка 289) Mention items для тэгов <Picture N> в промптах клипов.
-  // Аналогично generate-view: нумерация по порядку добавленных рефов.
   const clipMentions: MentionItem[] = useMemo(() => {
     return extendRefs.map((ref, i) => ({
       id: ref.id,
@@ -247,16 +206,15 @@ export function ExtendView() {
   }, [extendRefs])
 
   /* ──────────── Upload handlers ──────────── */
-
   const addExtendImageFiles = useCallback(async (files: File[]) => {
     const images = files.filter((f) => detectKind(f.name) === 'image')
     const rejected = files.length - images.length
-    if (rejected > 0) toast.error(`Только картинки — ${rejected} файл(ов) отклонено`)
+    if (rejected > 0) toast.error(`Images only — ${rejected} file(s) rejected`)
     if (!images.length) return
     const current = useGenStore.getState().video.extendImageRefs.length
     const available = Math.max(0, 9 - current)
     if (available === 0) {
-      toast.error('Максимум 9 картинок-рефов для продления')
+      toast.error('Maximum of 9 reference images for extension')
       return
     }
     setUploadingRefs(true)
@@ -278,7 +236,7 @@ export function ExtendView() {
       const prev = useGenStore.getState().video.extendImageRefs
       patchVideo({ extendImageRefs: [...prev, ...items] })
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки')
+      toast.error(e instanceof Error ? e.message : 'Upload error')
     } finally {
       setUploadingRefs(false)
     }
@@ -288,24 +246,18 @@ export function ExtendView() {
 
   const handleVideoSelect = useCallback(async (file: File) => {
     if (detectKind(file.name) !== 'video') {
-      toast.error('Выберите видеофайл (mp4, webm, mov, ...)')
+      toast.error('Select a video file (mp4, webm, mov, ...)')
       return
     }
-    // (правка 343) Старое blob-превью отзываем при замене — иначе утечка.
     const blobUrl = URL.createObjectURL(file)
     setSourceVideo((prev) => {
       if (prev?.previewUrl.startsWith('blob:')) {
-        try { URL.revokeObjectURL(prev.previewUrl) } catch { /* уже отозван */ }
+        try { URL.revokeObjectURL(prev.previewUrl) } catch { /* already revoked */ }
       }
       return { name: file.name, previewUrl: blobUrl }
     })
-    // (правка 164) Сразу загружаем видео в ComfyUI input/ (или staged) —
-    // без этого нода LoadVideo не найдёт файл и видео не будет учитываться.
     setUploadingVideo(true)
     try {
-      // (правка 291) /api/comfy/upload возвращает durationSec (ffprobe на сервере)
-      // для видео-файлов — храним в store, badges/карточки клипов сразу
-      // показывают «итого ~X с» вместе с оригиналом.
       const form = new FormData()
       form.append('image', file)
       const res = await fetch('/api/comfy/upload', { method: 'POST', body: form })
@@ -316,40 +268,28 @@ export function ExtendView() {
       const data = await res.json() as { name?: string; durationSec?: number; staged?: boolean }
       if (!data.name) throw new Error('Upload: no name in response')
       const duration = typeof data.durationSec === 'number' && data.durationSec > 0 ? data.durationSec : 0
-      // (правка 363) Файл с диска — не из галереи: папка результата = outputFolder
       patchVideo({ extendSourceVideoPath: data.name, extendSourceDuration: duration, extendSourceSubfolder: null, extendSourceName: null })
       if (duration > 0) {
-        toast.success(`Исходник: ${file.name} (${duration.toFixed(1)} с)`)
+        toast.success(`Source: ${file.name} (${duration.toFixed(1)} s)`)
       } else {
-        toast.success(`Исходник: ${file.name}`)
+        toast.success(`Source: ${file.name}`)
       }
-      // (правка 343) Файл уже на сервере — blob-превью больше не нужно,
-      // отзываем и переключаемся на серверный URL (если имя совпало с
-      // именем файла, эффект синхронизации сам бы blob не отозвал).
-      try { URL.revokeObjectURL(blobUrl) } catch { /* уже отозван */ }
+      try { URL.revokeObjectURL(blobUrl) } catch { /* already revoked */ }
       setSourceVideo({ name: data.name, previewUrl: `/api/comfy/file?filename=${encodeURIComponent(data.name)}&type=input` })
     } catch (e) {
-      // (правка 344) Ошибка загрузки — сбрасываем превью, не оставляем
-      // карточку «как будто видео выбрано»: generate всё равно упал бы
-      // на отсутствии файла в input/.
-      try { URL.revokeObjectURL(blobUrl) } catch { /* уже отозван */ }
+      try { URL.revokeObjectURL(blobUrl) } catch { /* already revoked */ }
       setSourceVideo(null)
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки видео')
+      toast.error(e instanceof Error ? e.message : 'Error uploading video')
     } finally {
       setUploadingVideo(false)
     }
   }, [patchVideo])
 
-  // (правка 265, фикс) Импорт видео из галереи (DnD карточки) в ComfyUI input/.
-  // Нода продления (VHS_LoadVideo) и проба размеров/кадров в /api/comfy/generate
-  // ищут источник ПО ИМЕНИ В Папке input/ — поэтому сервер копирует output → input
-  // и отдаёт basename (как uploadInputFile для файла с диска), а не абсолютный путь.
   const importGalleryVideo = useCallback(async (filename: string, subfolder: string) => {
     if (!filename) {
-      toast.error('Не удалось прочитать перетащенное видео')
+      toast.error('Failed to read dragged video')
       return
     }
-    // Превью из общей папки output — /api/comfy/file (type=output) стримит локально.
     setSourceVideo({ name: filename, previewUrl: `/api/comfy/file?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder || '')}` })
     setUploadingVideo(true)
     try {
@@ -362,25 +302,13 @@ export function ExtendView() {
       if (!r.ok || !d.ok || !d.name) {
         throw new Error(d.error ?? `import → ${r.status}`)
       }
-      // (правка 291) Длительность исходника из ответа импорта (сервер ffprobe)
       const dur = typeof d.durationSec === 'number' && d.durationSec > 0 ? d.durationSec : 0
-      // (правка 363) Источник из галереи — запоминаем её подпапку: результат
-      // продления (и автосклейка) падает в папку оригинала.
-      // (правка 385) И имя ОРИГИНАЛА в output/ (копия в input/ получает
-      // случайное имя): по имени+папке роут резолвит латент исходника.
       patchVideo({
         extendSourceVideoPath: d.name,
         extendSourceDuration: dur,
         extendSourceSubfolder: subfolder || '',
         extendSourceName: filename,
       })
-      // (правка 389) Наследуем картинки-рефы ОРИГИНАЛА из его .meta.json —
-      // раньше при «Продлить»/DnD из галереи референсы источника (в т.ч. у
-      // драфтов, pipeline='draft') терялись: клипы генерились без якорей
-      // идентичности. Сайдкар пишется во всех режимах (правка ~305+), читаем
-      // его через /api/comfy/meta. Пути в мете — имена в ComfyUI input/;
-      // /api/comfy/generate умеет читать extendRefs прямо с диска input/.
-      // Добавляем только те, которых ещё нет в списке (по path), лимит 9.
       try {
         const metaPath = subfolder ? `${subfolder}/${filename}` : filename
         const mr = await fetch(`/api/comfy/meta?path=${encodeURIComponent(metaPath)}`)
@@ -395,16 +323,12 @@ export function ExtendView() {
             : Array.isArray(meta.minimax_h3_references) ? meta.minimax_h3_references
             : []
           const imgRefs = list.filter((r) => r?.type === 'image' && typeof r?.path === 'string' && r.path.length > 0)
-          // (правка 452) Исходник сгенерирован в режиме «Кадры»: кадры в
-          // references не попадают (там только аудио), поэтому продление такого
-          // видео шло вообще без якорей внешности. Первый кадр из меты
-          // добавляем как картинку-реф (с дедупликацией ниже).
           const firstFrame =
             meta.generation_mode === 'flf' && typeof meta.first_frame === 'string' && meta.first_frame
               ? meta.first_frame
               : null
           if (firstFrame && !imgRefs.some((r) => r.path === firstFrame)) {
-            imgRefs.unshift({ type: 'image', path: firstFrame, role: 'первый кадр оригинала' })
+            imgRefs.unshift({ type: 'image', path: firstFrame, role: 'first frame of original' })
           }
           if (imgRefs.length > 0) {
             const prev = useGenStore.getState().video.extendImageRefs
@@ -428,26 +352,21 @@ export function ExtendView() {
             }
             if (inherited.length > 0) {
               patchVideo({ extendImageRefs: [...prev, ...inherited] })
-              toast.success(`Референсы оригинала: +${inherited.length} из метаданных`)
+              toast.success(`Original references: +${inherited.length} from metadata`)
             }
           }
         }
-      } catch { /* нет сайдкара/сеть — продление просто без наследованных рефов */ }
-      toast.success(dur > 0 ? `Исходное видео: ${filename} (${dur.toFixed(1)} с)` : `Исходное видео: ${filename}`)
+      } catch { /* ignored */ }
+      toast.success(dur > 0 ? `Source video: ${filename} (${dur.toFixed(1)} s)` : `Source video: ${filename}`)
     } catch (e) {
-      // (правка 344) Ошибка импорта — сбрасываем превью и путь в store,
-      // чтобы карточка не выглядела «выбранной» при отсутствующем файле.
       setSourceVideo(null)
       patchVideo({ extendSourceVideoPath: '', extendSourceDuration: 0, extendSourceSubfolder: null, extendSourceName: null })
-      toast.error(e instanceof Error ? e.message : 'Ошибка импорта видео из галереи')
+      toast.error(e instanceof Error ? e.message : 'Error importing video from gallery')
     } finally {
       setUploadingVideo(false)
     }
   }, [patchVideo])
 
-  // (правка 370) Цель «Продлить» из галереи: клик по пункту меню в
-  // video-gallery-grid кладёт {filename, subfolder} в ExtendTargetStore и шлёт
-  // 'h3:goto-extend' — забираем цель и импортируем как обычный DnD из галереи.
   const galleryTarget = useExtendTarget((s) => s.target)
   const clearGalleryTarget = useExtendTarget((s) => s.clear)
   useEffect(() => {
@@ -457,52 +376,31 @@ export function ExtendView() {
   }, [galleryTarget, clearGalleryTarget, importGalleryVideo])
 
   /* ──────────── Generate ──────────── */
-
-  // (правка 333) Guard от случайного дабл-клика: пока generate() не вернулся
-  // (POST сабмита в полёте, prompt_id ещё не получен), повторный вызов
-  // игнорируется. Намеренные повторные запуски не блокируются.
   const submitInFlightRef = useRef(false)
 
   const handleGenerate = useCallback(async () => {
     if (assistantBusy) {
-      toast.error('Ассистент отвечает — дождитесь ответа или прервите его')
+      toast.error('Assistant is responding — wait for response or cancel it')
       return
     }
     const v = useGenStore.getState().video
-    // (правка 177) Жёсткий чек исходного видео: без него в итоговом склеенном
-    // файле не будет оригинала (а это ключевой UX-требование — «полное
-    // бесшовно склеенное видео, включая оригинал в начале»).
     if (!v.extendSourceVideoPath) {
-      toast.error('Загрузите исходное видео — без него продление не имеет смысла (исходный фрагмент должен быть в итоге склеен с новыми клипами)')
+      toast.error('Upload a source video — extension requires it (source clip is concatenated with new clips)')
       return
     }
     if (v.extendClips.length === 0) {
-      toast.error('Добавьте хотя бы один клип')
+      toast.error('Add at least one clip')
       return
     }
     if (v.extendClips.every((c) => !c.prompt.trim())) {
-      toast.error('Заполните промпт хотя бы одного клипа')
+      toast.error('Fill in the prompt of at least one clip')
       return
     }
     if (uploadingVideo) {
-      toast.error('Видео ещё загружается — дождитесь завершения')
+      toast.error('Video is still uploading — please wait')
       return
     }
 
-    // (правка 165) Если загружено исходное видео — автоматически вставляем
-    // <Video 1> в каждый клип-промпт. Без этой тега модель НЕ использует
-    // видео-реф для ракурса/сцены/движения камеры.
-    //
-    // (правка 170) Ref2VA — это *reference-conditioning*: исходное видео задаёт
-    // «мягкий» контекст, а не жёсткий якорь, поэтому без явной инструкции модель
-    // может сдвинуть ракурс.
-    //
-    // (правка 197) КРИТИЧНО для двухпроходной схемы: pass 2 перешумляет латент
-    // до σ≈0.9 и пересобирает сцену по conditioning. Если в промпте есть своя
-    // декорация («in the room» и т.п.), ТЕКСТ побеждает мягкий <Video 1>-реф —
-    // оригинал перестаёт продолжаться (воспроизведено: лес → комната).
-    // Директива явно связывает локацию/свет/персонажей с <Video 1> и проверена
-    // прогоном: с ней оба клипа продолжают исходную сцену с теми же промптами.
     const CAMERA_LOCK =
       'You are continuing the reference video <Video 1>: keep the exact same scene, location, environment, lighting and time of day as shown in <Video 1>; the same characters with the same appearance and clothing. Continue exactly the same camera angle, framing and camera movement as the reference video; keep the same subject position and shot. Do not change the location, do not introduce a new setting or new characters, do not cut to a new shot.'
     const hasSourceVideo = !!v.extendSourceVideoPath
@@ -512,76 +410,57 @@ export function ExtendView() {
         if (!/<Video 1>/i.test(prompt)) {
           prompt = `<Video 1> ${prompt}`
         }
-        if (!/camera angle|ракурс|same scene|same location/i.test(prompt)) {
+        if (!/camera angle|same scene|same location/i.test(prompt)) {
           prompt = `${prompt} ${CAMERA_LOCK}`
         }
       }
-      // (правка 309, ослаблена правкой 434) Жёсткий кламп: клипы продления
-      // минимум 3 с (было 5: при коротких клипах первый кадр клипа 0
-      // «отъезжал» от хвоста исходника; на 3 с риск ниже, а гибкость нужна).
-      // Кламп здесь, чтобы не пробились значения из сохранённых настроек/
-      // очереди мимо UI.
       return { prompt, duration: Math.max(3, c.duration), seed: c.seed }
     })
 
-    // Общий промпт удалён из UI: conditioning строят только промпты клипов.
-    // В `prompt` идёт первый ОСМЫСЛЕННЫЙ клиповый промпт (2+ буквы — не «.»
-    // и прочий мусор) — как подпись карточки очереди и промпт в .meta.json
-    // сайдкаре: по нему refine подбирает caption, точка там якорем быть не
-    // может (генерацию он не меняет: клипы всегда непусты, фолбэк
-    // buildExtendWorkflow не срабатывает).
-    const MEANINGFUL_WORD = /[a-zA-Zа-яА-ЯёЁ]{2,}/
+    const MEANINGFUL_WORD = /[a-zA-Z]{2,}/
     const labelPrompt = v.extendClips.find((c) => MEANINGFUL_WORD.test(c.prompt))?.prompt.trim() ?? ''
-    // (правка 333) Флаг синхронно до await — дабл-клик за время сабмита
-    // не шлёт дубль задачи.
     if (submitInFlightRef.current) return
     submitInFlightRef.current = true
-    // (правка 696) Зафиксировать stageKind на момент старта: во время
-    // генерации переключение «Драфт/Полное» не меняет шаблон подписи.
     useGenProgress.getState().setVideoFrozenStageKind(v.extendTwoPass ? 'clips2' : 'clips')
     try {
       await generate({
-      modelType: v.modelType,
-      mode: 'extend',
-      prompt: labelPrompt,
-      seed: v.seed,
-      resolution: v.resolution,
-      videoLength: v.videoLength,
-      extendClips: clips,
-      extendRefs: v.extendImageRefs.map((r) => r.path),
-      extendSourceVideo: v.extendSourceVideoPath || undefined,
-      extendSourceName: v.extendSourceName ?? undefined, // (правка 385)
-      extendSourceSubfolder: v.extendSourceSubfolder ?? undefined, // (правка 385)
-      extendTwoPass: v.extendTwoPass, // (правка 423) два прохода: low-res → апскейл → рефайн
-      // (правка 174) Debug: ensure extendSourceVideoPath is not lost
-      referenceDetail: v.referenceDetail || 'match', // (правка 307) — выбор Match/Max как в генерации
-      lowResMP: v.lowResMP ?? 0.2,
+        modelType: v.modelType,
+        mode: 'extend',
+        prompt: labelPrompt,
+        seed: v.seed,
+        resolution: v.resolution,
+        videoLength: v.videoLength,
+        extendClips: clips,
+        extendRefs: v.extendImageRefs.map((r) => r.path),
+        extendSourceVideo: v.extendSourceVideoPath || undefined,
+        extendSourceName: v.extendSourceName ?? undefined,
+        extendSourceSubfolder: v.extendSourceSubfolder ?? undefined,
+        extendTwoPass: v.extendTwoPass,
+        referenceDetail: v.referenceDetail || 'match',
+        lowResMP: v.lowResMP ?? 0.2,
         firstSamplerSteps: v.firstSamplerSteps ?? 6,
-        // Шаги клипа: явное значение побеждает; иначе «авто» — шаги первого
-        // прохода исходника из его меты (посчитаны выше autoClipSteps); нет
-        // меты — undefined, сервер возьмёт firstSamplerSteps (фолбэк шаблона).
         extendClipSteps: v.extendClipSteps ?? autoClipSteps ?? undefined,
-      sigmaVariant: v.sigmaVariant || '3step',
-      pass2Sampler: v.pass2Sampler || 'euler', // (правка 473) раньше не отправлялся — pass 2 продления всегда шёл на euler
-      pass1Sampler: v.pass1Sampler || 'euler',
-      pass1Scheduler: v.pass1Scheduler || 'simple',
-      sparseAttention: v.sparseAttention, // (правка 168)
-      sparseTau: v.sparseTau, // (правка 466)
-      sparseStartPercent: v.sparseStartPercent, // (правка 466)
-      sparseEndPercent: v.sparseEndPercent, // (правка 466)
-      sparseMinTokens: v.sparseMinTokens, // (правка 466)
-      sparseExtraTokens: v.sparseExtraTokens, // (правка 466)
-      vedaAttention: v.vedaAttention, // (правка 301)
-      vedaGeneratedSparsity: v.vedaGeneratedSparsity, // (правка 402)
-      vedaReferenceSparsity: v.vedaReferenceSparsity, // (правка 402)
-      vedaFullAttentionLayers: v.vedaFullAttentionLayers, // (правка 402)
-      vedaFullAttentionSteps: v.vedaFullAttentionSteps, // (правка 402)
-      vedaVerbose: v.vedaVerbose, // (правка 402)
-      lowVramAttention: v.lowVramAttention,
-      chunkFeedForward: v.chunkFeedForward,
-      chunkFFChunks: v.chunkFFChunks,
-      chunkFFThreshold: v.chunkFFThreshold,
-      outputSubfolder: v.extendSourceSubfolder ?? (v.outputFolder || ''), // (правка 363) галерея-источник → папка оригинала
+        sigmaVariant: v.sigmaVariant || '3step',
+        pass2Sampler: v.pass2Sampler || 'euler',
+        pass1Sampler: v.pass1Sampler || 'euler',
+        pass1Scheduler: v.pass1Scheduler || 'simple',
+        sparseAttention: v.sparseAttention,
+        sparseTau: v.sparseTau,
+        sparseStartPercent: v.sparseStartPercent,
+        sparseEndPercent: v.sparseEndPercent,
+        sparseMinTokens: v.sparseMinTokens,
+        sparseExtraTokens: v.sparseExtraTokens,
+        vedaAttention: v.vedaAttention,
+        vedaGeneratedSparsity: v.vedaGeneratedSparsity,
+        vedaReferenceSparsity: v.vedaReferenceSparsity,
+        vedaFullAttentionLayers: v.vedaFullAttentionLayers,
+        vedaFullAttentionSteps: v.vedaFullAttentionSteps,
+        vedaVerbose: v.vedaVerbose,
+        lowVramAttention: v.lowVramAttention,
+        chunkFeedForward: v.chunkFeedForward,
+        chunkFFChunks: v.chunkFFChunks,
+        chunkFFThreshold: v.chunkFFThreshold,
+        outputSubfolder: v.extendSourceSubfolder ?? (v.outputFolder || ''),
       })
     } finally {
       submitInFlightRef.current = false
@@ -592,9 +471,6 @@ export function ExtendView() {
   const { files: galleryFiles, loading: galleryLoading, load: loadGallery, deleteFile } = useVideoGallery({ phase })
 
   /* ──────────── Badges ──────────── */
-  // (правка 291) Итоговая длительность = исходник + все клипы (без учёта
-  // перекрытия швов — оценка «сколько секунд будет по итогу вместе с
-  // оригиналом», а не только добавленных клипов).
   const clipsSum = video.extendClips.reduce((s, c) => s + c.duration, 0)
   const sourceDur = typeof video.extendSourceDuration === 'number' && video.extendSourceDuration > 0
     ? video.extendSourceDuration
@@ -602,45 +478,36 @@ export function ExtendView() {
   const totalDuration = sourceDur + clipsSum
   const badges = (
     <>
-      <Badge variant="secondary" className="text-[10px]">Как в исходнике</Badge>
-      {/* (правка 291) Итоговая длительность: исходник + клипы (если исходник
-          известен); иначе только сумма клипов. */}
+      <Badge variant="secondary" className="text-[10px]">Same as source</Badge>
       <Badge variant="secondary" className="text-[10px]">
-        {totalDuration.toFixed(1)} с{sourceDur > 0 ? ' (исх.' + sourceDur.toFixed(0) + '+' + clipsSum + ')' : ''}
+        {totalDuration.toFixed(1)} s{sourceDur > 0 ? ' (src ' + sourceDur.toFixed(0) + ' + ' + clipsSum + ')' : ''}
       </Badge>
-      <Badge variant="secondary" className="text-[10px]">{video.extendClips.length} клип(ов)</Badge>
+      <Badge variant="secondary" className="text-[10px]">{video.extendClips.length} clip(s)</Badge>
       {extendRefs.length > 0 && (
-        <Badge variant="secondary" className="text-[10px]">{extendRefs.length} реф(ов)</Badge>
+        <Badge variant="secondary" className="text-[10px]">{extendRefs.length} ref(s)</Badge>
       )}
-      {/* (правка 247, 423, 437) По умолчанию — ДВУХПРОХОДНАЯ генерация
-          (правка 437: low-res pass 1 → апскейл латента → pass 2 рефайн до
-          размера исходника, схема «full»-пайплайна генерации). Однопроходный
-          «Драфт» — переключатель «Качество прохода» выше (Extender один на
-          канве разрешения исходника, цепочка motion-context). */}
       {video.extendTwoPass ? (
         <Badge className="text-[10px] bg-cyan-500/15 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/15">
-          Полное (2 прохода)
+          Full (2 passes)
         </Badge>
       ) : (
         <Badge className="text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/15">
-          Драфт (1 проход) ✓
+          Draft (1 pass) ✓
         </Badge>
       )}
     </>
   )
 
   /* ──────────── Render ──────────── */
-
   return (
     <div className="flex-1 flex min-h-0 min-w-0">
       {/* ═══════════ LEFT: Settings panel (400px) ═══════════ */}
-      {/* (правка 472) фон — surface-1, как у Refine/Tile/FPS (единый вид) */}
       <div className="w-[400px] shrink-0 border-r border-border flex flex-col bg-[var(--surface-1)]">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
           {/* Header */}
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">Параметры продления</h2>
+            <h2 className="text-sm font-semibold text-foreground">Extension Parameters</h2>
             <Badge className="text-[10px] bg-cyan-500/15 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/15">
               MiniMax H3
             </Badge>
@@ -652,9 +519,9 @@ export function ExtendView() {
           <div className="space-y-2">
             <Label
               className="text-xs text-amber-400"
-              title="Видео продолжится с тем же ракурсом, сценой и движением камеры. Готовые клипы автоматически склеиваются с исходником в один ролик."
+              title="Video will continue with same angle, scene, and camera motion. Finished clips are automatically joined with source into a single video."
             >
-              Исходное видео <span className="text-amber-400/70">(обязательно)</span>
+              Source video <span className="text-amber-400/70">(required)</span>
             </Label>
             <div
               onDragOver={(e) => { e.preventDefault(); setVideoDragOver(true); setRefsDragOver(true) }}
@@ -663,20 +530,19 @@ export function ExtendView() {
                 e.preventDefault()
                 setVideoDragOver(false)
                 setRefsDragOver(false)
-                // (правка 265) Видео из галереи (превьюшка) — импортируем на сервере
                 const raw = e.dataTransfer.getData(H3_VIDEO_DND_MIME)
                 if (raw) {
                   try {
                     const parsed = JSON.parse(raw) as { filename?: string; subfolder?: string }
                     void importGalleryVideo(parsed.filename ?? '', parsed.subfolder ?? '')
                   } catch {
-                    toast.error('Не удалось прочитать перетащенное видео')
+                    toast.error('Failed to read dragged video')
                   }
                   return
                 }
                 const f = Array.from(e.dataTransfer.files).find((x) => detectKind(x.name) === 'video')
                 if (f) void handleVideoSelect(f)
-                else toast.error('Нужно видео')
+                else toast.error('A video file is required')
               }}
               onClick={() => videoInputRef.current?.click()}
               className={cn(
@@ -687,18 +553,12 @@ export function ExtendView() {
               {sourceVideo ? (
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {/* (правка 455) Живое превью исходника вместо голой иконки:
-                        preload="metadata" + muted — WebView2 показывает первый
-                        кадр без загрузки всего файла. Клик по превью не должен
-                        открывать диалог выбора файла (onClick на всей зоне).
-                        (правка 719) Клик по превью — просмотр исходника во
-                        весь экран (как на вкладке «Генерация»). */}
                     <RefPreviewThumb
                       kind="video"
                       name={sourceVideo.name}
                       url={sourceVideo.previewUrl}
                       className="h-16 w-28 rounded-md object-cover bg-black shrink-0"
-                      title="Открыть исходное видео во весь экран"
+                      title="Open source video in full screen"
                       stopPropagation
                     >
                       <video
@@ -713,13 +573,12 @@ export function ExtendView() {
                     <div className="min-w-0 flex-1">
                       <p className="text-xs truncate" title={sourceVideo.name}>{sourceVideo.name}</p>
                       <div className="flex items-center gap-1.5">
-                        {/* (правка 291) Показываем длительность исходника, если известна */}
                         {typeof video.extendSourceDuration === 'number' && video.extendSourceDuration > 0 && (
-                          <span className="text-[10px] text-cyan-400/80 shrink-0" title="Длительность исходного видео">
-                            {video.extendSourceDuration.toFixed(1)} с
+                          <span className="text-[10px] text-cyan-400/80 shrink-0" title="Source video duration">
+                            {video.extendSourceDuration.toFixed(1)} s
                           </span>
                         )}
-                        {uploadingVideo && <span className="text-[10px] text-cyan-400 shrink-0">загрузка…</span>}
+                        {uploadingVideo && <span className="text-[10px] text-cyan-400 shrink-0">uploading…</span>}
                         {sourceVideoPath && !uploadingVideo && <span className="text-[10px] text-green-400 shrink-0">✓</span>}
                       </div>
                     </div>
@@ -728,22 +587,21 @@ export function ExtendView() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
-                      // (правка 343) blob-превью при удалении отзываем — иначе утечка
                       setSourceVideo((prev) => {
                         if (prev?.previewUrl.startsWith('blob:')) {
-                          try { URL.revokeObjectURL(prev.previewUrl) } catch { /* уже отозван */ }
+                          try { URL.revokeObjectURL(prev.previewUrl) } catch { /* already revoked */ }
                         }
                         return null
                       })
-                      patchVideo({ extendSourceVideoPath: '', extendSourceSubfolder: null }) // (правка 363)
+                      patchVideo({ extendSourceVideoPath: '', extendSourceSubfolder: null })
                     }}
                     className="text-[10px] text-muted-foreground hover:text-red-400 shrink-0"
                   >
-                    Убрать
+                    Remove
                   </button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Добавить видео для продления — перетащите карточку из галереи или файл с диска</p>
+                <p className="text-xs text-muted-foreground">Add video for extension — drag a card from gallery or drop a file from disk</p>
               )}
             </div>
             <input
@@ -757,25 +615,14 @@ export function ExtendView() {
                 e.target.value = ''
               }}
             />
-            {/* (правка 363) Куда сохранится результат: источник из галереи —
-                папка оригинала; файл с диска — как на вкладке «Генерация». */}
             {sourceVideoPath && (
               <p className="text-[10px] text-muted-foreground/60">
-                Папка результата: {video.extendSourceSubfolder !== null
-                  ? `${video.extendSourceSubfolder || 'общая'} (по оригиналу)`
-                  : (video.outputFolder || 'общая')}
+                Output folder: {video.extendSourceSubfolder !== null
+                  ? `${video.extendSourceSubfolder || 'General'} (matching source)`
+                  : (video.outputFolder || 'General')}
               </p>
             )}
           </div>
-
-          <Separator className="bg-border opacity-50" />
-
-          {/* (правка 227) Разрешение продления ВСЕГДА как в исходнике:
-              и размер, и соотношение сторон (роут снимает их с файла).
-              Поле «Разрешение» убрано — информация уже в подсказке
-              исходного видео и не даёт пользователю выбора. */}
-
-          {/* Клипы продления — в правой панели (лента с промптами) */}
 
           <Separator className="bg-border opacity-50" />
 
@@ -783,9 +630,9 @@ export function ExtendView() {
           <div className="space-y-2">
             <Label
               className="text-xs text-muted-foreground"
-              title="До 9 картинок — помогают сохранить персонажей и сцену одинаковыми во всех клипах продления."
+              title="Up to 9 images — help maintain character and scene consistency across all extension clips."
             >
-              Картинки-рефы
+              Image references
               <span className="text-[10px] font-normal text-muted-foreground/60 ml-2">
                 {extendRefs.length}/9 img
               </span>
@@ -806,9 +653,9 @@ export function ExtendView() {
               )}
             >
               {uploadingRefs ? (
-                <p className="text-xs text-cyan-400">Загрузка…</p>
+                <p className="text-xs text-cyan-400">Uploading…</p>
               ) : (
-                <p className="text-xs text-muted-foreground">Добавить картинки-рефы</p>
+                <p className="text-xs text-muted-foreground">Add image references</p>
               )}
             </div>
             <input
@@ -827,18 +674,13 @@ export function ExtendView() {
               <div className="grid grid-cols-3 gap-2">
                 {extendRefs.map((ref) => (
                   <div key={ref.id} className="relative group">
-                    {/* (правка 288) Фолбэк на серверный файл, если previewUrl пуст
-                        (localStorage не хранит blob: — после перезапуска превьюшки
-                        исчезали).
-                        (правка 719) Клик — полноэкранный просмотр (общий
-                        компонент, как на вкладке «Генерация»). */}
                     <RefPreviewThumb
                       kind="image"
                       name={ref.name}
                       path={ref.path ?? ''}
                       url={ref.previewUrl || undefined}
                       className="w-full block"
-                      title="Открыть референс во весь экран"
+                      title="Open reference in full screen"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -856,11 +698,9 @@ export function ExtendView() {
                       type="button"
                       onClick={() => {
                         const refs = useGenStore.getState().video.extendImageRefs
-                        // (правка 587) Отзываем blob-URL удаляемого референса —
-                        // как при замене источника выше (утечка blob: строк).
                         const removed = refs.find((r) => r.id === ref.id)
                         if (removed?.previewUrl?.startsWith('blob:')) {
-                          try { URL.revokeObjectURL(removed.previewUrl) } catch { /* уже отозван */ }
+                          try { URL.revokeObjectURL(removed.previewUrl) } catch { /* already revoked */ }
                         }
                         patchVideo({ extendImageRefs: refs.filter((r) => r.id !== ref.id) })
                       }}
@@ -874,13 +714,13 @@ export function ExtendView() {
             )}
           </div>
 
-          {/* (правка 307) Рефы: режим размера — как в генерации */}
+          {/* Reference size mode */}
           <div className="space-y-1">
             <Label
               className="text-xs text-muted-foreground"
-              title="Как обрабатывать загруженные картинки. Match — быстрее; Max — точнее сохраняет детали референсов, но медленнее."
+              title="How to process uploaded images. Match — faster; Max — preserves reference details more accurately, but slower."
             >
-              Рефы: режим размера
+              Refs: size mode
             </Label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
@@ -893,7 +733,7 @@ export function ExtendView() {
                     : 'border-border text-muted-foreground hover:text-foreground',
                 )}
               >
-                Match (быстро)
+                Match (fast)
               </button>
               <button
                 type="button"
@@ -905,31 +745,29 @@ export function ExtendView() {
                     : 'border-border text-muted-foreground hover:text-foreground',
                 )}
               >
-                Max (качество)
+                Max (quality)
               </button>
             </div>
           </div>
 
           <Separator className="bg-border opacity-50" />
 
-          {/* (правка 423) Качество прохода — как на вкладке «Генерация»:
-              «Драфт» = один проход на канве исходника (быстро, правка 247);
-              «Полное» = два прохода (low-res → апскейл латента → рефайн). */}
+          {/* Pass quality */}
           <div className="space-y-1.5">
             <Label
               className="text-xs text-muted-foreground"
               title={
                 video.extendTwoPass
-                  ? 'Сначала быстрый черновик каждого клипа, затем доработка до чёткого результата. Дольше, но детальнее.'
-                  : 'Один проход сразу в разрешении исходника — быстрее. Довести до полного качества можно позже во вкладке Refine.'
+                  ? 'First a fast draft of each clip, then refinement to clear output. Takes longer, but more detailed.'
+                  : 'Single pass at source resolution — faster. Can be brought to full quality later in Refine tab.'
               }
             >
-              Качество прохода
+              Pass quality
             </Label>
             <div className="grid grid-cols-2 gap-1.5">
               {([
-                [false, 'Драфт', 'Один быстрый проход — черновое качество; довести можно вкладкой Refine'],
-                [true, 'Полное', 'Два прохода: быстрый черновик, затем детализация до качества исходника'],
+                [false, 'Draft', 'Single fast pass — draft quality; can be refined later in Refine tab'],
+                [true, 'Full', 'Two passes: fast draft, then detail refinement to source quality'],
               ] as const).map(([tp, label, hint]) => (
                 <button
                   key={label}
@@ -958,7 +796,7 @@ export function ExtendView() {
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-border hover:border-cyan-500/30 transition-all text-left"
             >
-              <span className="text-xs font-medium text-muted-foreground">Дополнительные параметры</span>
+              <span className="text-xs font-medium text-muted-foreground">Advanced Parameters</span>
               <span className={cn('text-[10px] text-muted-foreground transition-transform', showAdvanced && 'rotate-180')}>▼</span>
             </button>
 
@@ -978,7 +816,7 @@ export function ExtendView() {
                     className="w-full flex items-center justify-between px-3 py-1.5 rounded-md bg-[var(--surface-3)] border border-border/60 hover:border-cyan-500/30 transition-all text-left"
                   >
                     <span className="text-xs font-medium text-muted-foreground">
-                      {video.extendTwoPass ? 'Pass 1 (low-res)' : 'Проход продления (один)'}
+                      {video.extendTwoPass ? 'Pass 1 (low-res)' : 'Extension pass (single)'}
                     </span>
                     <span className={cn('text-[10px] text-muted-foreground transition-transform', showPass1 && 'rotate-180')}>▼</span>
                   </button>
@@ -990,15 +828,13 @@ export function ExtendView() {
                       className="space-y-3 pl-1 overflow-hidden"
                     >
                       <div className="space-y-1">
-                        {/* (правка 456) Стили под эталон «Генерация»: Label text-xs,
-                            Select-триггеры h-9 bg-[var(--surface-2)] text-sm. */}
                         <Label
                           className="text-xs text-muted-foreground"
-                          title="Сколько шагов делает модель, дорисовывая клип. Больше — точнее, но медленнее. По умолчанию — авто: шаги первого прохода исходника (из его метаданных); ручное значение побеждает авто."
+                          title="Sampling steps for drawing the clip. More is more accurate, but slower. Default is auto: source pass 1 steps (from metadata); manual input overrides auto."
                         >
-                          Шаги сэмплера
+                          Sampler steps
                           {video.extendClipSteps == null && (
-                            <span className="ml-1.5 text-[10px] text-cyan-400/80">авто</span>
+                            <span className="ml-1.5 text-[10px] text-cyan-400/80">auto</span>
                           )}
                         </Label>
                         <div className="flex items-center gap-2">
@@ -1015,15 +851,15 @@ export function ExtendView() {
                               type="button"
                               onClick={() => patchVideo({ extendClipSteps: undefined })}
                               className="shrink-0 rounded-md border border-cyan-500/40 px-1.5 py-0.5 text-[10px] text-cyan-300 transition-colors hover:bg-cyan-500/10"
-                              title={`Вернуть «авто»: шаги исходника${autoClipSteps != null ? ` (${autoClipSteps})` : ' → как в генерации'}`}
+                              title={`Restore 'auto': source steps${autoClipSteps != null ? ` (${autoClipSteps})` : ' → same as generation'}`}
                             >
-                              авто
+                              auto
                             </button>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">
                               {autoClipSteps != null
-                                ? `из исходника · ${autoClipSteps}`
-                                : `как в генерации · ${video.firstSamplerSteps ?? 6}`}
+                                ? `from source · ${autoClipSteps}`
+                                : `same as generation · ${video.firstSamplerSteps ?? 6}`}
                             </span>
                           )}
                           <span className="text-[10px] text-muted-foreground/70">2–30</span>
@@ -1033,9 +869,9 @@ export function ExtendView() {
                       <div className="space-y-1">
                         <Label
                           className="text-xs text-muted-foreground"
-                          title="Способ, которым модель рисует кадры. Влияет на детализацию и стабильность; если не уверены — оставьте euler."
+                          title="Sampling method for drawing frames. Influences detail and stability; if unsure, keep euler."
                         >
-                          Сэмплер (pass 1)
+                          Sampler (pass 1)
                         </Label>
                         <Select value={video.pass1Sampler || 'euler'} onValueChange={(v) => patchVideo({ pass1Sampler: v })}>
                           <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
@@ -1052,9 +888,9 @@ export function ExtendView() {
                       <div className="space-y-1">
                         <Label
                           className="text-xs text-muted-foreground"
-                          title="Как модель распределяет работу между шагами. Обычно лучше оставить simple."
+                          title="How model distributes work across steps. Usually best to keep simple."
                         >
-                          Планировщик
+                          Scheduler
                         </Label>
                         <Select value={video.pass1Scheduler || 'simple'} onValueChange={(v) => patchVideo({ pass1Scheduler: v })}>
                           <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
@@ -1071,10 +907,7 @@ export function ExtendView() {
                   )}
                 </div>
 
-                {/* (правка 473) Pass 2 — только в двухпроходном режиме
-                    («Полное»). Шаблон extend уже использует sigmaVariant/
-                    pass2Sampler (minimax-h3-template.ts) — раньше настройки
-                    не были выведены в UI и pass2Sampler даже не отправлялся. */}
+                {/* Pass 2 (only in Full two-pass mode) */}
                 {video.extendTwoPass && (
                   <div className="space-y-1.5">
                     <button
@@ -1082,7 +915,7 @@ export function ExtendView() {
                       onClick={() => setShowPass2(!showPass2)}
                       className="w-full flex items-center justify-between px-3 py-1.5 rounded-md bg-[var(--surface-3)] border border-border/60 hover:border-cyan-500/30 transition-all text-left"
                     >
-                      <span className="text-xs font-medium text-muted-foreground">Pass 2 — детализация</span>
+                      <span className="text-xs font-medium text-muted-foreground">Pass 2 — refinement</span>
                       <span className={cn('text-[10px] text-muted-foreground transition-transform', showPass2 && 'rotate-180')}>▼</span>
                     </button>
 
@@ -1095,20 +928,20 @@ export function ExtendView() {
                         <div className="space-y-1">
                           <Label
                             className="text-xs text-muted-foreground"
-                            title="Сколько шагов делает финальный проход детализации. Больше — чётче картинка, но дольше."
+                            title="Sampling steps for final refinement pass. More is clearer, but takes longer."
                           >
-                            Sigma-профиль (шаги)
+                            Sigma profile (steps)
                           </Label>
                           <Select value={video.sigmaVariant || '3step'} onValueChange={(v) => patchVideo({ sigmaVariant: v })}>
                             <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-[var(--surface-3)] border-border">
-                              <SelectItem value="3step">3 шага (быстрее)</SelectItem>
-                              <SelectItem value="4step">4 шага (баланс)</SelectItem>
-                              <SelectItem value="5step">5 шагов (высокое)</SelectItem>
-                              <SelectItem value="6step">6 шагов (оч. высокое)</SelectItem>
-                              <SelectItem value="7step">7 шагов (макс.)</SelectItem>
+                              <SelectItem value="3step">3 steps (faster)</SelectItem>
+                              <SelectItem value="4step">4 steps (balanced)</SelectItem>
+                              <SelectItem value="5step">5 steps (high)</SelectItem>
+                              <SelectItem value="6step">6 steps (very high)</SelectItem>
+                              <SelectItem value="7step">7 steps (max)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1116,9 +949,9 @@ export function ExtendView() {
                         <div className="space-y-1">
                           <Label
                             className="text-xs text-muted-foreground"
-                            title="Способ, которым модель рисует кадры на финальном проходе. Если не уверены — оставьте euler."
+                            title="Sampling method for final refinement pass. If unsure, keep euler."
                           >
-                            Сэмплер (pass 2)
+                            Sampler (pass 2)
                           </Label>
                           <Select value={video.pass2Sampler || 'euler'} onValueChange={(v) => patchVideo({ pass2Sampler: v })}>
                             <SelectTrigger className="w-full h-9 bg-[var(--surface-2)] border-border text-sm rounded-md">
@@ -1139,14 +972,9 @@ export function ExtendView() {
               </motion.div>
             )}
           </div>
-
-          {/* (правка 308) Устаревший статичный блок «Рефы: режим размера» (правка 286) удалён:
-              он дублировал интерактивный переключатель (правка 307) выше и вводил в заблуждение
-              подписью «зафиксирован Match». Реально в генерацию уходит video.referenceDetail. */}
         </div>
 
         {/* Pinned bottom: generation status */}
-        {/* (правка 475) панель статуса/превью — surface-1, в цвет панели настроек */}
         <div className="shrink-0 border-t border-border p-3 bg-[var(--surface-1)]/90 backdrop-blur-sm">
           <GenerationStatus
             isGenerating={isGenerating}
@@ -1155,72 +983,57 @@ export function ExtendView() {
             statusMessage={statusMessage}
             error={error}
             onInterrupt={interrupt}
-            // (правка 433) «Попробовать снова»: был no-op — баннер ошибки
-            // не убирался. Теперь реальный reset (фаза idle + очистка error),
-            // как на вкладках Генерация/Refine.
             onReset={reset}
             startedAt={videoStartedAt}
             promptId={promptId}
-            // (правка 430) Двухпроходный extend: стадий clips×2 (pass 1+2 на
-            // клип) — подпись «Клип N/M · проход K/2», а не «Клип N/2M».
             stageKind={video.extendTwoPass ? 'clips2' : 'clips'}
           />
         </div>
       </div>
 
       {/* ═══════════ RIGHT: Clips + Gallery (flex-1) ═══════════ */}
-      {/* (правка 302) Правая панель: жёстко ограничена по ширине (flex-1 + overflow-hidden). */}
       <div style={{ minWidth: 0, overflow: 'hidden' }} className="flex-1 flex flex-col bg-[var(--surface-1)]">
-        {/* Clips card: inline overflow-hidden гарантирует обрезку переполнения. */}
         <div style={{ overflow: 'hidden', maxWidth: '100%' }} className="p-5 pb-3 space-y-3 aurora-bg">
           <div style={{ minWidth: 0 }} className="space-y-2">
             <div className="flex items-center justify-between shrink-0">
               <Label
                 className="text-sm font-medium text-foreground flex items-center gap-2"
-                title="Каждый клип продолжает предыдущий — вместе они склеиваются с исходником в один ролик."
+                title="Each clip continues the previous one — together they are concatenated with source into a single video."
               >
                 <SparklesIcon className="w-4 h-4 text-cyan-400" />
-                Клипы продления
+                Extension clips
                 <span className="text-[10px] font-normal text-muted-foreground/60">
-                  {video.extendClips.length} клип(ов)
+                  {video.extendClips.length} clip(s)
                 </span>
               </Label>
               <span className="text-[10px] text-muted-foreground/70 hidden sm:block">
                 <kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Ctrl</kbd>
                 {' + '}
                 <kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Enter</kbd>
-                {' — запустить'}
+                {' — generate'}
               </span>
             </div>
 
-            {/* (правка 304) Лента клипов: overflow-x-auto + w-max —
-                стандартный паттерн: внутренняя строка шириной по контенту,
-                внешний контейнер скроллит по горизонтали. */}
+            {/* Clips ribbon */}
             <div ref={clipsStripRef} className="pb-2 overflow-x-auto min-w-0">
             <div className="pb-1 flex gap-3 w-max">
               {video.extendClips.map((clip, i) => (
                 <div
-                  key={clip.id ?? `clip-${i}`} /* (правка 587) стабильный ключ: key={i} после splice переносил состояние карточки на соседний клип */
+                  key={clip.id ?? `clip-${i}`}
                   className="flex flex-col p-3 rounded-lg border border-border bg-[var(--surface-2)] space-y-2 w-[280px] shrink-0"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-foreground">Клип {i + 1}</span>
+                    <span className="text-xs font-medium text-foreground">Clip {i + 1}</span>
                     <div className="flex items-center gap-2">
-                      {/* (правка 427) «Исправить промпт клипа» с ассистентом
-                          (правка 560 — переименовано из «Улучшить»):
-                          цитирует текущий промпт клипа и его номер в extend-чате
-                          (пустой промпт — ассистент придумает с нуля по
-                          контексту исходника). */}
                       <button
                         type="button"
                         onClick={() => setFixClip(i)}
                         className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-300 transition-colors"
-                        title="Исправить промпт клипа с ассистентом (напишите, что изменить)"
+                        title="Fix clip prompt with assistant (describe what to change)"
                       >
                         <SparklesIcon className="w-3 h-3" />
-                        Исправить
+                        Fix
                       </button>
-                      {/* (правка 691) «Очистить» промпт клипа — только если он непустой */}
                       {clip.prompt.trim() && (
                         <button
                           type="button"
@@ -1230,9 +1043,9 @@ export function ExtendView() {
                             patchVideo({ extendClips: clips })
                           }}
                           className="text-[10px] text-muted-foreground hover:text-red-400 transition-colors"
-                          title="Очистить промпт клипа"
+                          title="Clear clip prompt"
                         >
-                          Очистить
+                          Clear
                         </button>
                       )}
                       <button
@@ -1244,21 +1057,13 @@ export function ExtendView() {
                         }}
                         className="text-[10px] text-muted-foreground hover:text-red-400 transition-colors"
                       >
-                        Удалить
+                        Delete
                       </button>
                     </div>
                   </div>
-                  {/* (правка 289) MentionTextarea вместо <textarea>: поддержка
-                      тэгов <Picture N> с подсветкой и @-меню, как в generate-view.
-                      (правка 443) Фиксированная высота карточки: h-full-режим
-                      (без ручного resize-ручки), переполнение — внутренний
-                      скролл; полный промпт — в редакторе (кнопка внизу
-                      карточки, правка 454). */}
+
                   <div className="relative h-[150px] shrink-0">
-                    {/* (правка 717) Кнопки поля — вертикальная колонка с ровными
-                        интервалами (PromptFieldTools), как в generate/controlnet. */}
                     <PromptFieldTools>
-                      {/* (правка 692) «Очистить» + «Исправить» — над микрофоном, как в generate/controlnet */}
                       <PromptClearButton
                         disabled={!clip.prompt.trim()}
                         onClear={() => {
@@ -1282,13 +1087,13 @@ export function ExtendView() {
                           void handleGenerate()
                         }
                       }}
-                      placeholder="Что происходит в этом клипе: действие, ракурс, движение камеры..."
+                      placeholder="What happens in this clip: action, camera angle, motion..."
                       mentions={clipMentions}
                       className="h-full min-h-0 pr-12"
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label className="text-[10px] text-muted-foreground">Длит., с:</Label>
+                    <Label className="text-[10px] text-muted-foreground">Duration, s:</Label>
                     <input
                       type="number"
                       min={3}
@@ -1296,33 +1101,26 @@ export function ExtendView() {
                       value={Math.round(clip.duration)}
                       onChange={(e) => {
                         const clips = [...video.extendClips]
-                        // (правка 434) минимум 3 с (было 5, правка 309) — см. кламп при отправке.
                         clips[i] = { ...clips[i], duration: Math.max(3, Math.min(30, parseInt(e.target.value, 10) || 3)) }
                         patchVideo({ extendClips: clips })
                       }}
                       className="w-16 text-xs bg-[var(--surface-3)] border border-border rounded-md px-2 py-1 text-foreground"
                     />
-                    {/* (правка 291) Показываем накопленную сумму клипов +
-                        итог вместе с оригиналом — пользователь видит, сколько
-                        секунд будет по итогу, а не только добавленных клипов. */}
                     <span className="text-[10px] text-muted-foreground">
                       {(() => {
                         const sumUpTo = video.extendClips.slice(0, i + 1).reduce((s, c) => s + c.duration, 0)
                         const srcD = typeof video.extendSourceDuration === 'number' && video.extendSourceDuration > 0
                           ? video.extendSourceDuration : 0
                         return srcD > 0
-                          ? `${sumUpTo} с · итог ~${(srcD + sumUpTo).toFixed(0)} с`
-                          : `${sumUpTo} с (итого клипов: ${video.extendClips.reduce((s, c) => s + c.duration, 0)} с)`
+                          ? `${sumUpTo} s · total ~${(srcD + sumUpTo).toFixed(0)} s`
+                          : `${sumUpTo} s (clips total: ${video.extendClips.reduce((s, c) => s + c.duration, 0)} s)`
                       })()}
                     </span>
-                    {/* (правка 454) Кнопка полноэкранного редактора промпта
-                        перенесена из шапки в низ карточки (правый край ряда
-                        длительности) — в шапке она теснила «Улучшить/Удалить». */}
                     <button
                       type="button"
                       onClick={() => setEditingClip(i)}
                       className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-cyan-300 transition-colors"
-                      title="Открыть промпт клипа в полноэкранном редакторе"
+                      title="Open clip prompt in full-screen editor"
                     >
                       <Maximize2Icon className="w-3 h-3" />
                     </button>
@@ -1330,19 +1128,18 @@ export function ExtendView() {
                 </div>
               ))}
 
-              {/* Добавить клип — карточка в конце ленты (новые клипы справа) */}
+              {/* Add clip button */}
               <button
                 type="button"
                 onClick={() => {
                   const clips = [...video.extendClips]
-                  // (правка 587) Стабильный id нового клипа — key карточки.
                   clips.push({ prompt: '', duration: 5, seed: -1, id: `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}` })
                   patchVideo({ extendClips: clips })
                 }}
                 className="w-[140px] shrink-0 rounded-lg border-2 border-dashed border-border hover:border-cyan-500/50 hover:bg-[var(--surface-2)] transition-all flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-cyan-400"
               >
                 <PlusIcon className="w-5 h-5" />
-                <span className="text-xs">Добавить клип</span>
+                <span className="text-xs">Add clip</span>
               </button>
             </div>
             </div>
@@ -1351,49 +1148,44 @@ export function ExtendView() {
             <div className="flex flex-wrap items-center gap-1.5">{badges}</div>
           </div>
 
-          {/* Generate button (правка 295) — размер как в generate-view */}
+          {/* Generate button */}
           <div className="pt-2 flex justify-end">
             <Button
               onClick={() => void handleGenerate()}
               disabled={!canGenerateNow}
               title={
                 assistantBusy
-                  ? '💬 Ассистент отвечает — дождитесь ответа или прервите его'
-                  : 'Сгенерировать продление (Ctrl+Enter)'
+                  ? '💬 Assistant is responding — wait for response or cancel it'
+                  : 'Generate extension (Ctrl+Enter)'
               }
               className="h-11 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 text-sm font-semibold shadow-lg shadow-cyan-500/20"
             >
-              {isGenerating ? 'Ещё в очередь' : (
+              {isGenerating ? 'Queue another' : (
                 <>
                   <PlayIcon className="w-4 h-4 mr-2" />
-                  Сгенерировать продление
+                  Generate extension
                 </>
               )}
             </Button>
           </div>
         </div>
 
-        {/* (правка 302) Results gallery — flex-1 + overflow-y-auto.
-            Галерея получает оставшееся место, скроллится вертикально. */}
+        {/* Results gallery */}
         <div style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto' }} className="px-5 pb-5">
           <VideoGalleryGrid
             files={galleryFiles}
             loading={galleryLoading}
             onRefresh={loadGallery}
             onDeleteFile={deleteFile}
-            emptyHint="Здесь появятся сгенерированные видео продления. Опишите сцену, добавьте клипы и нажмите «Сгенерировать продление»."
+            emptyHint="Generated extension videos will appear here. Describe the scene, add clips, and click 'Generate extension'."
           />
         </div>
       </div>
 
-      {/* (правка 442) Ассистент — правая боковая панель (чаты режима
-          «Продление»; resize за левую границу, сворачивается в рейл) */}
+      {/* Assistant panel */}
       <AssistantPanel mode="extend" />
 
-      {/* (правка 443) Полноэкранный редактор промпта клипа (кнопка-«раскрыть»
-          внизу карточки, правка 454). «Сохранить и запустить» ведёт в
-          handleGenerate — стор уже обновлён onSave, читается свежим
-          (getState). */}
+      {/* Fullscreen clip prompt editor */}
       <PromptEditorDialog
         open={editingClip !== null}
         onOpenChange={(v) => { if (!v) setEditingClip(null) }}
@@ -1406,26 +1198,22 @@ export function ExtendView() {
           patchVideo({ extendClips: clips })
         }}
         onSaveAndRun={() => { void handleGenerate() }}
-        placeholder="Что происходит в этом клипе: действие, ракурс, движение камеры..."
+        placeholder="What happens in this clip: action, camera angle, motion..."
         mentions={clipMentions}
         improveOptions={editingClip !== null ? { mode: 'extend', clipNumber: editingClip + 1 } : undefined}
       />
 
-      {/* (правка 691) Диалог «Исправить промпт» из карточки клипа: задание +
-          промпт клипа уходят в extend-чат с номером клипа. */}
+      {/* Prompt fix dialog */}
       <PromptFixDialog
         open={fixClip !== null}
         onOpenChange={(v) => { if (!v) setFixClip(null) }}
-        hint={fixClip !== null ? `Промпт клипа ${fixClip + 1} и ваше задание уйдут в чат ассистента вкладки «Продление» — ответ можно будет вставить обратно кнопкой «В промпт». Ctrl+Enter — отправить, Esc — отмена.` : undefined}
+        hint={fixClip !== null ? `Clip ${fixClip + 1} prompt and your request will be sent to the Extension tab assistant chat — you can paste the response back with 'To Prompt'. Ctrl+Enter to send, Esc to cancel.` : undefined}
         onSubmit={(req) => {
           const n = fixClip
           if (n === null) return
           requestImprovePrompt(video.extendClips[n]?.prompt ?? '', { mode: 'extend', clipNumber: n + 1, fixRequest: req })
         }}
       />
-
-      {/* (правка 719) Просмотр рефов — у каждого превью (общий компонент
-          RefPreviewThumb), отдельного диалога на вкладке больше нет. */}
     </div>
   )
 }

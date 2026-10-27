@@ -1,12 +1,12 @@
-﻿# (релиз) Вписывает ресурс версии (RT_VERSION) в PE-файл.
+# (release) Writes version resource (RT_VERSION) into PE file.
 #
-# Сделано через Win32 API (BeginUpdateResource/UpdateResource/
-# EndUpdateResource): Windows сам пересобирает раздел ресурсов, поэтому
-# новый блок может быть БОЛЬШЕ старого — ручная правка PE не справилась бы
-# (в строках VS_VERSIONINFO нет запаса, а менять длину строки нельзя без
-# пересборки всей структуры).
+# Implemented via Win32 API (BeginUpdateResource/UpdateResource/
+# EndUpdateResource): Windows reassembles the resource section itself,
+# so the new block can be LARGER than the old one — manual PE patching
+# would not work (VS_VERSIONINFO strings have no spare padding, and string
+# lengths cannot be changed without rebuilding the entire structure).
 #
-# Использование:
+# Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File set-version-resource.ps1 `
 #     -ExePath "C:\...\app.exe" -ResFile "C:\...\version.bin" -LangId 1033 -NameId 1
 
@@ -38,8 +38,8 @@ public static class Win32Res {
 }
 '@
 
-if (-not (Test-Path -LiteralPath $ExePath)) { throw "Нет файла: $ExePath" }
-if (-not (Test-Path -LiteralPath $ResFile)) { throw "Нет файла ресурса: $ResFile" }
+if (-not (Test-Path -LiteralPath $ExePath)) { throw "File not found: $ExePath" }
+if (-not (Test-Path -LiteralPath $ResFile)) { throw "Resource file not found: $ResFile" }
 
 $data = [System.IO.File]::ReadAllBytes($ResFile)
 

@@ -65,10 +65,10 @@ def output_size(width, height, options):
         raise ValueError("Requested output exceeds D3D11's 16384-pixel texture dimension.")
     if w < width or h < height:
         raise ValueError("Upscale output must not be smaller than the source.")
-    # (правка 716) Размеры округляются ВВЕРХ ДО ЧЁТНЫХ — как в видео-версии
-    # (upscale/video/models.py). Раньше возвращались нечётные ceil(w)/ceil(h):
-    # два «output size» в одном продукте расходились на 1 px, а RTX VSR /
-    # DLSS feature-18 построены на чётных размерах.
+    # (fix 716) Dimensions are rounded UP TO EVEN numbers — like in the video version
+    # (upscale/video/models.py). Previously odd ceil(w)/ceil(h) were returned:
+    # two "output sizes" in the same product differed by 1 px, whereas RTX VSR /
+    # DLSS feature-18 are built on even dimensions.
     ow, oh = max(2, math.ceil(w / 2) * 2), max(2, math.ceil(h / 2) * 2)
     if max(ow, oh) > TEXTURE_LIMIT:
         raise ValueError("Requested output exceeds D3D11's 16384-pixel texture dimension.")

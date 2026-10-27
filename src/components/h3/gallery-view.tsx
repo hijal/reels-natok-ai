@@ -1,25 +1,17 @@
 'use client'
 
 /**
- * GalleryView (правка 91) — полная библиотека сгенерированных видео.
+ * GalleryView — full library of generated videos.
  *
- * Справа — рейка папок: «Все видео» (всё подряд), «Общая» (корень output,
- * есть всегда) и папки проектов (подпапки output). Папки создаются кнопкой
- * «+», переименовываются карандашом (правка 122), удаляются крестиком
- * (только пустые). Видео перетаскиваются в папки drag&drop'ом (карточки
- * грида уже draggable — тем же MIME, что и для Upscale; drop-цели здесь
- * читают его).
+ * Right side — folder rail: "All videos", "General" (root output folder),
+ * and project folders (subfolders of output). Folders are created with "+",
+ * renamed with pencil, deleted with trash icon (empty only).
+ * Videos can be dragged and dropped into folders.
  *
- * (правка 495) Вложенные папки: путь 'проект/сцены', в рейке — дерево с
- * отступом по глубине. Подпапка создаётся кнопкой «+» на строке родителя
- * или путём со слэшем в поле создания («проект/сцены»). Фильтр по папке
- * включает содержимое её подпапок (префиксное совпадение); счётчики — тоже.
- * Переименование меняет имя листа (родитель сохраняется); вложенные папки
- * переезжают вместе с родителем — фильтр и активная папка генерации
- * переписываются по префиксу.
- *
- * Выбор на этой вкладке НЕ влияет на вкладку «Генерация» — у неё своя
- * активная папка (gen-store → video.outputFolder).
+ * Nested folders: path 'project/scenes', rendered in the rail with depth indentation.
+ * Subfolder is created via "+" on parent row or by typing slash in creation field.
+ * Filter by folder includes subfolder contents (prefix match).
+ * Renaming renames the leaf while preserving parent; descendants move along with it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
@@ -47,21 +39,20 @@ interface DragPayload {
   subfolder?: string
 }
 
-/** (правка 495) Файл лежит в папке folder или в любой её подпапке.
- *  folder '' (общая) — только корень, без папок проектов. */
+/** File is located in folder or any of its subfolders.
+ *  folder '' (general) — root only, no project folders. */
 function inFolder(subfolder: string, folder: string): boolean {
   if (folder === '') return subfolder === ''
   return subfolder === folder || subfolder.startsWith(folder + '/')
 }
 
-/** Лист пути папки: 'проект/сцены' → 'сцены'. */
+/** Leaf name of a folder path: 'project/scenes' → 'scenes'. */
 function leafName(folder: string): string {
   const i = folder.lastIndexOf('/')
   return i === -1 ? folder : folder.slice(i + 1)
 }
 
-/** (правка 495) Переписать путь после переименования/переноса папки:
- *  сама папка и все её потомки. */
+/** Remap folder path after rename/move: folder itself and all its descendants. */
 function remapFolderPath(value: string, oldPath: string, newPath: string): string {
   if (value === oldPath) return newPath
   if (value.startsWith(oldPath + '/')) return newPath + value.slice(oldPath.length)
@@ -72,10 +63,8 @@ export function GalleryView() {
   const { files, folders, loading, load, deleteFile } = useVideoGallery()
   const [filter, setFilter] = useState<FolderFilter>('__all__')
   const [creating, setCreating] = useState(false)
-  /** (правка 495) Родитель создаваемой папки ('' = корень output). */
   const [createParent, setCreateParent] = useState('')
   const [newName, setNewName] = useState('')
-  // (правка 122) Переименование: путь папки + новое значение (имя листа)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [dragOver, setDragOver] = useState<string | null>(null)
@@ -93,7 +82,6 @@ export function GalleryView() {
     }
   }, [renaming])
 
-  /** (правка 495) Счётчики — с учётом вложенных папок (префикс). */
   const countFor = useCallback(
     (key: FolderFilter) => {
       if (key === '__all__') return files.length
@@ -116,8 +104,6 @@ export function GalleryView() {
   const createFolder = useCallback(async () => {
     const name = newName.trim()
     if (!name) return
-    // (правка 495) Полный путь: родитель + введённое имя (само имя тоже
-    // может содержать '/', чтобы создать цепочку сразу).
     const full = createParent ? `${createParent}/${name}` : name
     try {
       const r = await fetch('/api/comfy/folders', {
@@ -127,21 +113,17 @@ export function GalleryView() {
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
-      toast.success('Папка создана', { description: d.name })
+      toast.success('Folder created', { description: d.name })
       setCreating(false)
       setNewName('')
       setCreateParent('')
       setFilter(d.name)
       await load(true)
     } catch (err) {
-      toast.error('Не удалось создать папку', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to create folder', { description: err instanceof Error ? err.message : String(err) })
     }
   }, [newName, createParent, load])
 
-  /** (правка 122) Переименовать папку. Синхронизируем активную папку
-   *  вкладки «Генерация» (gen-store), если она указывает на переименованную.
-   *  (правка 495) Переписываем по префиксу: потомки переезжают вместе с
-   *  родителем. */
   const renameFolder = useCallback(async (oldName: string) => {
     const to = renameValue.trim()
     if (!to) { setRenaming(null); return }
@@ -153,9 +135,8 @@ export function GalleryView() {
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
-      toast.success('Папка переименована', { description: `«${oldName}» → «${d.name}»` })
+      toast.success('Folder renamed', { description: `"${oldName}" → "${d.name}"` })
       if (filter !== '__all__') setFilter((cur) => remapFolderPath(cur, oldName, d.name))
-      // Активная папка генерации — обновляем, если совпадает со старой
       const gen = useGenStore.getState()
       if (gen.video.outputFolder) {
         gen.patchVideo({ outputFolder: remapFolderPath(gen.video.outputFolder, oldName, d.name) })
@@ -164,12 +145,12 @@ export function GalleryView() {
       setRenameValue('')
       await load(true)
     } catch (err) {
-      toast.error('Не удалось переименовать папку', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to rename folder', { description: err instanceof Error ? err.message : String(err) })
     }
   }, [renameValue, filter, load])
 
   const deleteFolder = useCallback(async (name: string) => {
-    if (!confirm(`Удалить папку «${name}»?\nПапка должна быть пустой (без видео и подпапок) — содержимое не пострадает.`)) return
+    if (!confirm(`Delete folder "${name}"?\nThe folder must be empty (no videos or subfolders) — contents will not be affected.`)) return
     try {
       const r = await fetch('/api/comfy/folders', {
         method: 'DELETE',
@@ -178,26 +159,23 @@ export function GalleryView() {
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
-      toast.success('Папка удалена')
-      // (правка 495) Фильтр мог указывать на удалённую папку или её потомка.
-      if (filter !== '__all__' && inFolder(filter, name) ) setFilter('__all__')
+      toast.success('Folder deleted')
+      if (filter !== '__all__' && inFolder(filter, name)) setFilter('__all__')
       await load(true)
     } catch (err) {
-      toast.error('Не удалось удалить папку', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to delete folder', { description: err instanceof Error ? err.message : String(err) })
     }
   }, [filter, load])
 
-  /** Drop видео на папку: читаем MIME грида и просим сервер переместить файл. */
   const handleDrop = useCallback(async (e: React.DragEvent, targetFolder: string) => {
     e.preventDefault()
     e.stopPropagation()
     setDragOver(null)
-    // «Все видео» — не папка, drop туда бессмыслен
     if (targetFolder === '__all__') return
     let payload: DragPayload | null = null
     try {
       payload = JSON.parse(e.dataTransfer.getData(H3_VIDEO_DND_MIME)) as DragPayload
-    } catch { /* не наше DnD (например, файл из проводника) — игнор */ }
+    } catch { /* ignored */ }
     if (!payload?.filename) return
     const from = payload.subfolder || ''
     if (from === targetFolder) return
@@ -209,10 +187,10 @@ export function GalleryView() {
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
-      toast.success(`Перемещено в «${targetFolder || 'Общая'}»`, { description: payload.filename })
+      toast.success(`Moved to "${targetFolder || 'General'}"`, { description: payload.filename })
       await load(true)
     } catch (err) {
-      toast.error('Не удалось переместить', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to move', { description: err instanceof Error ? err.message : String(err) })
     }
   }, [load])
 
@@ -249,7 +227,6 @@ export function GalleryView() {
       >
         <span className={cn('shrink-0', active ? 'text-violet-400' : 'text-muted-foreground/60')}>{icon}</span>
         {isRenaming ? (
-          /* (правка 122) inline-переименование вместо имени */
           <span
             className="flex-1 min-w-0 flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
@@ -262,7 +239,7 @@ export function GalleryView() {
                 if (e.key === 'Enter') void renameFolder(key)
                 if (e.key === 'Escape') setRenaming(null)
               }}
-              placeholder="Новое имя…"
+              placeholder="New name…"
               className="w-full min-w-0 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
               maxLength={60}
             />
@@ -270,7 +247,7 @@ export function GalleryView() {
               type="button"
               onClick={() => void renameFolder(key)}
               className="shrink-0 w-4 h-4 flex items-center justify-center text-emerald-400/80 hover:text-emerald-300"
-              title="Сохранить (Enter)"
+              title="Save (Enter)"
             >
               <CheckIcon className="w-3 h-3" />
             </button>
@@ -278,7 +255,7 @@ export function GalleryView() {
               type="button"
               onClick={() => setRenaming(null)}
               className="shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground/60 hover:text-foreground"
-              title="Отмена (Esc)"
+              title="Cancel (Esc)"
             >
               <XIcon className="w-3 h-3" />
             </button>
@@ -296,7 +273,7 @@ export function GalleryView() {
             type="button"
             onClick={(e) => { e.stopPropagation(); startCreate(key) }}
             className="shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground/40 hover:text-violet-300 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Создать подпапку"
+            title="Create subfolder"
           >
             <FolderPlusIcon className="w-3 h-3" />
           </button>
@@ -310,7 +287,7 @@ export function GalleryView() {
               setRenameValue(label)
             }}
             className="shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground/40 hover:text-violet-300 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Переименовать папку"
+            title="Rename folder"
           >
             <PencilIcon className="w-3 h-3" />
           </button>
@@ -320,7 +297,7 @@ export function GalleryView() {
             type="button"
             onClick={(e) => { e.stopPropagation(); void deleteFolder(key) }}
             className="shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Удалить папку (только пустую)"
+            title="Delete folder (empty only)"
           >
             <Trash2Icon className="w-3 h-3" />
           </button>
@@ -341,16 +318,16 @@ export function GalleryView() {
                 <span className="w-9 h-9 rounded-xl gradient-creative flex items-center justify-center shrink-0 shadow-lg shadow-violet-500/20">
                   <FilmIcon className="w-4.5 h-4.5 text-white" />
                 </span>
-                Галерея
+                Gallery
               </h1>
               <p className="text-xs text-muted-foreground mt-1.5">
                 {filter === '__all__'
-                  ? 'Все видео из всех папок'
+                  ? 'All videos from all folders'
                   : filter === ''
-                    ? 'Общая папка (без проектов)'
-                    : `Папка «${filter}» (включая подпапки)`}
+                    ? 'General folder (no projects)'
+                    : `Folder "${filter}" (including subfolders)`}
                 {!loading && (
-                  <> · <span className="text-foreground/80 font-medium">{visibleFiles.length}</span> шт.</>
+                  <> · <span className="text-foreground/80 font-medium">{visibleFiles.length}</span> items</>
                 )}
               </p>
             </div>
@@ -369,21 +346,21 @@ export function GalleryView() {
             loading={loading}
             onRefresh={load}
             onDeleteFile={deleteFile}
-            emptyHint="Пока нет видео. Сгенерируйте первое на вкладке «Генерация»."
+            emptyHint="No videos yet. Generate your first video on the 'Generation' tab."
           />
         </motion.div>
       </div>
 
-      {/* Right rail: folders (правка 91) */}
+      {/* Right rail: folders */}
       <div className="w-56 border-l border-border flex flex-col bg-[var(--surface-0)]/60 shrink-0">
         <div className="p-3 border-b border-border flex items-center gap-2">
-          <span className="text-xs font-medium text-foreground flex-1">Папки</span>
+          <span className="text-xs font-medium text-foreground flex-1">Folders</span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => startCreate(filter !== '__all__' ? filter : '')}
             className="h-7 gap-1 text-xs"
-            title="Создать папку проекта (внутри выбранной, если она выбрана)"
+            title="Create project folder (inside selected, if selected)"
           >
             <FolderPlusIcon className="w-3.5 h-3.5" />
           </Button>
@@ -394,7 +371,7 @@ export function GalleryView() {
           <div className="p-2 border-b border-border/60 space-y-1.5">
             {createParent && (
               <p className="text-[10px] text-muted-foreground/60 leading-snug">
-                Подпапка в «{createParent}»
+                Subfolder in "{createParent}"
               </p>
             )}
             <input
@@ -405,26 +382,24 @@ export function GalleryView() {
                 if (e.key === 'Enter') void createFolder()
                 if (e.key === 'Escape') setCreating(false)
               }}
-              placeholder="Имя папки…"
+              placeholder="Folder name…"
               className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
               maxLength={120}
             />
             <div className="flex gap-1.5">
               <Button size="sm" onClick={() => void createFolder()} disabled={!newName.trim()} className="h-6 text-[10px] px-2 flex-1">
-                Создать
+                Create
               </Button>
               <Button variant="outline" size="sm" onClick={() => setCreating(false)} className="h-6 text-[10px] px-2">
-                Отмена
+                Cancel
               </Button>
             </div>
           </div>
         )}
 
         <div className="flex-1 overflow-y-auto">
-          {folderItem('__all__', <LayersIcon className="w-3.5 h-3.5" />, 'Все видео')}
-          {folderItem('', <FilmIcon className="w-3.5 h-3.5" />, 'Общая', { onAddChild: true })}
-          {/* (правка 495) Папки приходят отсортированными (родитель раньше
-              детей) — рисуем дерево отступами по глубине пути. */}
+          {folderItem('__all__', <LayersIcon className="w-3.5 h-3.5" />, 'All videos')}
+          {folderItem('', <FilmIcon className="w-3.5 h-3.5" />, 'General', { onAddChild: true })}
           {folders.map((f) =>
             folderItem(
               f,
@@ -436,7 +411,7 @@ export function GalleryView() {
         </div>
 
         <p className="px-3 py-2 text-[10px] text-muted-foreground/50 border-t border-border/60 leading-snug">
-          Перетащите видео на папку, чтобы переместить его. «+» на строке папки создаёт подпапку; папку можно переименовать (карандаш) или удалить (крестик, только пустую). Папку можно выбрать и на вкладке «Генерация» — новые видео будут ложиться в неё.
+          Drag and drop a video onto a folder to move it. "+" creates a subfolder; folders can be renamed (pencil) or deleted (trash icon, empty only). You can also select a folder on the 'Generation' tab — new videos will be saved there.
         </p>
       </div>
     </div>

@@ -1,84 +1,84 @@
 /**
- * refine-meta — заимствование промпта драфта из .meta.json сайдкара для
- * v2v-refine, с зачисткой того, что в refine вредно или бессмысленно.
+ * refine-meta — borrowing draft prompt from .meta.json sidecar for
+ * v2v-refine, stripping out anything harmful or pointless in refine.
  *
- * Зачем: refine при σ_start 0.9035 — текст-условный ре-рендер, якорящийся
- * латентом исходника; оригинальный промпт драфта описывает сцену и делает
- * схему идентичной Pass 2 генерации (там pass 2 использует тот же caption,
- * что pass 1).
+ * Why: refine at σ_start 0.9035 is a text-conditioned re-render anchored
+ * by source latent; the original draft prompt describes the scene and makes
+ * the scheme identical to Pass 2 of generation (where pass 2 uses the same
+ * caption as pass 1).
  *
- * Что вырезается (Формат A/B ассистента, h3-prompt-spec.ts + prompt-guide.md):
- *  • аудио-секции — overall_soundscape, non_diegetic_music (звук берём из
- *    исходника напрямую, эти токены только размывают внимание);
- *  • референсно-мета секции — retention_analysis, summary (построены
- *    вокруг тегов <Subject N>);
- *  • теги <Video N>/<Audio N> — этих модальностей в refine нет, висячая
- *    ссылка на несуществующие ref-сегменты = out-of-distribution
- *    conditioning. Теги <Picture N> (правка 310) СОХРАНЯЮТСЯ: билдер
- *    refine (правка 315) подаёт мета-рефы в исходной нумерации оригинальной
- *    генерации (<Picture 1..k>), так что ссылки снова валидны;
- *  • теги <Subject N> (правка 310) — абстракция из subject_definitions
- *    (prompt-guide.md: «<Subject N> — видимое содержимое, абстрагированное
- *    из рефов», задаётся через <Picture N>, маппинга 1:1 на слоты нет) —
- *    вырезаются, а СОДЕРЖИМОЕ subject_definitions (описания внешности с
- *    валидными <Picture N>) сохраняется;
- *  • маркеры спикеров (S1) и префикс [reference generation].
- * Диалог <d>…</d> СОХРАНЯЕТСЯ — синхрон губ ре-рендера с оригинальным звуком.
+ * What is stripped out (Assistant Format A/B, h3-prompt-spec.ts + prompt-guide.md):
+ *  • audio sections — overall_soundscape, non_diegetic_music (audio is taken
+ *    directly from source, these tokens only dilute attention);
+ *  • reference-meta sections — retention_analysis, summary (structured
+ *    around <Subject N> tags);
+ *  • <Video N>/<Audio N> tags — these modalities are not present in refine,
+ *    dangling references to non-existent ref segments = out-of-distribution
+ *    conditioning. <Picture N> tags (edit 310) ARE PRESERVED: refine builder
+ *    (edit 315) passes meta-refs in the original numbering of initial
+ *    generation (<Picture 1..k>), so links are valid again;
+ *  • <Subject N> tags (edit 310) — abstraction from subject_definitions
+ *    (prompt-guide.md: "<Subject N> — visible content abstracted from refs",
+ *    specified via <Picture N>, no 1:1 mapping to slots exists) —
+ *    stripped out, while CONTENTS of subject_definitions (appearance descriptions
+ *    with valid <Picture N>) are preserved;
+ *  • speaker markers (S1) and prefix [reference generation].
+ * Dialog <d>…</d> IS PRESERVED — keeps lip sync of re-render with original audio.
  *
- * Референсы (правка 315): картинки из меты исходника (<Picture 1..k>, исходный
- * порядок оригинальной генерации), первый кадр видео — ПОСЛЕДНИМ слотом
- * (<Picture k+1>); без мета-рефов первый кадр = <Picture 1>.
+ * References (edit 315): images from source meta (<Picture 1..k>, original
+ * order from original generation), first video frame — LAST slot
+ * (<Picture k+1>); without meta-refs, first frame = <Picture 1>.
  *
- * (правка 316) Цепочка промптов: readPromptChain/promptChainFromMeta собирают
- * source_prompt → prompt → extend_prompts[] в один conditioning-текст
- * (разделитель '\n\n---\n\n') — для extend-combined исходников рефайн и
- * апскейлы наследуют ВЕСЬ путь «исходник → клипы», а не один промпт.
+ * (edit 316) Prompt chain: readPromptChain/promptChainFromMeta combine
+ * source_prompt → prompt → extend_prompts[] into a single conditioning text
+ * (separator '\n\n---\n\n') — for extend-combined sources, refine and
+ * upscales inherit the ENTIRE chain "source → clips", rather than a single prompt.
  */
 import fs from 'fs'
 import path from 'path'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (edit 495)
 import { validateLatentFile } from '@/lib/latent-file'
 
-/** Есть ли в тексте хотя бы одно «настоящее» слово (2+ буквы)?
- *  Промпт из одних точек/цифр («.» — тестовые клипы продления) якорем
- *  conditioning быть не может: с таким caption refine при σ≈0.9
- *  пересобирает каждый кусок независимо — персонаж меняется от куска
- *  к куску. Такой промпт считаем отсутствующим → нейтральный enhance. */
+/** Does the text contain at least one "real" word (2+ letters)?
+ *  A prompt consisting only of dots/digits ("." — test extend clips) cannot
+ *  serve as a conditioning anchor: with such a caption, refine at σ≈0.9
+ *  rebuilds each chunk independently — characters change from chunk
+ *  to chunk. Such prompts are treated as absent → neutral enhance. */
 function hasMeaningfulText(s: string): boolean {
-  return /[a-zA-Zа-яА-ЯёЁ\u00c0-\u024f\u0400-\u04ff]{2,}/.test(s)
+  return /[a-zA-Z\u00c0-\u024f\u0400-\u04ff]{2,}/.test(s)
 }
 
-/** Секции, которые остаются (метка секции срезается, содержимое — целиком).
- *  (правка 310) subject_definitions сохраняется: её тело — описания внешности
- *  с тегами <Picture N>, которые снова валидны (правка 315). */
+/** Sections that are kept (section label is stripped, body kept in full).
+ *  (edit 310) subject_definitions is kept: its body consists of appearance descriptions
+ *  with <Picture N> tags that are valid again (edit 315). */
 const KEEP_SECTIONS = new Set(['integrated_multimodal_description', 'detailed_description', 'subject_definitions'])
 
-/** (правка 310) Тег-референс несуществующей в refine модальности:
- *  <Video 2> / <Audio 1> (звука/видео-рефов в refine-cond нет).
- *  <Picture N> НЕ вырезается — билдер (правка 315) сохраняет исходную
- *  нумерацию мета-рефов, ссылки валидны. */
+/** (edit 310) Reference tag of a modality absent in refine:
+ *  <Video 2> / <Audio 1> (no audio/video refs in refine-cond).
+ *  <Picture N> is NOT stripped — builder (edit 315) preserves original
+ *  numbering of meta-refs, links remain valid. */
 const REF_TAG_RE = /<\s*(?:video|audio)\s+\d+\s*>/gi
-/** (правка 310) Тег <Subject N> — абстракция subject_definitions, определённая
- *  через <Picture N> (prompt-guide.md), маппинга 1:1 на image-слоты нет →
- *  вырезается (содержимое секции остаётся). */
+/** (edit 310) Tag <Subject N> — abstraction of subject_definitions defined
+ *  via <Picture N> (prompt-guide.md), no 1:1 mapping to image slots →
+ *  stripped out (section content is preserved). */
 const SUBJECT_TAG_RE = /<\s*subject\s+\d+\s*>/gi
-/** Маркер спикера из FORMAT B: «(S1)» и производные. */
+/** Speaker marker from FORMAT B: "(S1)" and variants. */
 const SPEAKER_RE = /\(\s*S\d+\s*\)/g
-/** Префикс режима FORMAT B: «[reference generation] …». */
+/** FORMAT B mode prefix: "[reference generation] ...". */
 const REF_MODE_PREFIX_RE = /^\s*\[reference generation\]\s*/i
-/** Метка секции в начале строки: «overall_soundscape: …». */
+/** Section label at line start: "overall_soundscape: ...". */
 const SECTION_RE = /^([a-z_]+):\s*/gm
 
 /**
- * Очистить промпт драфта для подачи в refine-conditioning.
- * Свободный текст без меток секций возвращается зачищенным от тегов как есть.
+ * Clean up draft prompt for refine-conditioning.
+ * Free text without section labels is returned sanitized of tags as is.
  */
 export function sanitizeDraftPrompt(raw: string): string {
   const text = (raw || '').replace(/\r\n?/g, '\n')
   if (!text.trim()) return ''
 
-  // Разбор по секциям: [label, body] — секция тянется до следующей метки.
+  // Parse by sections: [label, body] — section runs until the next label.
   const sections: Array<{ label: string; body: string }> = []
   const marks: Array<{ label: string; start: number; end: number }> = []
   for (const m of text.matchAll(SECTION_RE)) {
@@ -87,7 +87,7 @@ export function sanitizeDraftPrompt(raw: string): string {
   if (marks.length === 0) {
     sections.push({ label: '', body: text })
   } else {
-    // Текст до первой метки (обычно пусто) тоже считаем «безметочной» секцией.
+    // Text before the first label (usually empty) is also treated as an "unlabeled" section.
     if (marks[0].start > 0) sections.push({ label: '', body: text.slice(0, marks[0].start) })
     marks.forEach((mk, i) => {
       const stop = i + 1 < marks.length ? marks[i + 1].start : text.length
@@ -105,8 +105,8 @@ export function sanitizeDraftPrompt(raw: string): string {
     .join('\n\n')
 }
 
-/** Зачистка одного фрагмента: теги <Video|Audio|Subject N> (правка 310;
- *  <Picture N> сохраняются), спикеры, префикс, лишние пробелы. */
+/** Sanitize single fragment: <Video|Audio|Subject N> tags (edit 310;
+ *  <Picture N> are kept), speakers, prefix, redundant whitespace. */
 function sanitizeFragment(fragment: string): string {
   return fragment
     .replace(REF_TAG_RE, '')
@@ -121,13 +121,13 @@ function sanitizeFragment(fragment: string): string {
 }
 
 /**
- * (правка 309) Прочитать картинки-референсы из .meta.json исходника.
- * (правка 311) Возвращает объекты { path, role } (role — imageIntent из
- * меты, может быть пустой): билдер refine пишет по роли осмысленную
- * подпись слота <Picture N>.
- * Порядок массива = порядок references оригинальной генерации (фильтр
- * type==='image' сохраняет относительный порядок) — это и есть исходная
- * нумерация <Picture 1..k> (см. правка 315 в refine-template.ts).
+ * (edit 309) Read image references from source .meta.json.
+ * (edit 311) Returns objects { path, role } (role is imageIntent from
+ * meta, may be empty): refine builder writes meaningful slot label
+ * <Picture N> based on role.
+ * Array order = references order of original generation (filter
+ * type==='image' preserves relative order) — this is the original
+ * numbering <Picture 1..k> (see edit 315 in refine-template.ts).
  */
 export function readMetaImageRefs(subfolder: string, filename: string): Array<{ path: string; role: string }> {
   const OUTPUT_DIR = getAppConfig().outputDir
@@ -136,9 +136,9 @@ export function readMetaImageRefs(subfolder: string, filename: string): Array<{ 
   const safeSub = subfolder ? sanitizeFolderPath(subfolder) : ''
   const safeName = path.basename(filename)
   const metaFile = path.resolve(path.join(OUTPUT_DIR, ...safeSub.split('/').filter(Boolean), safeName + '.meta.json'))
-  // (правка 716) Сравниваем resolve-нутые пути (на win32 — в нижнем регистре)
-  // с границей по разделителю. Прежний metaFile.startsWith(OUTPUT_DIR) сравнивал
-  // НЕ-нормализованный OUTPUT_DIR и пропускал соседнюю папку «outputX».
+  // (edit 716) Compare resolved paths (lowercase on win32)
+  // with delimiter boundary. Former metaFile.startsWith(OUTPUT_DIR) compared
+  // UN-normalized OUTPUT_DIR and skipped neighboring "outputX" folder.
   if (!isInsideOutput(metaFile, OUTPUT_DIR)) return []
 
   try {
@@ -152,12 +152,12 @@ export function readMetaImageRefs(subfolder: string, filename: string): Array<{ 
       : []
     return refs
       .filter((r) => r.type === 'image' && typeof r.path === 'string' && r.path.length > 0)
-      // (правка 716) Путь из сайдкара приводится к ИМЕНИ ФАЙЛА (basename).
-      // Сайдкар клиентский (POST /api/comfy/metadata принимает params как есть),
-      // поэтому r.path мог быть «../../../secret.png». Раньше он уходил в
-      // path.join(cfg.inputDir, r.path) — это был oracle существования
-      // произвольных файлов — и дальше в workflow, где ComfyUI LoadImage
-      // ждёт просто имя файла из input/.
+      // (edit 716) Path from sidecar is normalized to FILENAME (basename).
+      // Sidecar comes from client (POST /api/comfy/metadata accepts params as is),
+      // so r.path could be "../../../secret.png". Previously it went to
+      // path.join(cfg.inputDir, r.path) — an oracle for existence
+      // of arbitrary files — and then into workflow where ComfyUI LoadImage
+      // expects just a filename from input/.
       .map((r) => ({
         path: path.basename((r.path as string).replace(/\\/g, '/')),
         role: typeof r.role === 'string' ? r.role : '',
@@ -168,23 +168,23 @@ export function readMetaImageRefs(subfolder: string, filename: string): Array<{ 
   }
 }
 
-/** (правка 316) Общий резолв пути сайдкара с защитой от выхода за outputDir. */
+/** (edit 316) Shared sidecar path resolution with outputDir traversal protection. */
 function resolveMetaFile(subfolder: string, filename: string): string | null {
   const OUTPUT_DIR = getAppConfig().outputDir
   if (!OUTPUT_DIR || !filename) return null
 
-  // (правка 495) subfolder — многоуровневый относительный путь ('a/b').
+  // (edit 495) subfolder is a multi-level relative path ('a/b').
   const safeSub = subfolder ? sanitizeFolderPath(subfolder) : ''
   const safeName = path.basename(filename)
   const metaFile = path.resolve(path.join(OUTPUT_DIR, ...safeSub.split('/').filter(Boolean), safeName + '.meta.json'))
-  // (правка 716) Нормализованное сравнение с границей по разделителю.
+  // (edit 716) Normalized comparison with delimiter boundary.
   if (!isInsideOutput(metaFile, OUTPUT_DIR)) return null
   return metaFile
 }
 
 /**
- * (правка 716) Путь внутри outputDir? Сравнение нормализованных путей
- * (на win32 — без учёта регистра), граница — по разделителю.
+ * (edit 716) Is path inside outputDir? Comparison of normalized paths
+ * (case-insensitive on win32), boundary by delimiter.
  */
 function isInsideOutput(target: string, outputDir: string): boolean {
   const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
@@ -194,8 +194,8 @@ function isInsideOutput(target: string, outputDir: string): boolean {
 }
 
 /**
- * Прочитать промпт драфта из сайдкара `<outputDir>/<subfolder>/<filename>.meta.json`.
- * Возвращает ЗАЧИЩЕННЫЙ промпт или null (нет файла/нет поля/пусто).
+ * Read draft prompt from sidecar `<outputDir>/<subfolder>/<filename>.meta.json`.
+ * Returns SANITIZED prompt or null (no file / no field / empty).
  */
 export function readDraftPrompt(subfolder: string, filename: string): string | null {
   const metaFile = resolveMetaFile(subfolder, filename)
@@ -212,12 +212,12 @@ export function readDraftPrompt(subfolder: string, filename: string): string | n
 }
 
 /**
- * (правка 316) Собрать ПОЛНУЮ цепочку промптов из уже распарсенной меты:
- * исходник → продления. Порядок: source_prompt (промпт исходника, сохранён
- * concat'ом) → prompt → extend_prompts[] (накопленная цепочка продлений).
- * Подряд идущие дубли схлопываются (prompt первого продления часто совпадает
- * с промптом исходника). Каждая часть проходит sanitizeDraftPrompt; части
- * склеиваются разделителем '\n\n---\n\n'. Нет осмысленного текста → null.
+ * (edit 316) Assemble FULL prompt chain from already parsed meta:
+ * source → extensions. Order: source_prompt (source prompt, preserved
+ * by concat) → prompt → extend_prompts[] (accumulated chain of extensions).
+ * Consecutive duplicates are collapsed (first extension prompt often matches
+ * source prompt). Each part undergoes sanitizeDraftPrompt; parts are
+ * joined with '\n\n---\n\n' separator. No meaningful text → null.
  */
 export function promptChainFromMeta(meta: Record<string, unknown>): string | null {
   const parts = promptChainPartsFromMeta(meta)
@@ -227,11 +227,11 @@ export function promptChainFromMeta(meta: Record<string, unknown>): string | nul
 }
 
 /**
- * Цепочка промптов из меты ПО ЧАСТЯМ (та же раскладка, что
- * promptChainFromMeta, но без склейки): [source_prompt, prompt,
- * ...extend_prompts] — каждая часть санитизирована, подряд идущие дубли
- * схлопнуты. Нужна режиму «Частями», чтобы окно 0 получало ПЕРВЫЙ промпт
- * цепочки (он описывает начало видео), а не всю сумму сцен сразу.
+ * Prompt chain from meta BY PARTS (same breakdown as
+ * promptChainFromMeta, but without joining): [source_prompt, prompt,
+ * ...extend_prompts] — each part is sanitized, consecutive duplicates
+ * collapsed. Needed for "By parts" mode so window 0 gets the FIRST prompt
+ * of the chain (describing start of video), rather than sum of all scenes.
  */
 export function promptChainPartsFromMeta(meta: Record<string, unknown>): string[] {
   const parts: string[] = []
@@ -248,7 +248,7 @@ export function promptChainPartsFromMeta(meta: Record<string, unknown>): string[
   return parts
 }
 
-/** Части цепочки промптов из сайдкара исходника (см. promptChainPartsFromMeta). */
+/** Parts of prompt chain from source sidecar (see promptChainPartsFromMeta). */
 export function readPromptChainParts(subfolder: string, filename: string): string[] | null {
   const metaFile = resolveMetaFile(subfolder, filename)
   if (!metaFile) return null
@@ -263,11 +263,11 @@ export function readPromptChainParts(subfolder: string, filename: string): strin
 }
 
 /**
- * (правка 375/376) Прочитать из сайдкара исходника данные для lossless-ветки
- * рефайна: путь сохранённого AV-латента (latent_file — пишет финализация
- * меты из ui.latents ноды '46:49') + video_length/resolution той же меты.
- * Роут сверяет их с ffprobe-данными mp4: не совпало (видео обрезано/изменено
- * после генерации) → латент непригоден, рефайн идёт обычным mp4-путём.
+ * (edit 375/376) Read data from source sidecar for lossless branch of refine:
+ * path to saved AV latent (latent_file — written by meta finalization
+ * from ui.latents of node '46:49') + video_length/resolution of the same meta.
+ * Route verifies them against ffprobe mp4 data: mismatch (video was trimmed/edited
+ * after generation) → latent is unsuitable, refine follows standard mp4 path.
  */
 export function readMetaLatentSource(
   subfolder: string,
@@ -295,29 +295,29 @@ export function readMetaLatentSource(
 }
 
 export interface ResolvedSourceLatent {
-  /** Путь к .latent относительно output/ ComfyUI. */
+  /** Path to .latent relative to ComfyUI output/. */
   file: string
-  /** Пиксельная канва латента (из шапки safetensors, латент × 16).
-   *  Это канва ГЕНЕРАЦИИ (до кропа под номинал) — вся геометрия
-   *  lossless-ветки (цель, conditioning, апскейл) считается от неё. */
+  /** Pixel canvas of latent (from safetensors header, latent × 16).
+   *  This is the GENERATION canvas (before cropping to nominal) — all geometry
+   *  of lossless branch (target, conditioning, upscale) is calculated from it. */
   width: number
   height: number
-  /** Число видео-токенов латента (точно, из shape). */
+  /** Number of latent video tokens (exact, from shape). */
   tokens: number
-  /** Число аудио-шагов латента (точно, из shape; 0 = не читается). */
+  /** Number of latent audio steps (exact, from shape; 0 = unreadable). */
   audioSteps: number
 }
 
 /**
- * (правки 381/382) ЕДИНЫЙ резолвер lossless-ветки для refine «Целый» /
- * «Частями» / Tile Upscale: мета → целостность mp4 → валидация файла →
- * пиксельная канва латента. Любой отказ → null (тихий fallback на mp4),
- * причина — в console.warn от вызывающего (флаг verbose).
+ * (edits 381/382) UNIFIED resolver of lossless branch for refine "Whole" /
+ * "By parts" / Tile Upscale: meta → mp4 integrity → file validation →
+ * latent pixel canvas. Any failure → null (silent fallback to mp4),
+ * reason logged via caller's console.warn (verbose flag).
  *
- * Проверки:
- *  • latent_file в сайдкаре, mp4 НЕ менялся (кадры/разрешение меты = ffprobe);
- *  • файл существует, шапка safetensors цела, версия/VAE совпадают;
- *  • канва латента ≥ размеров mp4 (кроп генерации только срезает) и кратна 32.
+ * Checks:
+ *  • latent_file in sidecar, mp4 NOT changed (meta frames/resolution = ffprobe);
+ *  • file exists, safetensors header intact, version/VAE match;
+ *  • latent canvas ≥ mp4 dimensions (generation crop only trims) and multiple of 32.
  */
 export function resolveSourceLatent(
   subfolder: string,
@@ -329,36 +329,35 @@ export function resolveSourceLatent(
   const ls = readMetaLatentSource(subfolder, filename)
   if (!ls) return null
   if (ls.videoLength !== probe.frames || ls.resolution !== `${probe.width}x${probe.height}`) {
-    log(`mp4 не совпадает с метой (обрезан/изменён после генерации)`)
+    log(`mp4 does not match meta (trimmed/modified after generation)`)
     return null
   }
   const check = validateLatentFile(ls.latentFile)
   if (!check.ok || !check.dims) {
-    log(check.reason ?? 'нет размеров латента в шапке')
+    log(check.reason ?? 'no latent dimensions in header')
     return null
   }
   const { width, height, tokens, audioSteps } = check.dims
   if (width < probe.width || height < probe.height) {
-    log(`канва латента ${width}×${height} меньше mp4 ${probe.width}×${probe.height} — мета не согласована`)
+    log(`latent canvas ${width}×${height} is smaller than mp4 ${probe.width}×${probe.height} — inconsistent meta`)
     return null
   }
-  // (правка 396, 431) Канва обязана быть кратна 32 (это обещает docstring;
-  // с правкой 431 extend-комбайн тоже пишет латент на канве ceil32 — до неё
-  // ceil16 давал нечётный латент и падение LatentConcat на пост-сборке).
-  // Иначе геометрия conditioning lossless-ветки расходится — тихий fallback
-  // на mp4.
+  // (edit 396, 431) Canvas must be a multiple of 32 (as promised by docstring;
+  // with edit 431 extend-combine also writes latent on ceil32 canvas — before it,
+  // ceil16 resulted in odd latent and LatentConcat failure during post-assembly).
+  // Otherwise lossless conditioning geometry diverges — silent fallback to mp4.
   if (width % 32 !== 0 || height % 32 !== 0) {
-    log(`канва латента ${width}×${height} не кратна 32 — lossless отклонён`)
+    log(`latent canvas ${width}×${height} is not a multiple of 32 — lossless rejected`)
     return null
   }
   return { file: ls.latentFile, width, height, tokens, audioSteps }
 }
 
 /**
- * (правка 316) Прочитать цепочку промптов из сайдкара исходника.
- * Для обычной меты (одиночный prompt, без extend-полей) эквивалентна
- * readDraftPrompt; для extend-combined возвращает весь путь
- * «исходник → клип 1 → … → клип N».
+ * (edit 316) Read prompt chain from source sidecar.
+ * For standard meta (single prompt, no extend fields) equivalent to
+ * readDraftPrompt; for extend-combined returns the full path
+ * "source → clip 1 → … → clip N".
  */
 export function readPromptChain(subfolder: string, filename: string): string | null {
   const metaFile = resolveMetaFile(subfolder, filename)

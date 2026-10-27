@@ -1,15 +1,15 @@
 /**
- * (правка 293) Слияние метаданных combined-файла продления с сайдкаром
- * ИСХОДНИКА (роут /api/comfy/concat не может экспортировать хелперы —
- * Next.js разрешает в route-файле только HTTP-методы, поэтому функция здесь).
+ * (fix 293) Merging metadata of an extension combined file with the sidecar
+ * of the SOURCE (route /api/comfy/concat cannot export helpers —
+ * Next.js allows only HTTP methods in a route file, so the function is here).
  *
- * Чистая функция (вынесена для тестов):
- *  • references — если клиент их не прислал (extend-вкладка рефы в meta не
- *    несла), наследуем от исходника (references / minimax_h3_references);
- *  • extend_prompts — цепочка исходника + промпты клипов этого продления:
- *    накопление через несколько продлений, дубли на стыке схлопываются;
- *  • source_prompt — prompt исходника (или его source_prompt — самый ранний
- *    в цепочке), если отличается от prompt combined. prompt не перетираем.
+ * Pure function (extracted for testing):
+ *  • references — if client did not send them (extend tab carried no refs in meta),
+ *    inherit from source (references / minimax_h3_references);
+ *  • extend_prompts — source chain + clip prompts of this extension:
+ *    accumulated across multiple extensions, duplicates at junctions collapsed;
+ *  • source_prompt — prompt of the source (or its source_prompt — the earliest
+ *    in chain), if different from combined prompt. We do not overwrite prompt.
  */
 export function mergeExtendMeta(
   bodyMeta: Record<string, unknown>,
@@ -35,7 +35,7 @@ export function mergeExtendMeta(
   if (deduped.length > 0) merged.extend_prompts = deduped
   else delete merged.extend_prompts
 
-  // Самый ранний промпт цепочки важнее: сначала source_prompt исходника.
+  // The earliest prompt in the chain is more important: source_prompt of the source first.
   if (typeof sourceMeta.source_prompt === 'string' && sourceMeta.source_prompt.trim()
       && sourceMeta.source_prompt !== merged.prompt && merged.source_prompt === undefined) {
     merged.source_prompt = sourceMeta.source_prompt

@@ -17,13 +17,13 @@ import {
   DownloadIcon,
   XCircleIcon,
   ArrowUpFromLineIcon,
-  WaypointsIcon, // (правка 512) ControlNet
-  GaugeIcon, // (правка 554) FPS
+  WaypointsIcon, // (fix 512) ControlNet
+  GaugeIcon, // (fix 554) FPS
   Grid3x3Icon,
   ScanFaceIcon,
 } from 'lucide-react'
 import { useGenQueue, TYPE_ACCENT, TYPE_LABEL, type QueueItemType } from '@/lib/gen-queue-store'
-import { useAssistantPanel } from '@/lib/assistant-panel-store' // (правка 442) отступ от панели ассистента
+import { useAssistantPanel } from '@/lib/assistant-panel-store' // (fix 442) offset from assistant panel
 import { useGalleryRefresh } from '@/lib/gallery-refresh-store'
 import { cn } from '@/lib/utils'
 
@@ -34,10 +34,10 @@ const TYPE_ICON: Record<QueueItemType, typeof ImageIcon> = {
   music: MusicIcon,
   sound: Volume2Icon,
   video: VideoIcon,
-  refine: Wand2Icon, // (правка 261) рефайн в общей очереди
-  upscale: ArrowUpFromLineIcon, // (правка 262) upscale в общей очереди
-  controlnet: WaypointsIcon, // (правка 512)
-  fps: GaugeIcon, // (правка 554)
+  refine: Wand2Icon, // (fix 261) refine in general queue
+  upscale: ArrowUpFromLineIcon, // (fix 262) upscale in general queue
+  controlnet: WaypointsIcon, // (fix 512)
+  fps: GaugeIcon, // (fix 554)
   'tile-upscale': Grid3x3Icon,
   'face-refine': ScanFaceIcon,
 }
@@ -47,7 +47,7 @@ const TYPE_ICON: Record<QueueItemType, typeof ImageIcon> = {
 /** Detect if a WanGP status message indicates model downloading */
 function isDownloading(message: string | null | undefined): boolean {
   if (!message) return false
-  return /download|скачив|загружа/i.test(message)
+  return /download|loading|fetching/i.test(message)
 }
 
 function StatusIcon({ status, color, message }: { status: string; color: string; message?: string | null }) {
@@ -74,23 +74,23 @@ function StatusIcon({ status, color, message }: { status: string; color: string;
 /* ──────────────────── Status Labels ──────────────────── */
 
 const STATUS_LABEL: Record<string, string> = {
-  submitting: 'Отправка…',
-  queued: 'В очереди',
-  running: 'Генерация…',
-  done: 'Готово',
-  cancelled: 'Отменено',
-  error: 'Ошибка',
+  submitting: 'Submitting…',
+  queued: 'Queued',
+  running: 'Generating…',
+  done: 'Done',
+  cancelled: 'Cancelled',
+  error: 'Error',
 }
 
 /* ──────────────────── Global poller ──────────────────── */
 const GLOBAL_POLL_INTERVAL_MS = 8000
 
 /**
- * Fallback-поллер: держит очередь живой, когда use-video-gen размонтирован
- * (вкладка переключена). Интервал 8с (вместо 4с) — снижает нагрузку на
- * ComfyUI, который во время генерации отвечает медленно (GPU блокирует
- * event-loop). use-video-gen уже поллит каждый 1с — этот поллер дублирует
- * только для edge-case'ов.
+ * Fallback poller: keeps queue alive even when use-video-gen is unmounted
+ * (tab switched). 8s interval (instead of 4s) — reduces load on
+ * ComfyUI, which responds slowly during generation (GPU blocks
+ * event loop). use-video-gen already polls every 1s — this poller is a backup
+ * only for edge cases.
  */
 function useGlobalQueuePoller() {
   const items = useGenQueue((s) => s.items)
@@ -117,13 +117,13 @@ function useGlobalQueuePoller() {
 
     // Slow requests must not stack ticks — skip while one is in flight
     let busy = false
-    // (фикс) Счётчик ПОДРЯД идущих 'unknown' для каждого видео. Живёт в замыкании
-    // эффекта, а не внутри тика: раньше Map пересоздавалась каждый тик, счётчик
-    // никогда не накапливался и порог 15 был недостижим.
+    // (fix) Consecutive 'unknown' counter for each video. Lives in effect closure,
+    // not inside tick: previously Map was recreated every tick, counter never
+    // accumulated, and threshold 15 was unreachable.
     const unknownCountMap = new Map<string, number>()
-    // (фикс) Порог 15: во время активной генерации ComfyUI event-loop
-    // заблокирован GPU-операциями, и /history может не уложиться в 30с →
-    // ложный 502. 15 × 8с = 2 мин непрерывного недоступа.
+    // (fix) Threshold 15: during active generation ComfyUI event loop
+    // is blocked by GPU operations, and /history may not respond within 30s →
+    // false 502. 15 × 8s = 2 min of continuous unavailability.
     const UNKNOWN_THRESHOLD = 15
     pollRef.current = setInterval(async () => {
       if (busy) return
@@ -138,15 +138,15 @@ function useGlobalQueuePoller() {
           return
         }
 
-        // (правка 141) Счётчик подряд идущих 'unknown' для каждого видео.
-        // Если ComfyUI недоступен N раз подряд — показываем ошибку, но НЕ удаляем
-        // сразу: даём пользователю время перезапустить ComfyUI.
-        // (фикс) unknownCountMap/UNKNOWN_THRESHOLD — см. объявление выше.
+        // (fix 141) Consecutive 'unknown' counter for each video.
+        // If ComfyUI is unavailable N times in a row — show error, but do NOT delete
+        // immediately: give the user time to restart ComfyUI.
+        // (fix) unknownCountMap/UNKNOWN_THRESHOLD — see declaration above.
 
-        // (фикс) Параллельные запросы: 3 видео = 3 параллельных fetch
-        // вместо 3 последовательных. ComfyUI во время генерации отвечает
-        // медленно (GPU блокирует event-loop) — последовательные запросы
-        // накапливали задержку, и часть падала в 502.
+        // (fix) Parallel requests: 3 videos = 3 parallel fetches
+        // instead of 3 sequential. ComfyUI responds slowly during generation
+        // (GPU blocks event loop) — sequential requests accumulated delay,
+        // and some resulted in 502.
         await Promise.allSettled(active.map(async (item) => {
           try {
             const res = await fetch(`/api/comfy/status?prompt_id=${encodeURIComponent(item.promptId!)}`)
@@ -154,14 +154,14 @@ function useGlobalQueuePoller() {
               const count = (unknownCountMap.get(item.id) ?? 0) + 1
               unknownCountMap.set(item.id, count)
               if (count >= UNKNOWN_THRESHOLD) {
-                store.setStatus(item.id, 'error', 'ComfyUI не отвечает. Перезапустите start.bat.')
+                store.setStatus(item.id, 'error', 'ComfyUI is not responding. Please restart start.bat.')
               }
               return
             }
             unknownCountMap.delete(item.id)
             const s = await res.json()
 
-            // Re-check: элемент могли отменить/удалить во время запроса
+            // Re-check: item could be cancelled/removed during request
             const fresh = useGenQueue.getState().items.find((it) => it.id === item.id)
             if (!fresh || fresh.status === 'cancelled' || fresh.status === 'done' || fresh.status === 'error') return
 
@@ -180,9 +180,9 @@ function useGlobalQueuePoller() {
             }
 
             if (s.status === 'running') {
-              // (фикс) Terminal-status guard: элемент мог стать error/done/cancelled
-              // между fresh-check выше и этим вызовом (race с rehydration effect).
-              // Без этого: error → running (resurrection).
+              // (fix) Terminal-status guard: item could become error/done/cancelled
+              // between fresh-check above and this call (race with rehydration effect).
+              // Without this: error → running (resurrection).
               const guard = useGenQueue.getState().items.find((it) => it.id === item.id)
               if (guard && !['done', 'error', 'cancelled'].includes(guard.status)) {
                 if (guard.status !== 'running') store.setStatus(item.id, 'running')
@@ -193,43 +193,43 @@ function useGlobalQueuePoller() {
                 if (guard.status !== 'queued') store.setStatus(item.id, 'queued')
               }
             } else if (s.status === 'unknown') {
-              // (фикс) ComfyUI отвечает, но prompt_id отсутствует — задача
-              // отклонена или потеряна. Раньше 'unknown' обрабатывался ТОЛЬКО
-              // через !res.ok (502), и при 200+unknown элемент вечно крутил
-              // «В очереди». Теперь: счётчик + честная ошибка.
+              // (fix) ComfyUI responds, but prompt_id is missing — task
+              // was rejected or lost. Previously 'unknown' was handled ONLY
+              // via !res.ok (502), and on 200+unknown the item spun forever
+              // as "Queued". Now: counter + proper error.
               const count = (unknownCountMap.get(item.id) ?? 0) + 1
               unknownCountMap.set(item.id, count)
               if (count >= UNKNOWN_THRESHOLD) {
-                const isNotFound = s.detail?.includes('не найдена') || s.detail?.includes('отклонена')
+                const isNotFound = s.detail?.toLowerCase().includes('not found') || s.detail?.toLowerCase().includes('rejected')
                 const errMsg = isNotFound
-                  ? 'Задача не найдена в ComfyUI — отклонена или потеряна'
-                  : 'ComfyUI не отвечает'
+                  ? 'Task not found in ComfyUI — rejected or lost'
+                  : 'ComfyUI is not responding'
                 store.setStatus(item.id, 'error', errMsg)
               }
               return
             } else if (s.status === 'error') {
-              // (фикс) Только если элемент ещё не имеет статус 'error'
+              // (fix) Only if item does not already have 'error' status
               const fresh = useGenQueue.getState().items.find((it) => it.id === item.id)
               if (fresh && fresh.status !== 'error') {
                 console.warn(`[queue-poll] ${item.id}: SETTING ERROR — ${s.detail}`)
-                store.setStatus(item.id, 'error', s.detail || 'Ошибка')
+                store.setStatus(item.id, 'error', s.detail || 'Error')
               }
             } else if (s.status === 'done') {
-              // (правка 332) refine-элементы этот поллер НЕ финализирует:
-              // раньше он ставил done без legacy-stitch покусочных
-              // refinepart_* и без bump галереи. Финализация refine — в
-              // refine-queue (раннер в живой сессии, recoverOrphanRefineItem
-              // после перезагрузки).
+              // (fix 332) refine-items are NOT finalized by this poller:
+              // previously it set done without legacy-stitch of chunked
+              // refinepart_* and without gallery bump. refine finalization is in
+              // refine-queue (runner in active session, recoverOrphanRefineItem
+              // after reload).
               if (item.type === 'refine') return
-              // (фикс) Только если элемент ещё не имеет статус 'done'
-              // (use-video-gen уже обработал 'done' и запустил таймер удаления)
+              // (fix) Only if item does not already have 'done' status
+              // (use-video-gen already processed 'done' and started removal timer)
               const fresh = useGenQueue.getState().items.find((it) => it.id === item.id)
               if (fresh && fresh.status !== 'done') {
                 store.setStatus(item.id, 'done')
-                // Локальный поллер вкладки мог не успеть сделать bump: с
-                // единым FIFO следующая задача стартует сразу после done, а
-                // старый поллер уже видит новый promptId и выходит. Галерею
-                // обновляем здесь, чтобы результат не потерялся.
+                // Tab local poller might not have had time to bump: with
+                // unified FIFO next task starts immediately after done, and
+                // old poller already sees new promptId and exits. Update gallery
+                // here so the result is not lost.
                 if (
                   item.type === 'controlnet' ||
                   item.type === 'fps' ||
@@ -262,25 +262,25 @@ function useGlobalQueuePoller() {
 
 async function cancelQueueItem(item: { id: string; promptId: string | null; type: QueueItemType }) {
   const { setStatus, remove } = useGenQueue.getState()
-  // (правка 329) upscale: у очереди нет promptId, ветка !promptId просто
-  // удаляла элемент, а серверный DLSS-рендер продолжал работать зомби.
-  // Теперь — реальная отмена (статус + задача из Map + cancel на мосту).
+  // (fix 329) upscale: queue has no promptId, !promptId branch just
+  // removed the item while server DLSS render continued working as a zombie.
+  // Now — real cancellation (status + task from Map + cancel on bridge).
   if (item.type === 'upscale') {
     const { cancelUpscaleItem } = await import('@/lib/upscale-queue')
     await cancelUpscaleItem(item.id)
     return
   }
-  // (правка 334) refine: отмена через refine-queue — чистит tasks Map от
-  // незапущенных задач (иначе запись оставалась сиротой навсегда).
+  // (fix 334) refine: cancel via refine-queue — cleans tasks Map of
+  // unstarted tasks (otherwise the entry remained orphaned forever).
   if (item.type === 'refine') {
     const { cancelRefineItem } = await import('@/lib/refine-queue')
     await cancelRefineItem(item.id)
     return
   }
-  // (правка 555) ControlNet/FPS: помечаем promptId как отменяемый ДО
-  // /api/comfy/cancel — иначе собственный модульный поллер вкладки увидит
-  // от ComfyUI 'error' (interrupted) и нарисует красный баннер «Ошибка
-  // генерации» вместо чистой отмены. Дальше — общий путь (cancel + статус).
+  // (fix 555) ControlNet/FPS: mark promptId as cancellable BEFORE
+  // /api/comfy/cancel — otherwise the tab's own modular poller will see
+  // 'error' (interrupted) from ComfyUI and render a red banner "Generation error"
+  // instead of clean cancellation. Then — common path (cancel + status).
   if (item.type === 'controlnet' && item.promptId) {
     const { markControlNetCancelRequested } = await import('@/lib/controlnet-job-store')
     markControlNetCancelRequested(item.promptId)
@@ -327,9 +327,9 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
   // Global poller: keeps queue alive even when source tab is unmounted
   useGlobalQueuePoller()
 
-  // (правка 442) На вкладках с панелью ассистента справа («Генерация»,
-  // «Продление») индикатор сдвигается левее панели, чтобы не перекрывать
-  // поле ввода чата. Развёрнутая панель — её ширина, свёрнутый рейл — 46px.
+  // (fix 442) On tabs with assistant panel on the right ("Generation",
+  // "Extend"), indicator shifts left of the panel so as not to overlap
+  // the chat input field. Expanded panel — its width, collapsed rail — 46px.
   const panelSpace = useAssistantPanel((s) => (s.collapsed ? 46 : s.width))
 
   // Single subscription — compute everything from items
@@ -356,8 +356,8 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
       ? Math.round((currentRunning.progressValue / currentRunning.progressMax) * 100)
       : 0
 
-  // (правка 442) Отступ справа: панель ассистента на generate/extend
-  // (правка 502: и controlnet) + зазор 16px.
+  // (fix 442) Right offset: assistant panel on generate/extend
+  // (fix 502: and controlnet) + 16px gap.
   const rightOffset =
     (activeTab === 'generate' || activeTab === 'extend' || activeTab === 'controlnet' ? panelSpace : 0) + 16
 
@@ -409,8 +409,8 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
               {activeCount > 0
                 ? currentRunning
                   ? `${TYPE_LABEL[currentRunning.type]}: ${STATUS_LABEL[currentRunning.status]}`
-                  : `${activeCount} в очереди`
-                : 'Очередь пуста'}
+                  : `${activeCount} in queue`
+                : 'Queue is empty'}
             </span>
             {/* Real-time message from WanGP (e.g. "Downloading model...") */}
             {currentRunning?.message && (
@@ -466,14 +466,14 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
               <span className="text-xs font-semibold text-foreground">
-                Очередь генераций
+                Generation Queue
               </span>
               <div className="flex items-center gap-1">
                 {items.some((it) => it.status === 'done' || it.status === 'error' || it.status === 'cancelled') && (
                   <button
                     onClick={clearFinished}
                     className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-[var(--surface-3)] transition-colors"
-                    title="Очистить завершённые"
+                    title="Clear completed"
                   >
                     <Trash2Icon className="w-3 h-3" />
                   </button>
@@ -533,7 +533,7 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] text-muted-foreground">
-                          {isDownloading(item.message) ? 'Скачивание модели…' : STATUS_LABEL[item.status]}
+                          {isDownloading(item.message) ? 'Downloading model…' : STATUS_LABEL[item.status]}
                         </span>
                         {isActive && item.progressMax > 0 && (
                           <span className="text-[10px] text-muted-foreground font-mono">
@@ -547,8 +547,8 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
                           {item.message}
                         </p>
                       )}
-                      {/* (фикс M4) Причина ошибки — раньше панель показывала
-                          только «Ошибка», без объяснения. */}
+                      {/* (fix M4) Error reason — previously panel showed
+                          only "Error" without explanation. */}
                       {item.error && !isActive && (
                         <p className="text-[10px] mt-0.5 truncate text-red-400" title={item.error}>
                           {item.error}
@@ -582,7 +582,7 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
                       <button
                         onClick={() => cancelQueueItem(item)}
                         className="p-1 rounded-md text-muted-foreground/50 hover:text-red-400 hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
-                        title="Отменить"
+                        title="Cancel"
                       >
                         <XCircleIcon className="w-3.5 h-3.5" />
                       </button>
@@ -606,7 +606,7 @@ export function QueueIndicator({ activeTab }: { activeTab?: string } = {}) {
             {activeCount > 0 && (
               <div className="px-3 py-2 border-t border-border">
                 <p className="text-[10px] text-muted-foreground text-center">
-                  {activeCount} {activeCount === 1 ? 'задача' : activeCount < 5 ? 'задачи' : 'задач'} в очереди
+                  {activeCount} {activeCount === 1 ? 'task' : 'tasks'} in queue
                 </p>
               </div>
             )}

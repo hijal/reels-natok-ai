@@ -1,38 +1,38 @@
 #!/usr/bin/env node
 /**
- * scripts/build.mjs — кроссплатформенная обёртка над `next build --webpack`.
+ * scripts/build.mjs — cross-platform wrapper around `next build --webpack`.
  *
- * Почему: сборка этого проекта не помещается в хип Node по умолчанию
- * (~4 ГБ) и падает с `FATAL ERROR: JavaScript heap out of memory`.
- * При увеличенном хипе (8 ГБ) сборка проходит штатно (проверено).
+ * Why: building this project does not fit in Node's default heap
+ * (~4 GB) and fails with `FATAL ERROR: JavaScript heap out of memory`.
+ * With an increased heap (8 GB), the build succeeds normally (verified).
  *
- * Как: NODE_OPTIONS читается только в момент СТАРТА node-процесса, поэтому
- * мы запускаем `next build` отдельным дочерним процессом, у которого этот
- * флаг уже задан в окружении (рабочие потоки webpack — потоки того же
- * процесса — делят с ним хип). Никаких новых зависимостей не требуется.
+ * How: NODE_OPTIONS is read only at the START of the node process, so
+ * we launch `next build` in a separate child process which already has
+ * this flag set in its environment (webpack worker threads — threads of
+ * the same process — share the heap with it). No new dependencies required.
  *
- * Переопределить размер хипа (в МБ):
+ * Override heap size (in MB):
  *   NEXT_BUILD_HEAP_MB=12288 npm run build
  *
- * Вернуться к сборке без обёртки (хип по умолчанию):
+ * Fallback to build without wrapper (default heap):
  *   npm run build:default
  */
 import { spawnSync } from 'node:child_process';
 
-// (правка 716) NEXT_BUILD_HEAP_MB валидируется: 0 молча превращался в 8192,
-// а отрицательное значение давало «--max-old-space-size=-1», который Node
-// отвергает с невнятной ошибкой.
+// (fix 716) NEXT_BUILD_HEAP_MB is validated: 0 silently turned into 8192,
+// and a negative value resulted in "--max-old-space-size=-1", which Node
+// rejects with an unclear error.
 const heapMbRaw = Number(process.env.NEXT_BUILD_HEAP_MB);
 const heapMb = Number.isInteger(heapMbRaw) && heapMbRaw >= 512 && heapMbRaw <= 65536
   ? heapMbRaw
   : 8192;
 const flag = `--max-old-space-size=${heapMb}`;
-// (правка 587) Не дублируем флаг, если он уже в NODE_OPTIONS (последний
-// выигрывает, но дубликат путает диагностику).
-// (правка 716) NODE_OPTIONS НЕ пересобирается разбиением по пробелам:
-// значение с пробелом (например --require "C:\my path\preload.js") ломалось,
-// и Node отказывался стартовать с «--require is not allowed in NODE_OPTIONS».
-// Просто вырезаем наш флаг из исходной строки.
+// (fix 587) Do not duplicate the flag if it is already in NODE_OPTIONS (the
+// last one wins, but the duplicate confuses diagnostics).
+// (fix 716) NODE_OPTIONS is NOT reassembled by splitting on spaces:
+// values with spaces (e.g. --require "C:\my path\preload.js") were broken,
+// and Node refused to start with "--require is not allowed in NODE_OPTIONS".
+// Simply strip our flag from the original string.
 const rawOptions = process.env.NODE_OPTIONS || '';
 const prev = rawOptions
   .split(/--max-old-space-size=\d+/)
@@ -42,22 +42,22 @@ const prev = rawOptions
 const env = { ...process.env, NODE_OPTIONS: prev ? `${prev} ${flag}` : flag };
 
 console.log(`[build] next build --webpack  (heap = ${heapMb} MB)`);
-// (правка 716) --no-install: без него npx при отсутствующем node_modules
-// ПРЕДЛОЖИТ скачать next из реестра и спросит «Ok to proceed? (y)» — в
-// неинтерактивном контексте сборка зависала навсегда вместо падения.
+// (fix 716) --no-install: without it, npx when node_modules is missing
+// WILL PROMPT to download next from the registry and ask "Ok to proceed? (y)" — in
+// a non-interactive context the build would hang forever instead of failing.
 const r = spawnSync('npx', ['--no-install', 'next', 'build', '--webpack'], {
   env,
   stdio: 'inherit',
-  // На Windows npx это npx.cmd — нужен shell, чтобы он резолвился.
+  // On Windows npx is npx.cmd — shell is required to resolve it.
   shell: process.platform === 'win32',
 });
 
 if (r.error) {
-  console.error('[build] не удалось запустить next build:', r.error.message);
+  console.error('[build] failed to launch next build:', r.error.message);
   process.exit(1);
 }
 if (r.signal) {
-  console.error(`[build] next build прерван сигналом ${r.signal}`);
+  console.error(`[build] next build interrupted by signal ${r.signal}`);
   process.exit(1);
 }
 process.exit(r.status == null ? 1 : r.status);

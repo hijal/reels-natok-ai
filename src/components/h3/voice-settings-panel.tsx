@@ -1,16 +1,16 @@
 'use client'
 
 /**
- * (правка 72) Панель «Голосовой ввод» — настройки встроенного whisper STT.
+ * "Voice Input" panel — settings for built-in whisper STT.
  *
- *   • вкл/выкл голосовой ввод в UI
- *   • модель STT (скачивание из каталога или выбор из локальных)
- *   • язык, потоки CPU
- *   • статус сервиса + старт/перезапуск/остановка
- *   • живой тест: запись → распознанный текст
+ *   • enable/disable voice input in UI
+ *   • STT model (download from catalog or select from local)
+ *   • language, CPU threads
+ *   • service status + start/restart/stop
+ *   • live test: record → recognized text
  *
- * Распознавание работает ТОЛЬКО на CPU (требование: не трогать VRAM).
- * Рантайм (transcribe.dll) встроен в проект — папку выбирать не нужно.
+ * Recognition runs on CPU ONLY (keeps VRAM untouched).
+ * Runtime (transcribe.dll / binary) is bundled in the project.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -52,7 +52,6 @@ interface SttStatusResp {
 
 interface DownloadProgress {
   name: string
-  /** (правка 73) Скачивание реально идёт на сервере (для восстановления при реоткрытии панели). */
   active?: boolean
   downloaded: number
   total: number
@@ -62,11 +61,11 @@ interface DownloadProgress {
 }
 
 const MODEL_CATALOG: Array<{ name: string; file: string; sizeLabel: string; quality: string }> = [
-  { name: 'tiny',     file: 'ggml-tiny.bin',     sizeLabel: '~75 МБ',  quality: 'быстро, качество низкое' },
-  { name: 'base',     file: 'ggml-base.bin',     sizeLabel: '~142 МБ', quality: 'среднее качество' },
-  { name: 'small',    file: 'ggml-small.bin',    sizeLabel: '~466 МБ', quality: 'хорошее (рекомендуется)' },
-  { name: 'medium',   file: 'ggml-medium.bin',   sizeLabel: '~1.5 ГБ', quality: 'отличное' },
-  { name: 'large-v3', file: 'ggml-large-v3.bin', sizeLabel: '~3.1 ГБ', quality: 'лучшее, медленно' },
+  { name: 'tiny',     file: 'ggml-tiny.bin',     sizeLabel: '~75 MB',  quality: 'fast, low quality' },
+  { name: 'base',     file: 'ggml-base.bin',     sizeLabel: '~142 MB', quality: 'medium quality' },
+  { name: 'small',    file: 'ggml-small.bin',    sizeLabel: '~466 MB', quality: 'good (recommended)' },
+  { name: 'medium',   file: 'ggml-medium.bin',   sizeLabel: '~1.5 GB', quality: 'excellent' },
+  { name: 'large-v3', file: 'ggml-large-v3.bin', sizeLabel: '~3.1 GB', quality: 'best, slow' },
 ]
 
 export function VoiceSettingsPanel() {
@@ -80,15 +79,12 @@ export function VoiceSettingsPanel() {
   const [testText, setTestText] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // (правка 85) Выбор микрофона
+  // Microphone selection
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedMic, setSelectedMic] = useState<string>('')
   const [micLoading, setMicLoading] = useState(false)
 
   // Download state
-  // (правка 73) Прогресс храним в ref-зеркале: замыкание setInterval на state
-  // «застывает» на моменте создания интервала, и первый же тик видел пустое
-  // состояние, отключал поллинг — прогресс в UI больше не двигался.
   const [downloading, setDownloading] = useState<Record<string, DownloadProgress | null>>({})
   const downloadingRef = useRef<Record<string, DownloadProgress | null>>({})
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -126,7 +122,6 @@ export function VoiceSettingsPanel() {
     refreshRef.current = refresh
   }, [refresh])
 
-  /* Один тик поллинга. Читает только ref'ы — безопасно из любого замыкания. */
   const tick = () => {
     void (async () => {
       const activeNames = Object.keys(downloadingRef.current).filter((n) => {
@@ -145,14 +140,14 @@ export function VoiceSettingsPanel() {
           setProg(name, d)
           if (d.done && !toastShownRef.current.has(`ok:${name}`)) {
             toastShownRef.current.add(`ok:${name}`)
-            toast.success(`Модель ${name} скачана!`)
+            toast.success(`Model ${name} downloaded!`)
             await refreshRef.current()
           } else if (d.error && !toastShownRef.current.has(`err:${name}`)) {
             toastShownRef.current.add(`err:${name}`)
-            toast.error(`Скачивание ${name}: ${d.error}`)
+            toast.error(`Downloading ${name}: ${d.error}`)
           } else if (d.cancelled && !toastShownRef.current.has(`cxl:${name}`)) {
             toastShownRef.current.add(`cxl:${name}`)
-            toast.info(`Скачивание ${name} отменено`)
+            toast.info(`Downloading ${name} cancelled`)
           }
         } catch { /* network blip — retry next tick */ }
       }
@@ -164,24 +159,21 @@ export function VoiceSettingsPanel() {
     pollRef.current = setInterval(tick, 1500)
   }
 
-  // (правка 85) Перечислить доступные микрофоны.
-  // Для получения labels браузер должен один раз выдать доступ к микрофону.
+  // Enumerate available microphones
   const refreshMics = useCallback(async () => {
     setMicLoading(true)
     try {
-      // Если labels ещё не разблокированы — запрашиваем кратковременный доступ
       try {
         const tmp = await navigator.mediaDevices.getUserMedia({ audio: true })
         tmp.getTracks().forEach((t) => t.stop())
-      } catch { /* нет доступа — labels будут "Microphone N" */ }
+      } catch { /* no permission — labels will be fallback */ }
       const devices = await navigator.mediaDevices.enumerateDevices()
       const mics = devices.filter((d) => d.kind === 'audioinput')
       setMicDevices(mics)
-      // Подставить сохранённый выбор (если есть), иначе — системный дефолт
       const saved = getSttMicDevice()
       if (saved) {
         const match = mics.find((m) => m.deviceId === saved)
-        setSelectedMic(match ? saved : '') // сохранённый не найден → дефолт
+        setSelectedMic(match ? saved : '')
       } else {
         setSelectedMic('')
       }
@@ -201,8 +193,6 @@ export function VoiceSettingsPanel() {
   useEffect(() => {
     void refresh()
     void refreshMics()
-    // (правка 73) Восстановить активные скачивания, если панель открыли
-    // повторно во время загрузки (раньше состояние терялось).
     MODEL_CATALOG.forEach((m) => {
       if (downloadingRef.current[m.name]) return
       fetch(`/api/stt/models/download?name=${m.name}`)
@@ -212,7 +202,7 @@ export function VoiceSettingsPanel() {
             setProg(m.name, d)
           }
         })
-        .catch(() => { /* сервер недоступен — просто не восстанавливаем */ })
+        .catch(() => {})
         .finally(() => { ensurePolling() })
     })
     return () => {
@@ -230,20 +220,20 @@ export function VoiceSettingsPanel() {
       })
       const d = await r.json()
       if (!r.ok) {
-        toast.error(d.error || 'Ошибка запуска скачивания')
+        toast.error(d.error || 'Failed to start download')
         return
       }
       if (d.already && d.downloaded) {
-        toast.success(`Модель ${name} уже скачана`)
+        toast.success(`Model ${name} is already downloaded`)
         await refreshRef.current()
         return
       }
-      toast.info(`Скачивание модели ${name} началось…`)
+      toast.info(`Downloading model ${name} started…`)
       resetToasts(name)
       setProg(name, { name, downloaded: 0, total: 0, done: false, error: null, cancelled: false })
       ensurePolling()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Ошибка скачивания')
+      toast.error(err instanceof Error ? err.message : 'Download error')
     }
   }
 
@@ -278,16 +268,15 @@ export function VoiceSettingsPanel() {
         }),
       })
       if (!r.ok) {
-        // (релиз) Показываем причину от сервера, а не безликое «ошибка».
-        let msg = 'Ошибка сохранения настроек'
+        let msg = 'Failed to save settings'
         try {
           const d = await r.json()
           if (d && typeof d.error === 'string' && d.error) msg = d.error
-        } catch { /* ответ не JSON */ }
+        } catch { /* response is not JSON */ }
         toast.error(msg)
         return
       }
-      toast.success('Настройки голосового ввода сохранены')
+      toast.success('Voice input settings saved')
       // Restart STT service with new params
       const rr = await fetch('/api/stt/reload', {
         method: 'POST',
@@ -296,15 +285,15 @@ export function VoiceSettingsPanel() {
       })
       const rd = await rr.json()
       if (rr.ok && rd.ok) {
-        toast.success('STT-сервис запущен и готов', {
-          description: rd.model ? `Модель: ${String(rd.model).split(/[\\/]/).pop()}` : undefined,
+        toast.success('STT service running and ready', {
+          description: rd.model ? `Model: ${String(rd.model).split(/[\\/]/).pop()}` : undefined,
         })
       } else if (enabled) {
-        toast.error(rd.error || 'Не удалось запустить STT-сервис')
+        toast.error(rd.error || 'Failed to start STT service')
       }
       await refresh()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Ошибка сохранения')
+      toast.error(err instanceof Error ? err.message : 'Save error')
     } finally {
       setSaving(false)
     }
@@ -313,7 +302,7 @@ export function VoiceSettingsPanel() {
   const stopService = async () => {
     const r = await fetch('/api/stt/stop', { method: 'POST' })
     const d = await r.json().catch(() => ({}))
-    if (d.ok !== false) toast.success('STT-сервис остановлен (память освобождена)')
+    if (d.ok !== false) toast.success('STT service stopped (memory released)')
     await refresh()
   }
 
@@ -321,7 +310,7 @@ export function VoiceSettingsPanel() {
     return (
       <div className="py-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
-        Загрузка настроек голосового ввода…
+        Loading voice input settings…
       </div>
     )
   }
@@ -331,12 +320,12 @@ export function VoiceSettingsPanel() {
 
   return (
     <div className="space-y-4 py-2">
-      {/* Вкл/выкл */}
+      {/* Enable/disable */}
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-sm font-medium text-foreground">Голосовой ввод</span>
+          <span className="text-sm font-medium text-foreground">Voice input</span>
           <p className="text-[10px] text-muted-foreground/60">
-            Кнопка диктата у поля промпта, в редакторе промпта и в чате ассистента. Работает на CPU (whisper / transcribe.cpp).
+            Dictation button next to prompt input, in prompt editor, and in assistant chat. Runs on CPU (whisper / transcribe.cpp).
           </p>
         </div>
         <button
@@ -358,12 +347,12 @@ export function VoiceSettingsPanel() {
         </button>
       </div>
 
-      {/* Скачивание моделей */}
+      {/* Model downloads */}
       <div className="pt-3 border-t border-border space-y-2">
         <div>
-          <span className="text-xs text-muted-foreground">Модели распознавания</span>
+          <span className="text-xs text-muted-foreground">Recognition models</span>
           <p className="text-[10px] text-muted-foreground/60">
-            Скачайте модель нужного качества. Для русского языка рекомендуется <span className="font-mono">small</span> или <span className="font-mono">medium</span>.
+            Download the model with desired quality. For general use, <span className="font-mono">small</span> or <span className="font-mono">medium</span> is recommended.
           </p>
         </div>
         <div className="space-y-1.5">
@@ -382,7 +371,7 @@ export function VoiceSettingsPanel() {
                 {downloaded ? (
                   <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 gap-1 text-[10px] shrink-0">
                     <CheckCircleIcon className="w-3 h-3" />
-                    Скачана
+                    Downloaded
                   </Badge>
                 ) : isActive ? (
                   <div className="flex items-center gap-2 shrink-0">
@@ -397,7 +386,7 @@ export function VoiceSettingsPanel() {
                       type="button"
                       onClick={() => cancelDownload(m.name)}
                       className="p-1 rounded hover:bg-red-500/20 text-red-400"
-                      title="Отменить скачивание"
+                      title="Cancel download"
                     >
                       <XIcon className="w-3.5 h-3.5" />
                     </button>
@@ -410,7 +399,7 @@ export function VoiceSettingsPanel() {
                     onClick={() => { void startDownload(m.name) }}
                   >
                     <DownloadIcon className="w-3.5 h-3.5" />
-                    Скачать
+                    Download
                   </Button>
                 )}
               </div>
@@ -419,20 +408,20 @@ export function VoiceSettingsPanel() {
         </div>
       </div>
 
-      {/* Модель (выбор из скачанных) */}
+      {/* Model selection */}
       <div className="pt-3 border-t border-border space-y-2">
         <div>
-          <span className="text-xs text-muted-foreground">Активная модель</span>
+          <span className="text-xs text-muted-foreground">Active model</span>
           <p className="text-[10px] text-muted-foreground/60">
-            Какая модель будет использоваться для распознавания. Пусто = автоматически (первая найденная).
+            Which model will be used for recognition. Empty = automatic (first found).
           </p>
         </div>
         <Select value={model || '__auto__'} onValueChange={(v) => setModel(v === '__auto__' ? '' : v)}>
           <SelectTrigger className="h-8 w-full text-xs">
-            <SelectValue placeholder="Выберите модель" />
+            <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__auto__">Автоматически (первая доступная)</SelectItem>
+            <SelectItem value="__auto__">Automatic (first available)</SelectItem>
             {st?.models.map((m) => (
               <SelectItem key={m} value={m}>{m}</SelectItem>
             ))}
@@ -442,19 +431,19 @@ export function VoiceSettingsPanel() {
           <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
             <AlertCircleIcon className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
             <p className="text-xs text-amber-200/90 leading-snug">
-              Модели пока нет. Скачайте модель выше (рекомендуется <span className="font-mono">small</span> для русского языка) — и она появится в списке.
+              No models downloaded yet. Download a model above (e.g. <span className="font-mono">small</span>) — and it will appear in the list.
             </p>
           </div>
         )}
       </div>
 
-      {/* (правка 85) Микрофон */}
+      {/* Microphone */}
       <div className="pt-3 border-t border-border space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-xs text-muted-foreground">Микрофон</span>
+            <span className="text-xs text-muted-foreground">Microphone</span>
             <p className="text-[10px] text-muted-foreground/60">
-              Если на компьютере несколько устройств ввода — выберите нужный здесь.
+              If your computer has multiple input devices, select the desired one here.
             </p>
           </div>
           <button
@@ -462,7 +451,7 @@ export function VoiceSettingsPanel() {
             onClick={() => { void refreshMics() }}
             disabled={micLoading}
             className="p-1 rounded hover:bg-[var(--surface-3)] text-muted-foreground hover:text-foreground transition-colors"
-            title="Обновить список микрофонов"
+            title="Refresh microphone list"
           >
             <RefreshCwIcon className={cn('w-3.5 h-3.5', micLoading && 'animate-spin')} />
           </button>
@@ -471,13 +460,13 @@ export function VoiceSettingsPanel() {
           <MicIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           <Select value={selectedMic || '__default__'} onValueChange={handleMicChange} disabled={micLoading || micDevices.length === 0}>
             <SelectTrigger className="h-8 flex-1 text-xs">
-              <SelectValue placeholder={micLoading ? 'Загрузка…' : 'Системный (по умолчанию)'} />
+              <SelectValue placeholder={micLoading ? 'Loading…' : 'System (default)'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__default__">Системный (по умолчанию)</SelectItem>
+              <SelectItem value="__default__">System (default)</SelectItem>
               {micDevices.map((d) => (
                 <SelectItem key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Микрофон ${micDevices.indexOf(d) + 1}`}
+                  {d.label || `Microphone ${micDevices.indexOf(d) + 1}`}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -485,29 +474,29 @@ export function VoiceSettingsPanel() {
         </div>
       </div>
 
-      {/* Язык + потоки */}
+      {/* Language + Threads */}
       <div className="pt-3 border-t border-border grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <span className="text-xs text-muted-foreground">Язык речи</span>
+          <span className="text-xs text-muted-foreground">Spoken language</span>
           <Select value={language} onValueChange={setLanguage}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ru">Русский</SelectItem>
-              <SelectItem value="en">Английский</SelectItem>
-              <SelectItem value="auto">Автоопределение</SelectItem>
+              <SelectItem value="ru">Russian</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="auto">Auto-detect</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <span className="text-xs text-muted-foreground">Потоки CPU</span>
+          <span className="text-xs text-muted-foreground">CPU threads</span>
           <Select value={String(threads)} onValueChange={(v) => setThreads(parseInt(v, 10))}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="0">Авто (по ядрам)</SelectItem>
+              <SelectItem value="0">Auto (by CPU cores)</SelectItem>
               <SelectItem value="2">2</SelectItem>
               <SelectItem value="4">4</SelectItem>
               <SelectItem value="6">6</SelectItem>
@@ -518,24 +507,24 @@ export function VoiceSettingsPanel() {
         </div>
       </div>
 
-      {/* Статус сервиса */}
+      {/* Service status */}
       <div className="pt-3 border-t border-border space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">STT-сервис:</span>
+            <span className="text-xs text-muted-foreground">STT service:</span>
             {service?.starting ? (
               <Badge variant="secondary" className="gap-1 text-[10px]">
                 <Loader2Icon className="w-3 h-3 animate-spin" />
-                Загрузка…
+                Loading…
               </Badge>
             ) : service?.running ? (
               <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 gap-1 text-[10px]">
                 <CheckCircleIcon className="w-3 h-3" />
-                Работает
+                Running
               </Badge>
             ) : (
               <Badge variant="secondary" className="text-[10px]">
-                Остановлен (запустится при первом диктате)
+                Stopped (starts on first dictation)
               </Badge>
             )}
           </div>
@@ -543,14 +532,14 @@ export function VoiceSettingsPanel() {
             {service?.running && (
               <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={stopService}>
                 <PowerIcon className="w-3 h-3" />
-                Остановить
+                Stop
               </Button>
             )}
           </div>
         </div>
         {st?.health && (
           <p className="text-[10px] text-muted-foreground/60 font-mono truncate">
-            {String(st.health.model ?? '')} · язык: {String(st.health.language ?? '')} · потоки: {String(st.health.threads ?? '')}
+            {String(st.health.model ?? '')} · language: {String(st.health.language ?? '')} · threads: {String(st.health.threads ?? '')}
             {st.health.version ? ` · ${String(st.health.version)}` : ''}
           </p>
         )}
@@ -562,10 +551,10 @@ export function VoiceSettingsPanel() {
         )}
       </div>
 
-      {/* Тест */}
+      {/* Test */}
       <div className="pt-3 border-t border-border space-y-2">
         <span className="text-xs text-muted-foreground">
-          Тест: нажмите кнопку, скажите фразу и нажмите её снова — текст появится ниже
+          Test: click the button, say a phrase, and click it again — recognized text will appear below
         </span>
         <div className="flex items-center gap-2">
           <VoiceInputButton
@@ -574,7 +563,7 @@ export function VoiceSettingsPanel() {
             disabled={!enabled}
           />
           <span className="text-[10px] text-muted-foreground/60">
-            {enabled ? 'Голосовой ввод включён' : 'Голосовой ввод выключен — включите его выше'}
+            {enabled ? 'Voice input enabled' : 'Voice input disabled — enable it above'}
           </span>
         </div>
         {testText && (
@@ -584,15 +573,15 @@ export function VoiceSettingsPanel() {
         )}
       </div>
 
-      {/* Сохранить */}
+      {/* Save */}
       <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
         <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => { void refresh() }} disabled={saving}>
           <RefreshCwIcon className="w-3.5 h-3.5" />
-          Обновить
+          Refresh
         </Button>
         <Button size="sm" className="gap-1.5 text-xs bg-cyan-600 hover:bg-cyan-500" onClick={() => { void save() }} disabled={saving}>
           {saving ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <PlayIcon className="w-3.5 h-3.5" />}
-          Сохранить и применить
+          Save and Apply
         </Button>
       </div>
     </div>

@@ -5,8 +5,8 @@ import { getAppConfig } from '@/lib/app-config'
 import { sttStatus, STT_PORT } from '@/lib/stt-runner'
 
 /**
- * (правка 65) GET /api/stt/status
- * Голосовой ввод: конфиг, список моделей во встроенной папке stt/ и состояние сервиса.
+ * (fix 65) GET /api/stt/status
+ * Voice input: config, list of models in the built-in stt/ folder, and service state.
  */
 export const dynamic = 'force-dynamic'
 

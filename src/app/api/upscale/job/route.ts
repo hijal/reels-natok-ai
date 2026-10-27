@@ -4,20 +4,20 @@ import { fetchUpscaleHealth, bridgeUrl } from '@/lib/upscale-runner'
 import { ensureUpscaleMeta } from '@/lib/upscale-meta'
 
 /**
- * (правка 74) GET /api/upscale/job?id=<jobId>
- * Статус job моста + downloadUrl для результата (если готов).
+ * (fix 74) GET /api/upscale/job?id=<jobId>
+ * Bridge job status + downloadUrl for result (if ready).
  *
- * (правка 94) При статусе 'done' пишем .meta.json-сайдкар рядом с
- * результатом (разрешение/длительность/fps/размер — через ffprobe),
- * чтобы в галерее у апскейл-видео тоже работало «инфо о файле».
- * Идемпотентно и fire-and-forget — опрос статуса не ждёт ffprobe.
+ * (fix 94) On 'done' status write a .meta.json sidecar next to
+ * the result (resolution/duration/fps/size — via ffprobe),
+ * so that gallery upscale videos also support "file info".
+ * Idempotent and fire-and-forget — status polling does not wait for ffprobe.
  */
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id')
   if (!id) {
-    return NextResponse.json({ error: 'Не указан id' }, { status: 400 })
+    return NextResponse.json({ error: 'id is required' }, { status: 400 })
   }
   try {
     const r = await fetch(bridgeUrl(`/jobs/${encodeURIComponent(id)}`), {
@@ -31,10 +31,10 @@ export async function GET(req: NextRequest) {
       output?: { output_path?: string }
     }
     if (!r.ok) {
-      return NextResponse.json({ error: data.error ?? 'Job не найден (возможно, сервис был перезапущен)' }, { status: 404 })
+      return NextResponse.json({ error: data.error ?? 'Job not found (the service may have been restarted)' }, { status: 404 })
     }
     const outPath = data.output?.output_path
-    // (правка 94) Результат готов — обеспечиваем сайдкар метаданных.
+    // (fix 94) Result is ready — ensure metadata sidecar.
     if (data.status === 'done' && outPath) {
       const sourceHint = (data.output as Record<string, unknown>)?.input ?? (data.output as Record<string, unknown>)?.input_path
       void ensureUpscaleMeta(outPath, id, sourceHint).catch(() => {})
@@ -53,14 +53,14 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json(payload)
   } catch {
-    // Bridge не отвечает — сервис мог умереть во время рендера.
+    // Bridge is not responding — service might have died during render.
     let hint = ''
     try {
       const h = await fetchUpscaleHealth(1500)
       if (!h.ready && h.error) hint = ` (${h.error})`
     } catch {
-      hint = ' (Upscale-сервис не отвечает)'
+      hint = ' (Upscale service is not responding)'
     }
-    return NextResponse.json({ error: `Не удалось получить статус job${hint}` }, { status: 503 })
+    return NextResponse.json({ error: `Failed to get job status${hint}` }, { status: 503 })
   }
 }

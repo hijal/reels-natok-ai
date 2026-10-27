@@ -1,23 +1,23 @@
 @echo off
-REM (правка 587) chcp 65001 УДАЛЁН: cmd.exe под кодовой страницей 65001
-REM неверно отслеживает позицию чтения батника с многобайтовыми UTF-8
-REM символами (кириллица в комментариях) — после 8-килобайтного блока
-REM парсер «спотыкался» в середине слова, выполнял огрызок комментария
-REM как команду и молча пропускал строки ниже (в т.ч. запуск Electron).
-REM Кириллица остаётся только в REM-строках — без 65001 парсер ходит по
-REM байтам корректно; echo-строки переведены в ASCII (cp866-консоль).
+REM (fix 587) chcp 65001 REMOVED: cmd.exe under code page 65001
+REM improperly tracks read positions in batch files with multibyte UTF-8
+REM characters (Cyrillic in comments) — after an 8KB block
+REM the parser stumbled in the middle of words, executed comment fragments
+REM as commands and silently skipped lines below (including launching Electron).
+REM Comments are kept in plain ASCII — without 65001 the parser handles
+REM bytes correctly; echo strings are translated to ASCII.
 setlocal EnableExtensions
 
-REM (правка 570) Скрытый запуск: вместо свёрнутого окна — полностью скрытая
-REM консоль. VBS-скрипт запускает bat через WshShell.Run с HideWindow=0
-REM (скрытое окно), и при закрытии Electron-окна Electron сам убивает
-REM родительский cmd-процесс (taskkill по PID родителя из main.js).
-REM Аргумент :hidden — защита от бесконечного цикла (VBS уже запустил нас).
+REM (fix 570) Hidden launch: instead of a minimized window — fully hidden
+REM console. The VBS script launches the bat via WshShell.Run with HideWindow=0
+REM (hidden window), and on closing the Electron window, Electron itself kills
+REM the parent cmd process (taskkill by parent PID from main.js).
+REM The :hidden argument prevents infinite loops (VBS already launched us).
 if /i "%~1"==":hidden" goto main
 
-REM Если VBS-скрипт доступен — запускаем через него (полностью скрытое окно).
-REM Если cscript/VBS заблокированы антивирусом или политикой — не выходим
-REM молча, а откатываемся на свёрнутое консольное окно.
+REM If the VBS script is available — launch through it (fully hidden window).
+REM If cscript/VBS are blocked by antivirus or policy — do not exit
+REM silently, fall back to a minimized console window.
 if exist "%~dp0start_hidden.vbs" (
     where cscript >nul 2>&1
     if not errorlevel 1 (
@@ -29,22 +29,22 @@ if exist "%~dp0start_hidden.vbs" (
     )
 )
 
-REM Fallback: VBS нет или он заблокирован — свёрнутое окно (старое поведение)
+REM Fallback: VBS missing or blocked — minimized window (legacy behavior)
 start "" /min "%~f0" :hidden
 exit /b
 
 :main
 title MiniMax H3 Studio
 cd /d "%~dp0"
-REM (правка 587) Скрытый режим: pause/set /p невозможны (окно скрыто) —
-REM ошибки пишутся в start_error.log, интерактивные вопросы получают
-REM безопасный ответ по умолчанию.
+REM (fix 587) Hidden mode: pause/set /p are not possible (window is hidden) —
+REM errors are logged to start_error.log, interactive prompts receive
+REM safe default answers.
 set "HIDDEN="
 if /i "%~1"==":hidden" set "HIDDEN=1"
 
 set PORT=3000
 set COMFY_PORT=8188
-REM Приоритет: [comfy] comfy_dir → COMFY_ROOT из окружения → bundled-путь.
+REM Priority: [comfy] comfy_dir -> COMFY_ROOT from environment -> bundled path.
 set "COMFY_ROOT_CONFIG="
 if exist config\config.ini (
     for /f "tokens=1,* delims==" %%a in ('findstr /i /b /c:"comfy_dir" config\config.ini 2^>nul') do if not defined COMFY_ROOT_CONFIG set "COMFY_ROOT_CONFIG=%%b"
@@ -88,19 +88,19 @@ echo  [OK] Node.js %NODE_VER%
 REM ============================================================
 REM  [CHECK 2/5] ComfyUI folder
 REM ============================================================
-REM (правка 551) Проверка через goto, а не блок ( ... ): set /p и чтение
-REM %CONTINUE% внутри ОДНОГО блока не работают — переменная разворачивалась
-REM при ПАРСИНГЕ блока (до ввода ответа), всегда была пуста, а метка :web_ui,
-REM на которую шёл goto, вообще не существовала. Fallback «frontend only»
-REM был мёртв — при отсутствии папки ComfyUI скрипт всегда просто выходил.
+REM (fix 551) Check via goto rather than ( ... ) block: set /p and reading
+REM %CONTINUE% inside ONE block do not work — variable was expanded
+REM during block PARSING (before input), was always empty, and :web_ui
+REM label did not exist at all. Fallback "frontend only"
+REM was broken — if ComfyUI folder was missing script simply exited.
 if exist "%COMFY_ROOT%\python_embeded\python.exe" goto comfy_ok
 echo.
 echo  [WARN] ComfyUI not found at: %COMFY_ROOT%
 echo         Expected folder: %~dp0%COMFY_ROOT%\python_embeded\python.exe
 echo         Place the ComfyUI-Easy-Install folder next to this project.
 echo.
-REM (правка 587) Скрытое окно не может спросить пользователя — по умолчанию Y
-REM (frontend-only), причина пишется в start_error.log.
+REM (fix 587) Hidden window cannot prompt user — default to Y
+REM (frontend-only), reason is written to start_error.log.
 if defined HIDDEN (
     echo [%date% %time%] WARN: ComfyUI not found at %COMFY_ROOT% - frontend-only mode, hidden>> "%~dp0start_error.log"
     set "CONTINUE=Y"
@@ -111,7 +111,7 @@ if /i "%CONTINUE%"=="Y" goto frontend_only
 call :pause_or_log "[ERROR] ComfyUI not found, user declined frontend-only start"
 exit /b 0
 :frontend_only
-REM (правка 551) Frontend-only: Web UI поднимем, ComfyUI-бэкенд — нет.
+REM (fix 551) Frontend-only: Start Web UI, but not ComfyUI backend.
 set "FRONTEND_ONLY=1"
 echo  [WARN] Frontend-only mode: generation will not work without ComfyUI.
 goto comfy_check_done
@@ -173,12 +173,12 @@ if exist ".next\BUILD_ID" (
 )
 
 REM ============================================================
-REM  (правка 561) DESKTOP MODE — окно приложения (Electron)
-REM  Electron сам: убьёт висшие порты, поднимет server.js (на своём
-REM  Node) и ComfyUI (с флагами VRAM из config.ini), откроет окно на
-REM  /splash и прибьёт оба дерева при закрытии окна. Консоль остаётся
-REM  свёрнутым лог-хостом; выход из окна завершит и её.
-REM  Нет Electron (node_modules не полный) — прежний браузерный режим.
+REM  (fix 561) DESKTOP MODE — application window (Electron)
+REM  Electron handles: killing stale ports, starting server.js (on its
+REM  own Node) and ComfyUI (with VRAM flags from config.ini), opening
+REM  window at /splash, and killing both process trees on window close.
+REM  Console remains as a minimized log host; closing window terminates it too.
+REM  No Electron (incomplete node_modules) — falls back to browser mode.
 REM ============================================================
 if exist "node_modules\electron\dist\electron.exe" goto desktop_mode
 REM Electron 44+ downloads its binary lazily on first require('electron'),
@@ -189,20 +189,19 @@ goto web_mode
 
 :desktop_mode
 echo.
-REM (правка 586) Авто-очистка осиротевших процессов по пути проекта УДАЛЕНА:
-REM она могла зацепить чужие процессы (включая Bionic/LM Studio), если их
-REM командная строка случайно содержала путь проекта. Оставляем только
-REM killPortListeners(3000/8188) внутри electron/main.js.
+REM (fix 586) Auto-cleanup of orphaned processes by project path REMOVED:
+REM it could affect unrelated processes (including Bionic/LM Studio) if their
+REM command line happened to contain the project path. We only keep
+REM killPortListeners(3000/8188) inside electron/main.js.
 echo  Starting desktop app (Electron window)...
 echo  Close the app window to stop everything (web server + ComfyUI).
 echo.
 
-REM (релиз) Имя процесса в диспетчере задач. Штатный electron.exe в списке
-REM процессов неотличим от любого другого Electron-приложения — пользователю
-REM нечем понять, какой процесс прибивать. prepare-electron создаёт рядом
-REM копию MinimaxH3Studio.exe (с правильными свойствами файла), и её мы и
-REM запускаем. Если копии нет — работает обычный electron.exe, приложение
-REM запускается как раньше.
+REM (release) Process name in Task Manager. Standard electron.exe in process
+REM list is indistinguishable from other Electron apps — user cannot tell
+REM which process to terminate. prepare-electron creates a copy alongside it
+REM named MinimaxH3Studio.exe (with proper file properties), and that is what
+REM we run. If no copy exists — regular electron.exe runs as before.
 if exist "node_modules\electron\dist\MinimaxH3Studio.exe" goto desktop_mode_named
 "%NODE_CMD%" scripts\prepare-electron.mjs
 if exist "node_modules\electron\dist\MinimaxH3Studio.exe" goto desktop_mode_named
@@ -215,8 +214,8 @@ goto desktop_mode_launch
 
 :desktop_mode_launch
 
-REM (правка 582) Пред-проверка синтаксиса main.js: раньше SyntaxError мог
-REM уйти в скрытое окно и start.bat молча выходил, не показав причину.
+REM (fix 582) Pre-check syntax of main.js: previously SyntaxError could
+REM occur in hidden window and start.bat silently exited without showing reason.
 "%NODE_CMD%" --check electron\main.js
 if errorlevel 1 (
     echo.
@@ -226,10 +225,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM (релиз) launch-electron.mjs — то же, что делал cli.js (проксирует stdio
-REM electron.exe, чтобы логи сервера/ComfyUI шли в эту консоль), но для
-REM переименованной копии MinimaxH3Studio.exe. Если копии нет — откат на
-REM штатный electron/cli.js.
+REM (release) launch-electron.mjs — same as cli.js (proxies electron.exe
+REM stdio so server/ComfyUI logs appear in this console), but for renamed
+REM MinimaxH3Studio.exe copy. If copy doesn't exist — fallback to standard
+REM electron/cli.js.
 if exist "node_modules\electron\dist\MinimaxH3Studio.exe" goto launch_named
 "%NODE_CMD%" node_modules\electron\cli.js electron\main.js
 goto launch_done
@@ -245,20 +244,20 @@ echo  Desktop app closed (code %EL_EXIT%). Closing...
 exit /b %EL_EXIT%
 
 REM ============================================================
-REM  (правка 561) LEGACY: браузерный режим — фолбэк без Electron
+REM  (fix 561) LEGACY: browser mode — fallback without Electron
 REM ============================================================
 :web_mode
 
 REM ============================================================
-REM  [ правка 97] Start Web UI FIRST — браузер с экраном-заставкой
-REM  открывается сразу, не дожидаясь загрузки ComfyUI (30-90 с).
-REM  Заставка (/splash) сама опрашивает /api/comfy/health и переходит
-REM  в приложение, когда бэкенд готов.
+REM  [fix 97] Start Web UI FIRST — browser with splash screen
+REM  opens immediately without waiting for ComfyUI load (30-90s).
+REM  Splash screen (/splash) polls /api/comfy/health and transitions
+REM  into application when backend is ready.
 REM ============================================================
 echo.
 echo  Starting web UI...
 
-REM Kill any existing process on web port (только LISTENING — см. выше)
+REM Kill any existing process on web port (LISTENING only — see above)
 for /f "tokens=5" %%p in ('netstat -aon ^| findstr /C:":%PORT% " ^| findstr /C:"LISTENING" 2^>nul') do (
     taskkill /F /PID %%p >nul 2>&1
 )
@@ -266,10 +265,10 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr /C:":%PORT% " ^| findstr /C:"
 
 set NODE_ENV=production
 
-REM Веб-сервер — в фоне: он нужен ПРЯМО СЕЙЧАС, чтобы отдать заставку.
+REM Web server in background: needed RIGHT NOW to serve splash screen.
 start /b "" "%NODE_CMD%" server.js
 
-REM Ждём, пока веб-сервер начнёт отвечать (обычно 1-3 с)
+REM Wait for web server to respond (typically 1-3s)
 echo       Starting web server...
 set /a wt=0
 :wait_web
@@ -297,17 +296,17 @@ echo.
 echo  Opening browser (splash screen)...
 echo.
 
-REM (правка 128) Открываем браузер поверх всех окон (не в фоне).
-REM explorer.exe — простой вариант, но Windows foreground-lock может не дать
-REM взять фокус. (правка 129b) Надёжный способ — PowerShell + SetForegroundWindow.
+REM (fix 128) Open browser on top of all windows (not in background).
+REM explorer.exe is simple, but Windows foreground-lock may prevent focus.
+REM (fix 129b) Reliable approach — PowerShell + SetForegroundWindow.
 call :open_browser_foreground http://localhost:%PORT%/splash
 
 REM ============================================================
 REM  Start ComfyUI backend
 REM ============================================================
-REM (правка 551) Frontend-only (папки ComfyUI нет, пользователь ответил Y):
-REM бэкенд не поднимаем — сразу к keepalive (Web UI уже работает, заставка
-REM честно ждёт /api/comfy/health).
+REM (fix 551) Frontend-only (no ComfyUI folder, user answered Y):
+REM Do not start backend — jump directly to keepalive (Web UI already running,
+REM splash screen properly polls /api/comfy/health).
 if defined FRONTEND_ONLY (
     echo  [WARN] Frontend-only mode: ComfyUI backend NOT started.
     goto keepalive
@@ -316,24 +315,24 @@ echo.
 echo  Starting ComfyUI backend...
 
 REM Kill any existing process on ComfyUI port
-REM ВАЖНО: два findstr /C: подряд. Одиночный findstr ":port .*LISTENING"
-REM в литеральном режиме делит шаблон по пробелам на ИЛИ-альтернативы и
-REM матчит ЛЮБУЮ строку с ":port" (включая ESTABLISHED-соединения браузера
-REM и node) — taskkill /F убивал бы весь браузер пользователя.
+REM IMPORTANT: two findstr /C: sequentially. Single findstr ":port .*LISTENING"
+REM in literal mode splits pattern on spaces into OR-alternatives and
+REM matches ANY line with ":port" (including ESTABLISHED browser and node connections)
+REM — taskkill /F would terminate user's entire browser.
 for /f "tokens=5" %%p in ('netstat -aon ^| findstr /C:":%COMFY_PORT% " ^| findstr /C:"LISTENING" 2^>nul') do (
     taskkill /F /PID %%p >nul 2>&1
 )
 %SystemRoot%\System32\timeout.exe /t 2 /nobreak >nul
 
-REM Start ComfyUI in background (правка 140) — запускаем python.exe напрямую
-REM (правка 551) Чтение настроек из config\config.ini — СНАЧАЛА парсинг
-REM (переменные ПУСТЫЕ), ПОТОМ дефолты. Раньше дефолты выставлялись ДО
-REM парсинга, guard «if not defined» всегда был ложен и всё, что пользователь
-REM менял в «Настройках» (reserve_gb, vram_headroom, async_offload), молча
-REM игнорировалось — ComfyUI всегда стартовал с захардкоженными дефолтами.
-REM Паттерн и валидация — как в scripts\start_comfy.bat (правки 357/490):
-REM findstr /b /c: матчит только строки, НАЧИНАЮЩИЕСЯ с ключа (не комментарии),
-REM первый матч выигрывает, мусорные значения → безопасный дефолт.
+REM Start ComfyUI in background (fix 140) — launch python.exe directly
+REM (fix 551) Read settings from config\config.ini — FIRST parse
+REM (variables are EMPTY), THEN set defaults. Previously defaults were set
+REM BEFORE parsing, so the guard "if not defined" was always false and whatever
+REM the user configured in "Settings" (reserve_gb, vram_headroom, async_offload)
+REM was silently ignored — ComfyUI always started with hardcoded defaults.
+REM Pattern and validation matches scripts\start_comfy.bat (fixes 357/490):
+REM findstr /b /c: matches only lines STARTING with key (not comments),
+REM first match wins, invalid values -> safe default.
 set "RESERVE_VRAM="
 set "DYNAMIC_VRAM="
 set "ASYNC_OFFLOAD="
@@ -342,7 +341,7 @@ if exist config\config.ini (
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"reserve_gb" config\config.ini 2^>nul') do if not defined RESERVE_VRAM set "RESERVE_VRAM=%%a"
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"dynamic_vram" config\config.ini 2^>nul') do if not defined DYNAMIC_VRAM set "DYNAMIC_VRAM=%%a"
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"async_offload" config\config.ini 2^>nul') do if not defined ASYNC_OFFLOAD set "ASYNC_OFFLOAD=%%a"
-    REM (правка 521) vram_headroom — доп. запас свободной VRAM для DynamicVRAM
+    REM (fix 521) vram_headroom — extra margin of free VRAM for DynamicVRAM
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"vram_headroom" config\config.ini 2^>nul') do if not defined VRAM_HEADROOM set "VRAM_HEADROOM=%%a"
 )
 if not defined RESERVE_VRAM set "RESERVE_VRAM=3"
@@ -359,20 +358,20 @@ echo %ASYNC_OFFLOAD%| findstr /r "^[01]$" >nul || set "ASYNC_OFFLOAD=0"
 echo %VRAM_HEADROOM%| findstr /r "^[0-9][0-9.]*$" >nul || set "VRAM_HEADROOM=2"
 set "EXTRA_FLAGS="
 if not "%ASYNC_OFFLOAD%"=="1" set "EXTRA_FLAGS=--disable-async-offload --disable-pinned-memory"
-REM (правка 521) --vram-headroom: DynamicVRAM (aimdo) непрерывно держит
-REM столько ГБ реально свободными (по NVML, включая чужие приложения).
-REM 0 = флаг не передаём (поведение как раньше).
+REM (fix 521) --vram-headroom: DynamicVRAM (aimdo) continuously keeps
+REM this many GB genuinely free (via NVML, including third-party apps).
+REM 0 = flag not passed (legacy behavior).
 set "HEADROOM_FLAG="
 if not "%VRAM_HEADROOM%"=="0" set "HEADROOM_FLAG=--vram-headroom %VRAM_HEADROOM%"
-REM (правка 551) dynamic_vram=0 → --disable-dynamic-vram (как в start_comfy.bat;
-REM раньше этот флаг из start.bat не передавался вовсе).
+REM (fix 551) dynamic_vram=0 -> --disable-dynamic-vram (as in start_comfy.bat;
+REM previously this flag was never passed from start.bat).
 set "DYN_FLAG="
 if "%DYNAMIC_VRAM%"=="0" set "DYN_FLAG=--disable-dynamic-vram"
 
-REM Запускаем ComfyUI напрямую
+REM Launch ComfyUI directly
 start /b "" "%COMFY_ROOT%\python_embeded\python.exe" -I "%COMFY_ROOT%\ComfyUI\main.py" --windows-standalone-build --use-ck-attention --disable-auto-launch --reserve-vram %RESERVE_VRAM% %DYN_FLAG% %EXTRA_FLAGS% %HEADROOM_FLAG%
 
-REM Wait for ComfyUI to be ready (заставка в браузере покажет это сама)
+REM Wait for ComfyUI to be ready (browser splash screen will track this)
 echo       Waiting for ComfyUI (first start can take 30-90s)...
 set /a tries=0
 :wait_comfy
@@ -393,8 +392,8 @@ goto wait_comfy
 echo  [OK] ComfyUI is ready. Browser will enter the studio automatically.
 
 REM ============================================================
-REM  Keepalive: консоль держит фоновые процессы (веб + ComfyUI).
-REM  Закрытие окна = остановка всего (как и раньше).
+REM  Keepalive: console retains background processes (web + ComfyUI).
+REM  Closing window = stops everything (as before).
 REM ============================================================
 :keepalive
 echo.
@@ -405,29 +404,29 @@ echo.
 goto keepalive_loop
 
 REM ============================================================
-REM (правка 129b) Субрутина: открыть URL в браузере ПОВЕРХ всех окон.
+REM (fix 129b) Subroutine: open URL in browser ON TOP of all windows.
 REM
-REM Windows foreground-lock не даёт скрипту напрямую взять фокус.
-REM Рабочий обход: Start-Process открывает браузер, а через 500 мс
-REM PowerShell через Win32 P/Invoke SetForegroundWindow принудительно
-REM поднимает окно браузера на первый план (это работает, т.к. вызов
-REM идёт из процесса, запущенного через Start-Process — у него есть
-REM разрешение на SetForegroundWindow).
+REM Windows foreground-lock prevents scripts from directly seizing focus.
+REM Working workaround: Start-Process launches the browser, then 500ms later
+REM PowerShell via Win32 P/Invoke SetForegroundWindow forcibly brings
+REM browser window to foreground (this works because call originates
+REM from process launched via Start-Process — which has permission
+REM for SetForegroundWindow).
 REM ============================================================
 :open_browser_foreground
 setlocal
 set "_URL=%~1"
 
-REM 1) Открываем URL в браузере по умолчанию (Start-Process даёт новый
-REM    процесс, у которого Windows разрешает SetForegroundWindow).
+REM 1) Open URL in default browser (Start-Process yields a new
+REM    process which Windows permits SetForegroundWindow).
 powershell -NoProfile -Command "Start-Process -FilePath '%_URL%'" >nul 2>&1
 
-REM 2) Через 500 мс принудительно поднимаем окно браузера на передний план.
-REM    (Если браузер ещё не создал окно — SetForegroundWindow молча
-REM    пройдёт мимо; если окно уже есть — оно возьмёт фокус.)
-REM (правка 130) Убрали `^`-продолжения: cmd их убирает, но PowerShell
-REM    видит как аргумент → Add-Type падал с "positional parameter '")".
-REM    Теперь одна строка, без продолжений.
+REM 2) After 500ms forcibly bring browser window to front.
+REM    (If browser hasn't created window yet — SetForegroundWindow safely
+REM    no-ops; if window exists — it takes focus.)
+REM (fix 130) Removed `^` line continuations: cmd strips them, but PowerShell
+REM    sees them as arguments -> Add-Type failed with "positional parameter '")".
+REM    Now a single line without continuations.
 %SystemRoot%\System32\timeout.exe /t 1 /nobreak >nul
 powershell -NoProfile -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class FG { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int n); [DllImport(\"user32.dll\")] public static extern bool IsZoomed(IntPtr hWnd); public static void BringToFront() { IntPtr fg = GetForegroundWindow(); if (fg != IntPtr.Zero) { if (!IsZoomed(fg)) { ShowWindow(fg, 3); } SetForegroundWindow(fg); } } }' ; [FG]::BringToFront()" >nul 2>&1
 
@@ -435,12 +434,12 @@ endlocal
 goto :eof
 
 REM ============================================================
-REM (правка 587) Субрутина для аварийных путей: в видимом окне — pause
-REM (как раньше), в скрытом (запуск через start_hidden.vbs) — пауза
-REM невозможна (нет UI, ввода нет) и висела бы вечно. Вместо этого
-REM сообщение дописывается в start_error.log рядом со start.bat.
-REM Реализация через goto (НЕ через блоки в скобках): сообщения могут
-REM содержать скобки, которые внутри ( ... ) прервали бы блок.
+REM (fix 587) Subroutine for emergency paths: in visible window — pause
+REM (as before), in hidden window (launched via start_hidden.vbs) — pause
+REM is impossible (no UI, no input) and would hang forever. Instead
+REM message is appended to start_error.log next to start.bat.
+REM Implemented via goto (NOT via parenthesized blocks): messages might
+REM contain parentheses which inside ( ... ) would break the block.
 REM ============================================================
 :pause_or_log
 if defined HIDDEN goto :plog_hidden

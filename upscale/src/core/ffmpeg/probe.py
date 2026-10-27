@@ -41,11 +41,11 @@ def _run_json(
             size = errors.seek(0, os.SEEK_END)
             errors.seek(max(0, size - 8000))
             details = errors.read().decode("utf-8", "replace").strip()
-            # (правка 716) strict_decode отменял рендер при ЛЮБОМ байте в
-            # stderr, даже когда ffprobe завершился с кодом 0 и корректно
-            # посчитал кадры (ffprobe часто пишет нефатальные per-frame
-            # предупреждения). Теперь ошибкой считаем ТОЛЬКО ненулевой код
-            # возврата; stderr при успешном выходе — информационный.
+            # (fix 716) strict_decode cancelled render on ANY byte in
+            # stderr, even when ffprobe finished with code 0 and correctly
+            # counted frames (ffprobe often outputs non-fatal per-frame
+            # warnings). Now we consider ONLY non-zero exit codes as errors;
+            # stderr on a successful exit is treated as informational.
             if process.returncode:
                 if strict_decode and size:
                     raise RuntimeError("Source decoding failed during frame-count verification:\n" + details)
@@ -73,7 +73,7 @@ def _positive_count(value: object) -> int:
 
 
 def _as_int(value: object, default: int = 0) -> int:
-    """(правка 716) Безопасное целое из значения ffprobe ("90.0", "N/A", None)."""
+    """(fix 716) Safe integer from ffprobe value ("90.0", "N/A", None)."""
     try:
         if value is None:
             return default
@@ -87,7 +87,7 @@ def _as_int(value: object, default: int = 0) -> int:
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
-    """(правка 716) Безопасное число из значения ffprobe."""
+    """(fix 716) Safe float from ffprobe value."""
     try:
         if value is None:
             return default
@@ -142,10 +142,10 @@ def probe_video(
     if not streams:
         raise ValueError("The selected file contains no decodable video stream.")
     stream = streams[0]
-    # (правка 716) Значения из ffprobe — ВНЕШНИЕ данные: они могут быть
-    # "N/A", "90.0" или отсутствовать. Раньше int(...)/float(...) падали с
-    # ValueError/KeyError прямо в probe — на пути, который выполняется перед
-    # КАЖДЫМ рендером. Теперь нечитаемое значение → безопасный дефолт.
+    # (fix 716) Values from ffprobe are EXTERNAL data: they can be
+    # "N/A", "90.0" or missing. Previously int(...)/float(...) failed with
+    # ValueError/KeyError directly in probe — on a path executed before
+    # EVERY render. Now an unreadable value yields a safe default.
     rotation = _as_int((stream.get("tags") or {}).get("rotate"), 0)
     for side in stream.get("side_data_list") or []:
         if "rotation" in side:
@@ -175,9 +175,9 @@ def probe_video(
     rate_text = average_rate_text if average_rate_text != "0/0" else nominal_rate_text
     if rate_text == "0/0":
         rate_text = "30/1"
-    # (правка 716) Fraction() бросает ValueError на мусорной строке вида
-    # "N/A" или "25/0" — probe идёт перед каждым рендером, поэтому читаем
-    # некорректную частоту как 30 fps, а не роняем рендер.
+    # (fix 716) Fraction() raises ValueError on malformed strings like
+    # "N/A" or "25/0" — probe runs before each render, so treat
+    # an invalid frame rate as 30 fps rather than crashing the render.
     try:
         rate = Fraction(rate_text)
         if rate <= 0:

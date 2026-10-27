@@ -4,12 +4,12 @@ import path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { writeMetaSidecar } from '@/lib/pending-meta'
-import { probeVideoFile } from '@/lib/video-probe' // (правка 722) — фактическая геометрия обрезки
+import { probeVideoFile } from '@/lib/video-probe' // (fix 722) — actual trim geometry
 import { resolveFfmpeg } from '@/lib/thumb'
 import { ffmpegVideoArgs } from '@/lib/video-format'
-import { getVideoFormatSettings } from '@/lib/video-format-server' // (правка 386)
+import { getVideoFormatSettings } from '@/lib/video-format-server' // (fix 386)
 
 const execFileAsync = promisify(execFile)
 
@@ -17,15 +17,15 @@ const execFileAsync = promisify(execFile)
  * POST /api/comfy/trim
  *
  * Body: { filename: string, subfolder?: string, start: number, end: number }
- *   - filename: имя файла в output/ (или subfolder/output/)
- *   - subfolder: подпапка в output/ (пусто для корня)
- *   - start: секунд с начала (>= 0)
- *   - end: секунд до конца (<= duration)
+ *   - filename: file name in output/ (or subfolder/output/)
+ *   - subfolder: subfolder in output/ (empty for root)
+ *   - start: seconds from start (>= 0)
+ *   - end: seconds until end (<= duration)
  *
- * Результат: новый файл `<base>_trim_<start>-<end>.mp4` в той же папке.
- * Ответ: { filename, subfolder, url, duration }
- * (правка 307) Результату пишется .meta.json сайдкар: наследуется сайдкар
- * исходника целиком + workflow:'trim', source_video, trim_start/end/duration.
+ * Result: new file `<base>_trim_<start>-<end>.mp4` in the same folder.
+ * Response: { filename, subfolder, url, duration }
+ * (fix 307) Result gets a .meta.json sidecar: inherits sidecar
+ * of source in full + workflow:'trim', source_video, trim_start/end/duration.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
     if (!filename || typeof start !== 'number' || typeof end !== 'number') {
       return NextResponse.json({ error: 'filename, start, end are required' }, { status: 400 })
     }
-    // (правка 357) NaN/Infinity проходили typeof-проверку и уходили в
-    // ffmpeg-аргументы/имя файла → 500 вместо понятного 400.
+    // (fix 357) NaN/Infinity passed typeof check and went into
+    // ffmpeg arguments / file name → 500 instead of clear 400.
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       return NextResponse.json({ error: 'start/end must be finite numbers' }, { status: 400 })
     }
@@ -52,18 +52,18 @@ export async function POST(req: NextRequest) {
     const { outputDir } = getAppConfig()
 
     // Resolve source path
-    // (правка 495) subfolder — многоуровневый относительный путь ('a/b').
+    // (fix 495) subfolder is a multi-level relative path ('a/b').
     const safeName = path.basename(filename)
     const safeSub = subfolder ? sanitizeFolderPath(subfolder) : ''
     const sourcePath = path.join(outputDir, safeSub, safeName)
 
-    // (правка 587) Отсутствующий исходник — 404, а не 500: файл могли
-    // удалить из галереи прямо перед обрезкой (обычная гонка клиента).
+    // (fix 587) Missing source is 404, not 500: file could have been
+    // deleted from the gallery right before trimming (normal client race).
     try {
       await fs.access(sourcePath)
     } catch {
       return NextResponse.json(
-        { error: `Файл не найден: ${safeSub ? safeSub + '/' : ''}${safeName}` },
+        { error: `File not found: ${safeSub ? safeSub + '/' : ''}${safeName}` },
         { status: 404 },
       )
     }
@@ -97,8 +97,8 @@ export async function POST(req: NextRequest) {
 
     const duration = end - start
 
-    // (правка 306) Re-encode trim: -c copy даёт застывший кадр (нет I-frame на точке разреза).
-    // Re-encode с veryfast — для 20s видео ~1 сек, результат корректный и играется сразу.
+    // (fix 306) Re-encode trim: -c copy gives a frozen frame (no I-frame at split point).
+    // Re-encode with veryfast takes ~1 sec for a 20s video, result is valid and plays immediately.
     await execFileAsync(
       bin,
       [
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         '-ss', String(start),
         '-i', sourcePath,
         '-t', String(duration),
-        // (правка 386) кодек/качество — из [video] настроек студии
+        // (fix 386) codec/quality from studio [video] settings
         '-preset', 'veryfast', ...ffmpegVideoArgs(getVideoFormatSettings()),
         '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart',
@@ -122,16 +122,16 @@ export async function POST(req: NextRequest) {
 
     const finalName = path.basename(finalOutPath)
 
-    // (правка 307) Сайдкар результата: наследуем сайдкар исходника ЦЕЛИКОМ
-    // (промпт/цепочка, references, seed и пр.) и добавляем служебные поля
-    // обрезки. Нет сайдкара у исходника — пишем минимальный (сам факт trim).
+    // (fix 307) Result sidecar: inherit source sidecar ENTIRELY
+    // (prompt/chain, references, seed, etc.) and add trim service fields.
+    // No source sidecar — write minimal one (the trim fact itself).
     //
-    // (правка 722) Геометрия — ФАКТИЧЕСКАЯ, а не унаследованная. Раньше
-    // обрезанный файл сохранял video_length/duration_seconds исходника
-    // (107 кадров вместо, скажем, 48) → метаданные врали о самом файле, а
-    // lossless-резолвер латента (resolveSourceLatent) сверял мету с пробой
-    // mp4 и получал расхождение. Теперь: probe обрезанного файла → точные
-    // кадры/длительность/разрешение.
+    // (fix 722) Geometry is ACTUAL, not inherited. Previously
+    // the trimmed file kept source's video_length/duration_seconds
+    // (107 frames instead of, say, 48) → metadata lied about the file itself, and
+    // lossless latent resolver (resolveSourceLatent) checked meta against probe
+    // of mp4 and hit a mismatch. Now: probe of trimmed file → exact
+    // frames/duration/resolution.
     try {
       const outputRoot = path.resolve(outputDir)
       const srcMetaFile = path.resolve(path.join(outputDir, safeSub, safeName + '.meta.json'))
@@ -139,10 +139,10 @@ export async function POST(req: NextRequest) {
       if (srcMetaFile.startsWith(outputRoot + path.sep)) {
         try {
           srcMeta = JSON.parse(await fs.readFile(srcMetaFile, 'utf-8')) as Record<string, unknown>
-        } catch { /* битый сайдкар — пишем минимальный */ }
+        } catch { /* corrupted sidecar — write minimal */ }
       }
 
-      // Фактическая геометрия обрезанного файла.
+      // Actual geometry of trimmed file.
       let probed: Record<string, unknown> = {}
       try {
         const pr = await probeVideoFile(finalOutPath)
@@ -154,18 +154,18 @@ export async function POST(req: NextRequest) {
             fps: pr.fps ?? 24,
           }
         }
-      } catch { /* проба не критична — остаются унаследованные поля */ }
+      } catch { /* probe is non-critical — inherited fields remain */ }
 
-      // Латент исходника к обрезанному файлу НЕ относится: он описывает
-      // полную длину и канву исходника. Оставлять его в сайдкаре — ложь
-      // (и лишний путь, по которому lossless-рефайн попытается пойти).
+      // Source latent does NOT apply to the trimmed file: it describes
+      // the full length and canvas of the source. Leaving it in the sidecar is inaccurate
+      // (and an extra branch where lossless refine would try to go).
       const { latent_file: _dropLatent, ...srcMetaNoLatent } = srcMeta
 
       writeMetaSidecar(finalName, safeSub, {
         ...srcMetaNoLatent,
         workflow: 'trim',
-        // (правка 722) Метка «файл правили» — по ней галерея и любые
-        // потребители метаданных отличают обрезку от исходной генерации.
+        // (fix 722) "File edited" mark — allows gallery and any
+        // metadata consumers to distinguish trim from original generation.
         edited: true,
         source_video: { filename: safeName, subfolder: safeSub },
         trim_start: s,
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
         ...probed,
         job_id: `trim_${Date.now().toString(36)}`,
       })
-    } catch { /* сайдкар не критичен для самой обрезки */ }
+    } catch { /* sidecar is non-critical for trim itself */ }
 
     const url = `/api/comfy/file?filename=${encodeURIComponent(finalName)}&subfolder=${encodeURIComponent(safeSub)}&type=output`
 

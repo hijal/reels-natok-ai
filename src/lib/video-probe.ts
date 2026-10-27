@@ -1,5 +1,5 @@
 /**
- * video-probe — ffprobe обёртка + планировщик кусков для refine «Частями».
+ * video-probe — ffprobe wrapper + chunk planner for refine "In Parts".
  */
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -9,7 +9,7 @@ import { resolveFfmpeg } from '@/lib/thumb'
 
 const execFileAsync = promisify(execFile)
 
-/** ffprobe рядом с ffmpeg из resolveFfmpeg (runtime/ffmpeg — статическая пара). */
+/** ffprobe alongside ffmpeg from resolveFfmpeg (runtime/ffmpeg is a static pair). */
 export async function resolveFfprobe(): Promise<string> {
   const ffmpeg = await resolveFfmpeg()
   if (ffmpeg) {
@@ -24,7 +24,7 @@ export interface VideoProbe {
   height: number
   frames: number
   durationSec: number
-  /** (правка 268) fps из r_frame_rate (default 24). */
+  /** (fix 268) fps from r_frame_rate (default 24). */
   fps?: number
 }
 
@@ -52,7 +52,7 @@ export async function probeVideoFile(file: string): Promise<VideoProbe> {
   }
   const s = data.streams?.[0]
   if (!s?.width || !s?.height) {
-    throw new Error('ffprobe не смог определить размеры видео')
+    throw new Error('ffprobe failed to determine video dimensions')
   }
   let frames = parseInt(s.nb_frames ?? '', 10)
   if (!Number.isFinite(frames) || frames <= 0) {
@@ -61,8 +61,8 @@ export async function probeVideoFile(file: string): Promise<VideoProbe> {
     frames = Number.isFinite(dur) ? Math.round(dur * (fps || 24)) : 0
   }
   const durationSec = parseFloat(s.duration ?? '') || frames / 24
-  // (правка 268) fps из r_frame_rate — нужен вкладке FPS (VFI), чтобы
-  // вычислить целевой fps = исходный × multiplier. Default 24.
+  // (fix 268) fps from r_frame_rate — needed by the FPS tab (VFI) to
+  // compute target fps = source × multiplier. Default 24.
   let fps = 24
   if (s.r_frame_rate) {
     const [num, den] = s.r_frame_rate.split('/')
@@ -73,6 +73,6 @@ export async function probeVideoFile(file: string): Promise<VideoProbe> {
   return { width: s.width, height: s.height, frames, durationSec, fps: Math.max(1, Math.round(fps * 100) / 100) }
 }
 
-/* Планировщик кусков для refine «Частями» живёт в
- * src/lib/comfy/refine-template.ts (planChunkWindows) — здесь осталась
- * только обёртка над ffprobe. */
+/* Chunk planner for refine "In Parts" lives in
+ * src/lib/comfy/refine-template.ts (planChunkWindows) — only
+ * the ffprobe wrapper remains here. */

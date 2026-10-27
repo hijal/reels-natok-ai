@@ -1,8 +1,8 @@
-"""MiniMax Studio: обрезка аудио-референсов без создания копий файла.
+"""MiniMax Studio: audio reference trimming without duplicating files.
 
-LoadAudio возвращает AUDIO = {"waveform": tensor [batch, channels, samples],
-"sample_rate": int}. Нода просто срезает тензор по секундам — обрезанный
-фрагмент уходит в рефы модели, а исходный файл в input/ не трогается.
+LoadAudio returns AUDIO = {"waveform": tensor [batch, channels, samples],
+"sample_rate": int}. The node simply slices the tensor by seconds — the trimmed
+slice is sent to model references, leaving the original file in input/ untouched.
 """
 
 
@@ -13,7 +13,7 @@ class MiniMaxStudioAudioTrim:
             "required": {
                 "audio": ("AUDIO",),
                 "start_seconds": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 3600.0, "step": 0.01}),
-                # 0 = до конца файла
+                # 0 = until end of file
                 "end_seconds": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 3600.0, "step": 0.01}),
             }
         }
@@ -33,9 +33,9 @@ class MiniMaxStudioAudioTrim:
 
 
 class MiniMaxStudioAudioGain:
-    """(правка 694) Громкость аудио-референса: умножение волнового тензора на gain.
+    """(fix 694) Audio reference volume: scales the waveform tensor by gain factor.
 
-    Виртуально (как MiniMaxStudioAudioTrim) — без копий файла. gain=1.0 = без изменений.
+    Virtual (same as MiniMaxStudioAudioTrim) — no file copies. gain=1.0 = unchanged.
     """
 
     @classmethod

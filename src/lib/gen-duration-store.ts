@@ -30,8 +30,8 @@ export const useGenDurations = create<GenDurationState>()(
     (set) => ({
       entries: [],
       record: (durationMs, type, filename) => {
-        // (правка 716) Нечисловое значение отбрасываем: раньше NaN попадал в
-        // историю, и formatSeconds(NaN) давал «NaN сек» в бейдже.
+        // (fix 716) Discard non-numeric value: previously NaN got into
+        // history, and formatSeconds(NaN) gave "NaN sec" in the badge.
         if (durationMs === null || !Number.isFinite(durationMs)) return
         set((s) => ({
           entries: [...s.entries.slice(-199), { ts: Date.now(), durationMs, type, filename }],
@@ -43,20 +43,20 @@ export const useGenDurations = create<GenDurationState>()(
   ),
 )
 
-/** Format whole seconds into a human-readable string: "45 сек" / "2 мин 15 сек".
+/** Format whole seconds into a human-readable string: "45 sec" / "2 min 15 sec".
  *  Used for the generation-time badge when the value comes from the sidecar
  *  (field `generation_time`, already in seconds). */
 export function formatSeconds(totalSec: number): string {
-  // (правка 716) Нечисловые значения (NaN/Infinity) не должны попадать в UI.
+  // (fix 716) Non-numeric values (NaN/Infinity) must not reach the UI.
   if (!Number.isFinite(totalSec)) return '—'
   const s = Math.max(0, Math.round(totalSec))
-  if (s < 60) return `${s} сек`
+  if (s < 60) return `${s} sec`
   const min = Math.floor(s / 60)
   const sec = s % 60
-  return sec > 0 ? `${min} мин ${sec} сек` : `${min} мин`
+  return sec > 0 ? `${min} min ${sec} sec` : `${min} min`
 }
 
-/** Format milliseconds into a human-readable string like "45 сек" or "2 мин 15 сек". */
+/** Format milliseconds into a human-readable string like "45 sec" or "2 min 15 sec". */
 export function formatDuration(ms: number): string {
   return formatSeconds(ms / 1000)
 }

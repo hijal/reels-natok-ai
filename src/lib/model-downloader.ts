@@ -21,15 +21,15 @@ export interface DownloadState {
 const activeDownloads = new Map<string, DownloadState>()
 const abortControllers = new Map<string, AbortController>()
 
-/* (правка 136) Параллельное скачивание с ограничением.
+/* (fix 136) Parallel downloading with concurrency limit.
  *
- * Было: все модели скачивались одновременно (быстро, но диск и сеть
- * захлёбывались, риск обрывов рос).
- * Потом: по очереди (стабильно, но медленно).
- * Теперь: до MAX_CONCURRENT одновременных скачиваний (быстро + стабильно).
+ * Previously: all models were downloaded concurrently (fast, but disk and network
+ * choked, failure rate grew).
+ * Then: sequentially (stable, but slow).
+ * Now: up to MAX_CONCURRENT concurrent downloads (fast + stable).
  *
- * MAX_CONCURRENT = 3 — оптимум для большинства соединений и дисков.
- * Если сеть/диск слабые — можно уменьшить до 2, если мощные — до 5. */
+ * MAX_CONCURRENT = 3 — optimum for most connections and drives.
+ * If network/disk are slow — can be decreased to 2; if powerful — up to 5. */
 const MAX_CONCURRENT = 3
 let activeCount = 0
 let queue: Array<() => Promise<void>> = []
@@ -44,7 +44,7 @@ function enqueueDownload(run: () => Promise<void>): Promise<void> {
         reject(e)
       } finally {
         activeCount--
-        // Запускаем следующую задачу из очереди, если есть
+        // Start next task from queue, if any
         if (queue.length > 0 && activeCount < MAX_CONCURRENT) {
           const next = queue.shift()!
           activeCount++
@@ -65,25 +65,25 @@ function enqueueDownload(run: () => Promise<void>): Promise<void> {
 /** Resolve absolute path for a model file */
 function modelAbsPath(model: ModelDef): string {
   const cfg = getAppConfig()
-  // (правка 138) Bonsai-файлы живут в своей папке сборки (<bonsai_dir>),
-  // не в models ComfyUI. relPath у движка — каталог ('llama.cpp/').
+  // (fix 138) Bonsai files live in their own build folder (<bonsai_dir>),
+  // not in ComfyUI models. Engine's relPath is directory ('llama.cpp/').
   if (model.target === 'bonsai') {
     return join(cfg.llmBonsaiDir, model.relPath)
   }
-  // (правка 269) Кастомный корневой каталог — для моделей кастомных нод,
-  // которые ищут файлы НЕ в ComfyUI/models (например, VFI: ckpts/ в папке
-  // ComfyUI-Frame-Interpolation). baseDir может быть абсолютным или
-  // относительным от cwd (папка проекта).
+  // (fix 269) Custom root directory — for custom node models
+  // that look for files NOT in ComfyUI/models (e.g. VFI: ckpts/ in
+  // ComfyUI-Frame-Interpolation folder). baseDir can be absolute or
+  // relative to cwd (project directory).
   if (model.target === 'custom' && model.baseDir) {
-    // (правка 269) baseDir: абсолютный (E:\...) или относительный от
-    // comfyRoot (ComfyUI-Easy-Install/...) или от cwd (проект).
+    // (fix 269) baseDir: absolute (E:\...) or relative to
+    // comfyRoot (ComfyUI-Easy-Install/...) or to cwd (project).
     const isAbsolute = model.baseDir.startsWith('/')
       || model.baseDir.startsWith('\\')
       || /^[a-zA-Z]:[\\/]/.test(model.baseDir)
-    // (правка 507) Если папки нет ни там ни там (первое скачивание — нода
-    // ещё не создала свой ckpts), резолвим от comfyRoot, а НЕ от cwd:
-    // иначе качалка создавала лишнюю папку <проект>/ComfyUI/... рядом с
-    // настоящей ComfyUI-Easy-Install и клала модель туда.
+    // (fix 507) If directory exists in neither place (first download — node
+    // has not yet created its ckpts), resolve from comfyRoot, NOT from cwd:
+    // otherwise downloader created extra folder <project>/ComfyUI/... next to
+    // real ComfyUI-Easy-Install and placed model there.
     const base = isAbsolute
       ? model.baseDir
       : (existsSync(join(cfg.comfyRoot, model.baseDir))
@@ -96,7 +96,7 @@ function modelAbsPath(model: ModelDef): string {
   return join(cfg.comfyRoot, 'ComfyUI', 'models', model.relPath)
 }
 
-/** (правка 505) Проверка размера: файл близок к ожидаемому (±10%) */
+/** (fix 505) Size check: file is close to expected (±10%) */
 function sizeOk(abs: string, expected: number): boolean {
   try {
     const stat = statSync(abs)
@@ -112,20 +112,20 @@ export function modelExists(modelId: string): boolean {
   const model = MODELS.find(m => m.id === modelId)
   if (!model) return false
   try {
-    // (правка 138) zip-записи (движок Bonsai): «готово» = все нужные файлы
-    // извлечены; проверка размера zip здесь неприменима.
+    // (fix 138) zip entries (Bonsai engine): "ready" = all required files
+    // are extracted; zip size check is inapplicable here.
     if (model.extractFiles) {
       const dir = modelAbsPath(model)
       return model.extractFiles.every(f => existsSync(join(dir, f)))
     }
     const abs = modelAbsPath(model)
     if (existsSync(abs) && sizeOk(abs, model.sizeBytes)) return true
-    // (правка 505) Проверяем внешние папки моделей (extra paths) — если
-    // пользователь указал свою папку с моделями, файл может лежать там.
-    // relPath вида 'vae/xxx.safetensors' → категория='vae', файл='xxx.safetensors'.
-    // (релиз) Сохраняем ПОДПУТЬ внутри категории: у моделей с подпапкой
-    // ('llm/qwen3.5-9b/xxx.gguf') файл во внешней папке лежит как
-    // 'qwen3.5-9b/xxx.gguf' — искали только по имени файла и не находили.
+    // (fix 505) Check external model directories (extra paths) — if
+    // user specified custom models folder, file may be located there.
+    // relPath like 'vae/xxx.safetensors' → category='vae', file='xxx.safetensors'.
+    // Preserve SUBPATH inside category: for models with subfolder
+    // ('llm/qwen3.5-9b/xxx.gguf') file in external folder is stored as
+    // 'qwen3.5-9b/xxx.gguf' — searching by filename only failed to find it.
     const parts = model.relPath.split('/')
     if (parts.length >= 2) {
       const categoryDir = parts[0]
@@ -136,7 +136,7 @@ export function modelExists(modelId: string): boolean {
         .filter(e => e.category === categoryDir)
         .map(e => e.path)
       for (const extDir of externalDirs) {
-        // Сначала полный подпуть (как его видит ComfyUI), затем — только имя.
+        // First try full subpath (as seen by ComfyUI), then — filename only.
         for (const candidate of subPath !== fileName ? [subPath, fileName] : [fileName]) {
           const extPath = join(extDir, ...candidate.split('/'))
           if (existsSync(extPath) && sizeOk(extPath, model.sizeBytes)) return true
@@ -150,9 +150,9 @@ export function modelExists(modelId: string): boolean {
 }
 
 /**
- * (правка 138) Распаковать ИЗБРАННЫЕ файлы из zip (движок Bonsai с GitHub).
- * Распаковка через PowerShell Expand-Archive во временную папку + рекурсивный
- * поиск нужных файлов — не зависит от внутренней структуры архива.
+ * (fix 138) Extract SELECTED files from zip (Bonsai engine from GitHub).
+ * Extraction via PowerShell Expand-Archive into temp folder + recursive
+ * search for required files — independent of archive internal directory layout.
  */
 async function extractZipFiles(zipPath: string, targetDir: string, fileNames: string[]): Promise<void> {
   const { mkdtempSync, readdirSync, copyFileSync, rmSync } = await import('fs')
@@ -179,13 +179,13 @@ async function extractZipFiles(zipPath: string, targetDir: string, fileNames: st
     walk(tmpDir)
     const missing = fileNames.filter(f => !found.has(f))
     if (missing.length > 0) {
-      throw new Error(`В архиве отсутствуют файлы: ${missing.join(', ')}`)
+      throw new Error(`Archive is missing files: ${missing.join(', ')}`)
     }
     mkdirSync(targetDir, { recursive: true })
     for (const f of fileNames) copyFileSync(found.get(f)!, join(targetDir, f))
-    // zip удаляется ТОЛЬКО после успешной распаковки (в вызывающем коде):
-    // при сбое Extract-Archive сохранённый zip позволяет докачать/повторить,
-    // а не начинать сотни мегабайт заново.
+    // zip is deleted ONLY after successful extraction (in calling code):
+    // on Extract-Archive failure saved zip allows resuming/retrying,
+    // rather than re-downloading hundreds of megabytes.
   } finally {
     try { rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
   }
@@ -194,7 +194,7 @@ async function extractZipFiles(zipPath: string, targetDir: string, fileNames: st
 /** Get status for all models */
 export function getAllModelsStatus() {
   return MODELS.map(model => {
-    // (правка 162) optional: true — модель не обязательна (баннер не требует)
+    // (fix 162) optional: true — model is optional (banner does not require it)
     const optional = model.optional === true
     const active = activeDownloads.get(model.id)
     if (active && active.status === 'downloading') {
@@ -282,32 +282,32 @@ export async function startDownload(modelId: string): Promise<{ ok: boolean; err
   }
 
   const absPath = modelAbsPath(model)
-  // Zip-записи в одной папке получают разные временные имена: параллельные
-  // архивы движка и CUDA не должны перезаписывать и распаковывать друг друга.
-  // Суффикс .zip обязателен для PowerShell Expand-Archive.
+  // Zip entries in same folder receive distinct temporary names: concurrent
+  // engine and CUDA archives should not overwrite and unpack each other.
+  // .zip suffix is required for PowerShell Expand-Archive.
   const tmpPath = absPath + (model.extractFiles ? `_${model.id}_tmp.zip` : '.downloading')
 
-  // (факт-чек) Проверка свободного места ДО старта: раньше 21-гигабайтная
-  // модель падала_generic write error в конце, вместо внятной ошибки.
+  // Pre-flight free disk space check: previously a 21 GB
+  // model failed with generic write error at the end, rather than a clear error.
   try {
     const dir = dirname(tmpPath)
     mkdirSync(dir, { recursive: true })
-    // statfsSync может отсутствовать в старых рантаймах — обёрнуто в try
+    // statfsSync might be missing in older runtimes — wrapped in try
     const fsStat = statfsSync(dir)
     const free = BigInt(fsStat.bavail) * BigInt(fsStat.bsize)
     const needed = BigInt(Math.ceil(model.sizeBytes))
     if (free < needed) {
       return {
         ok: false,
-        error: `Недостаточно места на диске: свободно ${(Number(free) / 1024 ** 3).toFixed(1)} ГБ, нужно ~${(model.sizeBytes / 1024 ** 3).toFixed(1)} ГБ`,
+        error: `Insufficient disk space: free ${(Number(free) / 1024 ** 3).toFixed(1)} GB, required ~${(model.sizeBytes / 1024 ** 3).toFixed(1)} GB`,
       }
     }
   } catch {
-    /* statfs недоступен — не блокируем загрузку */
+    /* statfs unavailable — don't block download */
   }
 
-  // Частичный файл НЕ удаляем: докачка (Range) вместо старта с нуля —
-  // для 21 ГБ модели обрыв связи раньше означал начинать заново.
+  // Do NOT delete partial file: resume (Range) instead of starting from scratch —
+  // for 21 GB model connection drops previously meant restarting from 0.
   let resumeBytes = 0
   try {
     if (existsSync(tmpPath)) resumeBytes = statSync(tmpPath).size
@@ -333,22 +333,22 @@ export async function startDownload(modelId: string): Promise<{ ok: boolean; err
   const controller = new AbortController()
   abortControllers.set(modelId, controller)
 
-  // Run download in background (don't await), сериализованно
-  // (фикс) используем doDownloadWithRetry — автоматические ретраи при
-  // сетевых сбоях (2 попытки с экспоненциальной задержкой)
-  // (правка 337) .catch обязателен: doDownload теперь перевыбрасывает ошибку
-  // (иначе ретраи не работали), и финальный reject без обработчика давал бы
-  // unhandledRejection. Текст ошибки уже записан в state — здесь просто глушим.
+  // Run download in background (don't await), serialized
+  // Use doDownloadWithRetry — automatic retries on
+  // network failures (2 attempts with exponential backoff)
+  // (fix 337) .catch is required: doDownload now re-throws errors
+  // (otherwise retries didn't work), and final reject without handler gave
+  // unhandledRejection. Error text is already recorded in state — just suppress here.
   void enqueueDownload(() => doDownloadWithRetry(model, tmpPath, absPath, state, controller, resumeBytes))
-    .catch(() => { /* ошибка уже в state.error */ })
+    .catch(() => { /* error already in state.error */ })
 
   return { ok: true }
 }
 
 /**
- * (фикс) Ретраи при сетевых сбоях. Раньше один обрыв сети = пользователь
- * должен был вручную нажать «Скачать» снова. Теперь автоматически
- * повторяем 2 раза с экспоненциальной задержкой (1с, 2с).
+ * Retries on network failures. Previously a single network drop = user
+ * had to manually click "Download" again. Now automatically
+ * retry 2 times with exponential backoff (1s, 2s).
  */
 async function doDownloadWithRetry(
   model: ModelDef,
@@ -361,54 +361,54 @@ async function doDownloadWithRetry(
 ): Promise<void> {
   let lastError: Error | null = null
 
-  // (правка 337) Контроллер отмены живёт до конца ВСЕХ ретраев.
+  // (fix 337) Abort controller lives until all retries finish.
   try {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       if (attempt > 0) {
-        // Экспоненциальная задержка: 1с, 2с
+        // Exponential backoff: 1s, 2s
         const delay = Math.pow(2, attempt - 1) * 1000
         await new Promise(r => setTimeout(r, delay))
-        // Обновляем resumeBytes — файл мог вырасти
+        // Update resumeBytes — file might have grown
         try {
           resumeBytes = statSync(tmpPath).size
         } catch {
           resumeBytes = 0
         }
-        // (правка 587) Ребазим прогресс на фактический размер файла: в сорванной
-        // попытке state.bytesReceived считает сетевые чанки и мог убежать вперёд
-        // недописанного на диск файла — без сброса прогресс улетал за 100%.
-        // lastBytes в doDownload стартует от state.bytesReceived (правка 350).
+        // (fix 587) Rebase progress to actual file size on disk: in interrupted
+        // attempt state.bytesReceived counted network chunks and could run ahead
+        // of uncommitted bytes on disk — without reset progress exceeded 100%.
+        // lastBytes in doDownload starts from state.bytesReceived (fix 350).
         state.bytesReceived = resumeBytes
       }
       
       await doDownload(model, tmpPath, finalPath, state, controller, resumeBytes)
-      return // Успех — выходим
+      return // Success — exit
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e))
       
-      // Отмена пользователем — не ретраим
+      // User cancellation — do not retry
       if (lastError.message === 'cancelled' || lastError.name === 'AbortError') {
         throw lastError
       }
       
-      // 404 — модель не найдена, ретраи бесполезны
+      // 404 — model not found, retries useless
       if (lastError.message.includes('404')) {
         throw lastError
       }
       
-      // Если это последний ретрай — бросаем ошибку
+      // If this is the last retry — re-throw error
       if (attempt === maxRetries) {
         throw lastError
       }
 
-      // (правка 337) Между ретраями возвращаем статус 'downloading':
-      // doDownload уже выставил 'error' в state, но попытка не последняя —
-      // UI не должен показывать фейл до исчерпания всех ретраев.
+      // (fix 337) Between retries revert status to 'downloading':
+      // doDownload already set 'error' in state, but attempt is not the last —
+      // UI should not show failure until all retries are exhausted.
       state.status = 'downloading'
       delete state.error
 
-      // Иначе — пробуем снова
+      // Otherwise — try again
     }
   }
 
@@ -428,18 +428,18 @@ async function doDownload(
 ) {
   const { renameSync } = await import('fs')
   
-  // (фикс) Логирование — раньше при ошибке не было понятно, на каком этапе
-  // упало скачивание. Теперь ключевые этапы пишутся в консоль.
+  // Logging — previously on error it wasn't clear at what stage
+  // download failed. Now key stages are logged to console.
   console.log(`[download] START: ${model.label} (${model.sizeLabel})`)
   if (resumeBytes > 0) {
-    console.log(`[download] Resume: ${(resumeBytes / 1024 ** 3).toFixed(2)} ГБ already downloaded`)
+    console.log(`[download] Resume: ${(resumeBytes / 1024 ** 3).toFixed(2)} GB already downloaded`)
   }
   
   try {
-    // Range-докачка, если есть частичный файл (HuggingFace поддерживает)
-    // (фикс) При 416 Range Not Satisfiable — сервер говорит, что такой
-    // позиции в файле нет (файл обновился, URL изменился, хеш другой).
-    // Удаляем частичный файл и начинаем с нуля — иначе зациклимся.
+    // Range-resume if partial file exists (HuggingFace supports it)
+    // On 416 Range Not Satisfiable — server says such
+    // position in file does not exist (file updated, URL changed, different hash).
+    // Delete partial file and start fresh — otherwise we loop.
     const headers: Record<string, string> = { 'User-Agent': 'MiniMaxH3Studio/1.0' }
     let skip = 0
     if (resumeBytes > 0) {
@@ -449,15 +449,15 @@ async function doDownload(
     
     let res = await fetch(model.url, { headers, signal: controller.signal })
     
-    // (фикс) 404 — модель удалена или URL изменился. Отдельное сообщение,
-    // чтобы пользователь понял, что это не сетевой сбой.
+    // 404 — model deleted or URL changed. Dedicated message
+    // so user understands this is not a transient network glitch.
     if (res.status === 404) {
-      throw new Error('Модель не найдена на HuggingFace (404). URL мог измениться или модель удалена. Проверьте models-config.ts.')
+      throw new Error('Model not found on HuggingFace (404). URL may have changed or model was deleted. Check models-config.ts.')
     }
     
-    // (правка 142) 416 Range Not Satisfiable — частичный файл не соответствует
-    // текущему файлу на сервере. Или сервер не поддерживает Range.
-    // Раньше: пробовали докачать. Теперь: удаляем и начинаем с нуля — надёжнее.
+    // (fix 142) 416 Range Not Satisfiable — partial file does not match
+    // current server file, or server doesn't support Range.
+    // Previously: tried to resume. Now: delete and start fresh — more reliable.
     if (res.status === 416 && resumeBytes > 0) {
       console.log(`[download] 416: deleting partial file and starting fresh`)
       try {
@@ -467,14 +467,14 @@ async function doDownload(
       skip = 0
       delete headers['Range']
       state.bytesReceived = 0
-      // Повторяем запрос без Range
+      // Retry request without Range
       res = await fetch(model.url, { headers, signal: controller.signal })
     }
     
     if (!res.ok && !(res.status === 206 && resumeBytes > 0)) {
       throw new Error(`HTTP ${res.status}: ${res.statusText}`)
     }
-    // Сервер проигнорировал Range (200 вместо 206) — пишем с нуля
+    // Server ignored Range (200 instead of 206) — write from scratch
     if (resumeBytes > 0 && res.status !== 206) {
       skip = 0
       state.bytesReceived = 0
@@ -489,14 +489,14 @@ async function doDownload(
     const body = res.body
     if (!body) throw new Error('No response body')
 
-    // Read from web stream, write to file (append при докачке)
+    // Read from web stream, write to file (append on resume)
     const nodeStream = Readable.fromWeb(body as any)
     const fileStream = createWriteStream(tmpPath, { flags: skip > 0 ? 'a' : 'w' })
 
     let lastTime = Date.now()
-    // (правка 350) При докачке (resume) lastBytes должен стартовать с уже
-    // скачанного объёма: иначе первый расчёт скорости делил весь resumeFrom
-    // на 0.5 с и показывал гигантский скачок скорости.
+    // (fix 350) On resume lastBytes must start from already
+    // downloaded volume: otherwise first speed calculation divided whole resumeFrom
+    // by 0.5s and showed a huge speed spike.
     let lastBytes = state.bytesReceived
 
     nodeStream.on('data', (chunk: Buffer) => {
@@ -504,7 +504,7 @@ async function doDownload(
       // Calculate speed every ~500ms
       const now = Date.now()
       if (now - lastTime >= 500) {
-        // bytesReceived уже включает текущий чанк (строкой выше) — не считаем его дважды
+        // bytesReceived already includes current chunk (line above) — don't double count
         state.speed = (state.bytesReceived - lastBytes) / ((now - lastTime) / 1000)
         lastBytes = state.bytesReceived
         lastTime = now
@@ -517,12 +517,12 @@ async function doDownload(
         console.log(`[download] File stream finished: ${model.label}`)
         resolve()
       })
-      // (фикс) ENOSPC — диск заполнился во время скачивания. Раньше ошибка
-      // была общей, и пользователь не понимал, что нужно освободить место.
+      // ENOSPC — disk ran out of space during download. Previously generic error
+      // left user confused about needing to free up space.
       fileStream.on('error', (err: any) => {
         console.error(`[download] File stream error: ${model.label}`, err.message)
         if (err.code === 'ENOSPC') {
-          reject(new Error('Диск заполнился во время скачивания. Освободите место и нажмите «Скачать» снова — докачка продолжится с места обрыва.'))
+          reject(new Error('Disk ran out of space during download. Free up space and click "Download" again — download will resume from where it stopped.'))
         } else {
           reject(err)
         }
@@ -540,74 +540,74 @@ async function doDownload(
       })
     })
 
-    // Финальная валидация размера: обрезанный файл (>1 МБ, но не полный)
-    // раньше считался «готовым» и валился уже ComfyUI при загрузке.
-    // (правка 351) Порог унифицирован с modelExists (~строка 111): файл валиден,
-    // если скачано ≥ 90% ожидаемого размера (HuggingFace иногда обрывает
-    // соединение в конце, последние мегабайты не доходят, но файл практически
-    // полный). Раньше здесь был свой порог (1% + отдельная проверка 90%) —
-    // два разных критерия «готовности» для одного и того же файла.
+    // Final size validation: truncated file (>1 MB, but incomplete)
+    // was previously considered "ready" and failed later in ComfyUI on load.
+    // (fix 351) Threshold unified with modelExists (~line 111): file is valid
+    // if ≥ 90% of expected size is downloaded (HuggingFace sometimes closes
+    // connection at end, last megabytes don't arrive, but file is practically
+    // complete). Previously there was a different threshold (1% + separate 90% check) —
+    // two conflicting "ready" criteria for the same file.
     try {
       const finalSize = statSync(tmpPath).size
       const completion = model.sizeBytes > 0 ? finalSize / model.sizeBytes : 1
       if (model.sizeBytes > 1_000_000 && completion < 0.9) {
         throw new Error(
-          `Файл скачан не полностью (${(finalSize / 1024 ** 3).toFixed(2)} ГБ из ${(model.sizeBytes / 1024 ** 3).toFixed(2)} ГБ) — нажмите «Скачать» ещё раз`,
+          `File downloaded incompletely (${(finalSize / 1024 ** 3).toFixed(2)} GB of ${(model.sizeBytes / 1024 ** 3).toFixed(2)} GB) — click "Download" again`,
         )
       }
       if (completion < 1) {
         console.log(`[download] File ${Math.round(completion * 100)}% complete — accepting as valid`)
       }
     } catch (e) {
-      if (e instanceof Error && e.message.includes('не полностью')) throw e
-      /* stat упал — не блокируем */
+      if (e instanceof Error && e.message.includes('incompletely')) throw e
+      /* stat failed — don't block */
     }
 
     // Move tmp → final
-    // (фикс) renameSync может упасть (права, переполнение inode) — раньше
-    // ошибка не обрабатывалась, и state.status оставался 'downloading' forever.
-    // (правка 138) zip-записи (движок Bonsai): вместо rename — распаковка
-    // избранных файлов в целевой каталог, zip удаляется.
+    // renameSync can fail (permissions, inode exhaustion) — previously
+    // error was unhandled and state.status remained 'downloading' forever.
+    // (fix 138) zip entries (Bonsai engine): instead of rename — extract
+    // selected files to target folder, zip is deleted.
     if (model.extractFiles) {
       console.log(`[download] Extracting ${model.extractFiles.length} files from zip: ${model.label}`)
       mkdirSync(dirname(finalPath), { recursive: true })
       await extractZipFiles(tmpPath, finalPath, model.extractFiles)
-      try { unlinkSync(tmpPath) } catch { /* уже удалён */ }
+      try { unlinkSync(tmpPath) } catch { /* already deleted */ }
     } else {
       console.log(`[download] Renaming: ${tmpPath} → ${finalPath}`)
       try {
         renameSync(tmpPath, finalPath)
       } catch (e) {
-        throw new Error(`Не удалось переименовать файл: ${e instanceof Error ? e.message : String(e)}`)
+        throw new Error(`Failed to rename file: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
     state.status = 'done'
     state.speed = 0
     console.log(`[download] DONE: ${model.label}`)
-    // «done»-записи никто не читает (статус берётся с диска) — удаляем,
-    // иначе карта растёт всю сессию.
+    // "done" entries are never read (status checked from disk) — remove,
+    // otherwise map grows all session.
     activeDownloads.delete(model.id)
   } catch (e) {
     const isCancel = e instanceof Error && (e.message === 'cancelled' || e.name === 'AbortError')
     state.status = isCancel ? 'cancelled' : 'error'
-    state.error = isCancel ? 'Отменено пользователем' : (e instanceof Error ? e.message : String(e))
+    state.error = isCancel ? 'Cancelled by user' : (e instanceof Error ? e.message : String(e))
     state.speed = 0
-    // (фикс) Логирование ошибок — раньше при сбое не было понятно, что произошло
+    // Error logging — previously on failure what happened wasn't clear
     console.error(`[download] ${isCancel ? 'CANCELLED' : 'ERROR'}: ${model.label}`)
     if (!isCancel) {
       console.error(`[download] Error: ${state.error}`)
     }
-    // Частичный файл СОХРАНЯЕМ: повторная загрузка докачает с места обрыва,
-    // а не начнёт 21 ГБ заново. Полный файл после валидации уже переименован.
-    // (правка 337) Ошибку ПЕРЕВЫБРАСЫВАЕМ: раньше catch глотал её, и
-    // doDownloadWithRetry считал попытку успешной — ретраи были мёртвым кодом.
-    // Статус/ошибка в state уже выставлены выше; doDownloadWithRetry решит,
-    // ретраить ли (и вернёт статус 'downloading') или это финальный фейл.
+    // Partial file is PRESERVED: repeated download will resume from drop point,
+    // rather than restarting 21 GB from scratch. Complete file after validation is already renamed.
+    // (fix 337) RE-THROW error: previously catch swallowed it, and
+    // doDownloadWithRetry considered attempt successful — retries were dead code.
+    // Status/error in state are already set above; doDownloadWithRetry will decide
+    // whether to retry (and reset status to 'downloading') or if this is final failure.
     throw e
   } finally {
-    // (правка 337) Контроллер удаляет doDownloadWithRetry (после ВСЕХ попыток):
-    // иначе после первого неудачного ретрая отмена пользователем переставала
-    // работать — abortControllers уже пуст.
+    // (fix 337) Controller is deleted by doDownloadWithRetry (after ALL attempts):
+    // otherwise after first failed retry user cancellation ceased
+    // working — abortControllers was already empty.
   }
 }
 
@@ -615,51 +615,51 @@ async function doDownload(
 export function cancelDownload(modelId: string): { ok: boolean; error?: string } {
   const controller = abortControllers.get(modelId)
   if (!controller) {
-    return { ok: false, error: 'Нет активного скачивания' }
+    return { ok: false, error: 'No active download' }
   }
-  // Abort действует и на задачу, ещё стоящую в очереди: doDownload увидит
-  // уже отменённый signal на первом же fetch и завершится как «cancelled».
+  // Abort applies to tasks still in queue: doDownload will see
+  // already cancelled signal on very first fetch and complete as "cancelled".
   controller.abort()
   return { ok: true }
 }
 
 /**
- * (правка 139) Удалить скачанные файлы модели (освобождение места, когда
- * модель больше не нужна — например, выбрана альтернатива). Стирает и хвосты
- * незавершённых загрузок (.downloading / _tmp.zip). Гварда «не удалять активную
- * модель ассистента» живёт в роуте /api/models/delete — там виден конфиг.
+ * (fix 139) Delete downloaded model files (free space when
+ * model is no longer needed — e.g. alternative was chosen). Also clears tails
+ * of incomplete downloads (.downloading / _tmp.zip). Guard "do not delete active
+ * assistant model" lives in /api/models/delete route — config is visible there.
  */
 export function deleteModel(modelId: string): { ok: boolean; error?: string } {
   const model = MODELS.find(m => m.id === modelId)
   if (!model) return { ok: false, error: 'Unknown model' }
   const active = activeDownloads.get(modelId)
   if (active?.status === 'downloading') {
-    return { ok: false, error: 'Скачивание ещё идёт — сначала отмените его' }
+    return { ok: false, error: 'Download is still in progress — cancel it first' }
   }
   const absPath = modelAbsPath(model)
   try {
     if (model.extractFiles) {
-      // zip-записи (движок Bonsai): удаляем извлечённые файлы по списку
+      // zip entries (Bonsai engine): remove extracted files by list
       let removed = 0
       for (const f of model.extractFiles) {
-        try { unlinkSync(join(absPath, f)); removed++ } catch { /* файла нет — ок */ }
+        try { unlinkSync(join(absPath, f)); removed++ } catch { /* file missing — ok */ }
       }
       console.log(`[download] Deleted ${removed}/${model.extractFiles.length} files: ${model.label}`)
     } else {
       if (existsSync(absPath)) unlinkSync(absPath)
       console.log(`[download] Deleted: ${model.label}`)
     }
-    // Хвосты незавершённых загрузок, включая общий ZIP от старых версий.
+    // Tails of incomplete downloads, including shared ZIP from older versions.
     for (const tail of [absPath + '.downloading', absPath + `_${modelId}_tmp.zip`, absPath + '_tmp.zip']) {
-      try { unlinkSync(tail) } catch { /* нет — ок */ }
+      try { unlinkSync(tail) } catch { /* missing — ok */ }
     }
-    // (правка 352) Чистим застрявший error/cancelled-статус: после удаления
-    // модели запись в activeDownloads бессмысленна, а getAllModelsStatus
-    // показывал бы «ошибку» для уже удалённого файла до перезапуска.
+    // (fix 352) Clear stuck error/cancelled status: after deleting
+    // model, entry in activeDownloads is meaningless, and getAllModelsStatus
+    // would show "error" for already deleted file until reload.
     activeDownloads.delete(modelId)
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: `Не удалось удалить файл: ${e instanceof Error ? e.message : String(e)}` }
+    return { ok: false, error: `Failed to delete file: ${e instanceof Error ? e.message : String(e)}` }
   }
 }
 

@@ -5,24 +5,24 @@ import { pipeline } from 'stream/promises'
 import path from 'path'
 import crypto from 'crypto'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { probeVideoFile } from '@/lib/video-probe'
 
 /**
  * POST /api/extend/import
- * Тело: { filename, subfolder? }
+ * Body: { filename, subfolder? }
  *
- * Копирует видео ИЗ ОБЩЕЙ ПАПКИ OUTPUT COMFYUI в ComfyUI input/ прямо на
- * сервере (стриминг, без браузера в цикле) — для сценария «перетащить
- * превьюшку из галереи в исходник продления».
+ * Copies video FROM COMFYUI COMMON OUTPUT FOLDER into ComfyUI input/ directly on
+ * the server (streaming, without browser in the loop) — for the scenario of "drag
+ * thumbnail from gallery into extend source".
  *
- * ВАЖНО: нода продления (VHS_LoadVideo) и проба размеров/кадров в
- * /api/comfy/generate ищут источник ПО ИМЕНИ В Папке input/, поэтому
- * ответ отдаёт basename — ровно как uploadImage() для файлов с диска.
- * (Отдельный роут, а не /api/upscale/import: тот пишет в data/upscale-input —
- * путь, который LoadVideo не видит.)
+ * IMPORTANT: extend node (VHS_LoadVideo) and size/frame probe in
+ * /api/comfy/generate look up source BY NAME IN input/ folder, so
+ * the response returns basename — exactly like uploadImage() for files from disk.
+ * (Separate route, not /api/upscale/import: that one writes to data/upscale-input —
+ * a path LoadVideo cannot see.)
  *
- * Ответ: { ok, name, size, kind }.
+ * Response: { ok, name, size, kind }.
  */
 export const dynamic = 'force-dynamic'
 export const maxDuration = 600
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const subfolder = typeof body?.subfolder === 'string' ? body.subfolder.trim() : ''
     if (!filename) {
       return NextResponse.json(
-        { error: 'Не передано имя файла (ожидается { filename, subfolder? })' },
+        { error: 'Filename not provided (expected { filename, subfolder? })' },
         { status: 400 },
       )
     }
@@ -58,25 +58,25 @@ export async function POST(req: NextRequest) {
     const cfg = getAppConfig()
     if (!cfg.outputDir) {
       return NextResponse.json(
-        { error: 'Папка output ComfyUI не найдена (config.ini → [comfy] comfy_dir)' },
+        { error: 'ComfyUI output folder not found (config.ini → [comfy] comfy_dir)' },
         { status: 500 },
       )
     }
 
-    // Безопасность: basename имени + санитизированный относительный путь
-    // папки (правка 495), источник обязан остаться внутри output.
+    // Security: basename of name + sanitized relative folder
+    // path (fix 495), source must remain inside output.
     const outRoot = path.resolve(cfg.outputDir)
     const safeName = path.basename(filename)
     const safeSub = subfolder ? sanitizeFolderPath(subfolder) : ''
     const src = path.resolve(outRoot, safeSub ? path.join(safeSub, safeName) : safeName)
     if (src !== outRoot && !src.startsWith(outRoot + path.sep)) {
-      return NextResponse.json({ error: 'Некорректный путь к файлу' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
     }
 
     const ext = path.extname(safeName).toLowerCase()
     if (!VIDEO_EXTS.has(ext)) {
       return NextResponse.json(
-        { error: `Формат ${ext || '(без расширения)'} не поддерживается для продления видео` },
+        { error: `Format ${ext || '(no extension)'} is not supported for video extension` },
         { status: 400 },
       )
     }
@@ -86,43 +86,43 @@ export async function POST(req: NextRequest) {
       st = await fs.stat(src)
     } catch {
       return NextResponse.json(
-        { error: 'Файл не найден в общей папке output (возможно, он уже удалён)' },
+        { error: 'File not found in common output folder (it might have been deleted)' },
         { status: 404 },
       )
     }
     if (!st.isFile()) {
-      return NextResponse.json({ error: 'Это не файл' }, { status: 400 })
+      return NextResponse.json({ error: 'Not a file' }, { status: 400 })
     }
     if (st.size > MAX_BYTES) {
-      return NextResponse.json({ error: `Файл больше 32 ГБ — слишком большой для обработки` }, { status: 400 })
+      return NextResponse.json({ error: `File is larger than 32 GB — too large to process` }, { status: 400 })
     }
 
     const dir = path.resolve(cfg.inputDir)
     await fs.mkdir(dir, { recursive: true })
 
-    // Уникальное имя без перезаписи (как в /api/comfy/refine).
-    // (правка 716) extName/stem были вычислены, но не использовались —
-    // мёртвый код. Имя формируется через base.
+    // Unique name without overwrite (as in /api/comfy/refine).
+    // (fix 716) extName/stem were computed but never used —
+    // dead code. Name is formed via base.
     const base = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${sanitizeName(safeName)}`
     let destName: string
     destPath = path.join(dir, base)
     await pipeline(createReadStream(src), createWriteStream(destPath))
     destName = base
 
-    // (правка 291) Длительность исходника — ffprobe на сервере, чтобы клиент
-    // сразу видел «итого ~X с» в badges/карточках клипов без отдельного API.
-    // Ошибка пробы не критична: UI обработает durationSec=0/отсутствующее.
+    // (fix 291) Source duration — ffprobe on server so client
+    // immediately sees "total ~X s" in badges/clip cards without a separate API.
+    // Probe error is non-critical: UI handles durationSec=0/missing.
     let durationSec: number | undefined
     try {
       const pr = await probeVideoFile(destPath)
       if (Number.isFinite(pr.durationSec) && pr.durationSec > 0) {
         durationSec = Math.round(pr.durationSec * 10) / 10
       }
-    } catch { /* ffprobe недоступен/видео нестандартное — не блокируем импорт */ }
+    } catch { /* ffprobe unavailable/non-standard video — do not block import */ }
 
     return NextResponse.json({
       ok: true,
-      name: destName, // basename — его ждёт VHS_LoadVideo и проба в /api/comfy/generate
+      name: destName, // basename — expected by VHS_LoadVideo and probe in /api/comfy/generate
       size: st.size,
       kind: 'video',
       ...(durationSec !== undefined ? { durationSec } : {}),
@@ -132,6 +132,6 @@ export async function POST(req: NextRequest) {
       try { unlinkSync(destPath) } catch { /* ignore */ }
     }
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Ошибка импорта из галереи: ${msg}` }, { status: 500 })
+    return NextResponse.json({ error: `Error importing from gallery: ${msg}` }, { status: 500 })
   }
 }

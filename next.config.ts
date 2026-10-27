@@ -1,21 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // (правка 587) ignoreBuildErrors удалён: с ним продакшн-сборка отправлялась
-  // с непроверенными типами (типовые ошибки вроде isTurbo жили в проде).
-  // Проверка типов теперь выполняется на каждом `next build`.
+  // (fix 587) ignoreBuildErrors removed: with it production builds were shipped
+  // with unchecked types (type errors like isTurbo persisted in prod).
+  // Type checking is now executed on every `next build`.
   reactStrictMode: false,
-  // (релиз) Исключаем из output-file-tracing тяжёлые рантаймы, к которым
-  // приложение обращается по АБСОЛЮТНОМУ пути в рантайме, а не через
-  // require(): ComfyUI (портативный Python + исходники), embedded Python
-  // апскейлера, whisper-STT, ffmpeg и сборку Bonsai.
+  // (release) Exclude heavy runtimes from output-file-tracing that the
+  // application accesses via ABSOLUTE paths at runtime, rather than via
+  // require(): ComfyUI (portable Python + source), embedded Python
+  // for upscaler, whisper-STT, ffmpeg, and Bonsai build.
   //
-  // ВНИМАНИЕ: на Windows эта опция НЕ работает — Next склеивает паттерн с
-  // корнем проекта через path.join, получаются обратные слэши, а picomatch
-  // считает их экранирующими символами (проверено на Next 16.1.1).
-  // Реальное ужатие сборки делает scripts/prune-build.mjs — он обрезает
-  // готовые манифесты .nft.json после сборки. Опция оставлена для
-  // POSIX-сборок, где path.join даёт прямые слэши.
+  // NOTE: On Windows this option does NOT work — Next joins the pattern with
+  // project root via path.join, yielding backslashes, which picomatch
+  // interprets as escape characters (verified on Next 16.1.1).
+  // Actual build pruning is handled by scripts/prune-build.mjs — it trims
+  // generated .nft.json manifests after build. Option remains for
+  // POSIX builds where path.join produces forward slashes.
   outputFileTracingExcludes: {
     '*': [
       'ComfyUI-Easy-Install/**',
@@ -30,20 +30,20 @@ const nextConfig: NextConfig = {
   },
   webpack: (config) => {
     // Bundle markdown files (e.g. the H3 prompt guide) as raw source strings.
-    // (правка 716) Правило действует ТОЛЬКО для webpack. В Next 16 сборкой по
-    // умолчанию является Turbopack, а он правила webpack() НЕ распознаёт
-    // (см. node_modules/next/dist/docs/.../08-turbopack.md: «Turbopack replaces
-    // webpack, so webpack() configs are not recognized»). Поэтому скрипты
-    // dev/build теперь явно запускаются с --webpack (package.json), иначе
-    // импорт './prompt-guide.md' (src/lib/h3-prompt-spec.ts) не имел бы
-    // загрузчика и dev-сервер падал бы на каждом маршруте, тянущем его.
+    // (fix 716) Rule applies ONLY for webpack. In Next 16 default build
+    // is Turbopack, and it does NOT recognize webpack() rules
+    // (see node_modules/next/dist/docs/.../08-turbopack.md: "Turbopack replaces
+    // webpack, so webpack() configs are not recognized"). Therefore dev/build
+    // scripts explicitly run with --webpack (package.json), otherwise
+    // import './prompt-guide.md' (src/lib/h3-prompt-spec.ts) would lack a loader
+    // and dev server would crash on every route importing it.
     if (!config.module) config.module = {};
     if (!config.module.rules) config.module.rules = [];
     config.module.rules.push({
       test: /\.md$/,
       type: "asset/source",
-      // Исключаем node_modules: без exclude правило втягивало бы .md из
-      // зависимостей в бандл как исходный код.
+      // Exclude node_modules: without exclude the rule would pull .md from
+      // dependencies into bundle as source code.
       exclude: /node_modules/,
     });
     return config;

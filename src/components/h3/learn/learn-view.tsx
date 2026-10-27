@@ -1,15 +1,15 @@
 'use client'
 
 /**
- * LearnView — Обучение.
+ * LearnView — Learn tab.
  *
  * Contains three sub-tabs:
- *   • «Основы»    — step-by-step interactive tutorial (mockups + callouts).
- *   • «Промпты»   — PromptGuide: detailed MiniMax H3 prompt-writing guide,
+ *   • "Basics"    — step-by-step interactive tutorial (mockups + callouts).
+ *   • "Prompts"   — PromptGuide: detailed MiniMax H3 prompt-writing guide,
  *                   built-in LLM assistant, structured format, history,
  *                   and hover previews.
- *   • «Сценарии»  — LearnRecipes (правка 485): готовые сценарии работы
- *                   (прямая генерация / ступеньки / драфты) простым языком.
+ *   • "Workflows" — LearnRecipes (fix 485): ready-to-use workflows
+ *                   (direct generation / stepping / drafts) in simple terms.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -27,15 +27,15 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LEARN_STEPS } from './learn-steps'
 import { PromptGuide } from './prompt-guide'
-import { LearnRecipes } from './learn-recipes' // (правка 485)
+import { LearnRecipes } from './learn-recipes' // (fix 485)
 
 type SubTab = 'basics' | 'prompts' | 'recipes'
 
 const SUB_TABS: Array<{ id: SubTab; label: string; icon: ReactNode }> = [
-  { id: 'basics', label: 'Основы', icon: <GraduationCapIcon className="w-3.5 h-3.5" /> },
-  { id: 'prompts', label: 'Промпты', icon: <WandSparklesIcon className="w-3.5 h-3.5" /> },
-  // (правка 485) Готовые сценарии работы
-  { id: 'recipes', label: 'Сценарии', icon: <RouteIcon className="w-3.5 h-3.5" /> },
+  { id: 'basics', label: 'Basics', icon: <GraduationCapIcon className="w-3.5 h-3.5" /> },
+  { id: 'prompts', label: 'Prompts', icon: <WandSparklesIcon className="w-3.5 h-3.5" /> },
+  // (fix 485) Ready-to-use workflows
+  { id: 'recipes', label: 'Workflows', icon: <RouteIcon className="w-3.5 h-3.5" /> },
 ]
 
 export function LearnView() {
@@ -51,10 +51,10 @@ export function LearnView() {
               <span className="w-9 h-9 rounded-xl gradient-creative flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
                 <GraduationCapIcon className="w-4.5 h-4.5 text-white" />
               </span>
-              Обучение
+              Learn
             </h1>
             <p className="text-xs text-muted-foreground mt-1.5">
-              Как пользоваться студией и писать промпты для MiniMax H3
+              How to use the studio and write prompts for MiniMax H3
             </p>
           </div>
         </div>
@@ -116,7 +116,7 @@ export function LearnView() {
               transition={{ duration: 0.2 }}
               className="select-text flex-1 min-h-0 overflow-y-auto px-6 pt-2 pb-6"
             >
-              {/* (правка 485) Готовые сценарии работы */}
+              {/* (fix 485) Ready-to-use workflows */}
               <LearnRecipes />
             </motion.div>
           )}
@@ -155,9 +155,9 @@ function TutorialContent() {
       <div className="px-6 pt-1 pb-3 shrink-0">
         <div className="flex items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground font-mono">
-            Шаг {step + 1} / {total}
+            Step {step + 1} / {total}
           </p>
-          <p className="text-[10px] text-muted-foreground/60">← → — листать</p>
+          <p className="text-[10px] text-muted-foreground/60">← → — navigate</p>
         </div>
         {/* Progress bar */}
         <div className="mt-2 h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
@@ -212,7 +212,7 @@ function TutorialContent() {
                   <div className="flex gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3">
                     <LightbulbIcon className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-200/80 leading-relaxed">
-                      <span className="font-medium text-amber-300">Совет: </span>
+                      <span className="font-medium text-amber-300">Tip: </span>
                       {current.tip}
                     </p>
                   </div>
@@ -225,18 +225,18 @@ function TutorialContent() {
               {/* What's next */}
               <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-3">
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                  {step < total - 1 ? 'Дальше' : 'Финиш'}
+                  {step < total - 1 ? 'Next' : 'Finish'}
                 </p>
                 {step < total - 1 ? (
                   <p className="text-xs text-foreground/90 leading-relaxed">
-                    <span className="font-medium text-cyan-400">Шаг {step + 2}. </span>
-                    {LEARN_STEPS[step + 1].title.replace(/^Шаг \d+ — /, '')} — {LEARN_STEPS[step + 1].short}
+                    <span className="font-medium text-cyan-400">Step {step + 2}. </span>
+                    {LEARN_STEPS[step + 1].title.replace(/^Step \d+ — /, '')} — {LEARN_STEPS[step + 1].short}
                   </p>
                 ) : (
                   <p className="text-xs text-foreground/90 leading-relaxed">
-                    Тур пройден! Переключайтесь на вкладку{' '}
-                    <span className="font-medium text-cyan-400">«Генерация»</span> и сделайте
-                    первое видео по чек-листу.
+                    Tour completed! Switch to the{' '}
+                    <span className="font-medium text-cyan-400">"Generate"</span> tab and create
+                    your first video using the checklist.
                   </p>
                 )}
               </div>
@@ -244,27 +244,27 @@ function TutorialContent() {
               {/* Hotkeys */}
               <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-3">
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                  Горячие клавиши
+                  Hotkeys
                 </p>
                 <div className="space-y-1 text-xs text-foreground/80">
-                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Ctrl+Enter</kbd> — запуск генерации</p>
-                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Ctrl+V</kbd> — вставить изображение как референс (в чате ассистента — как вложение)</p>
-                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Space · M · Esc</kbd> — плеер</p>
-                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Esc · Enter</kbd> — в галерее: снять выделение / сравнить пару</p>
-                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">← →</kbd> — листать шаги обучения</p>
+                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Ctrl+Enter</kbd> — start generation</p>
+                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Ctrl+V</kbd> — paste image as reference (in assistant chat — as attachment)</p>
+                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Space · M · Esc</kbd> — video player</p>
+                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">Esc · Enter</kbd> — gallery: clear selection / compare pair</p>
+                  <p><kbd className="px-1.5 py-0.5 rounded border border-border bg-[var(--surface-2)] font-mono text-[10px]">← →</kbd> — navigate tutorial steps</p>
                 </div>
               </div>
 
               {/* Mini glossary */}
               <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-3">
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                  Словарик
+                  Glossary
                 </p>
                 <div className="space-y-1 text-xs text-foreground/80 leading-snug">
-                  <p><span className="text-foreground font-medium">Референс</span> — картинка/видео/аудио-образец.</p>
-                  <p><span className="text-foreground font-medium">Промпт</span> — текстовое описание сцены.</p>
-                  <p><span className="text-foreground font-medium">Pass 1 / Pass 2</span> — черновой и финальный проходы генерации.</p>
-                  <p><span className="text-foreground font-medium">Точка сплита</span> — сколько шагов забирает черновик из общего расписания.</p>
+                  <p><span className="text-foreground font-medium">Reference</span> — image/video/audio sample.</p>
+                  <p><span className="text-foreground font-medium">Prompt</span> — text description of the scene.</p>
+                  <p><span className="text-foreground font-medium">Pass 1 / Pass 2</span> — draft and final generation passes.</p>
+                  <p><span className="text-foreground font-medium">Split Point</span> — number of steps allocated to draft in schedule.</p>
                 </div>
               </div>
             </div>
@@ -276,7 +276,7 @@ function TutorialContent() {
       <div className="shrink-0 border-t border-border px-6 py-3 bg-[var(--surface-0)]/90 backdrop-blur-sm flex items-center justify-between gap-4">
         <Button variant="outline" size="sm" onClick={prev} disabled={step === 0} className="gap-1.5">
           <ChevronLeftIcon className="w-4 h-4" />
-          Назад
+          Back
         </Button>
 
         {/* Step dots */}
@@ -300,13 +300,13 @@ function TutorialContent() {
             onClick={next}
             className="gap-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 font-semibold"
           >
-            Далее
+            Next
             <ChevronRightIcon className="w-4 h-4" />
           </Button>
         ) : (
           <Button variant="outline" size="sm" onClick={restart} className="gap-1.5">
             <RotateCcwIcon className="w-4 h-4" />
-            Пройти ещё раз
+            Restart Tour
           </Button>
         )}
       </div>

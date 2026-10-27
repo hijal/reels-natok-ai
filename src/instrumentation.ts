@@ -1,11 +1,11 @@
 /**
- * (правка 722) Старт сервера.
+ * (fix 722) Server startup.
  *
- * Переписываем ComfyUI/extra_model_paths.yaml до запуска бэкенда: в нём студия
- * регистрирует свою папку детекторов Face Refine (models/ultralytics → категория
- * `ultralytics`). ComfyUI читает файл при импорте, поэтому к моменту сборки
- * /object_info категория уже есть — и в комбо H3FaceTrackCrop появляется
- * модель человека для fallback_detector.
+ * Rewrite ComfyUI/extra_model_paths.yaml before backend launch: studio registers
+ * its Face Refine detector folder in it (models/ultralytics → category
+ * `ultralytics`). ComfyUI reads the file on import, so by the time /object_info
+ * is built the category already exists — and the human model appears in
+ * the H3FaceTrackCrop combo for fallback_detector.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return

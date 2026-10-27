@@ -86,10 +86,10 @@ def decode_image(path: str | os.PathLike[str]) -> _DecodedImage:
             warnings.append(f"Used the first frame/page of {frame_count}.")
             image.seek(0)
         original_mode = image.mode
-        # (правка 716) Метаданные снимаем ПОСЛЕ exif_transpose: ориентация
-        # меняет и сам EXIF-блок, и часть info (пиксели на дюйм, XMP).
-        # Раньше info копировался до трансформации, и в выходной файл
-        # попадало смешанное состояние «до/после».
+        # (fix 716) Extract metadata AFTER exif_transpose: orientation
+        # changes both the EXIF block itself and part of info (dpi, XMP).
+        # Previously info was copied before transformation, resulting in
+        # a mixed "before/after" state in the output file.
         image = ImageOps.exif_transpose(image)
         info = dict(image.info)
         image.load()

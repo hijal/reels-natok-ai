@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * ControlNetTargetStore — мост «галерея → вкладка ControlNet»
- * + её UI-состояние.
+ * ControlNetTargetStore — bridge "gallery → ControlNet tab"
+ * + its UI state.
  *
- * (правка 511) ControlNet теперь полностью на стандартном References-воркфлоу:
- *  • Тип контроля: depth | canny | direct (новый «Прямой» — видео идёт как реф
- *    напрямую, без карт глубины/кэнни);
- *  • Дефолт «Рефы: режим размера» — Max (было Match);
- *  • Доп. параметры: шаги (draft: 1, full: 2), сэмплер + планировщик (Pass 1),
- *    Sigma-профиль + сэмплер (Pass 2), low-res разрешение (Pass 1) — как на
- *    вкладке «Генерация»;
- *  • Сжатие исходника до 480p — работает во всех режимах (правка 511).
+ * (fix 511) ControlNet is now completely on the standard References workflow:
+ *  • Control type: depth | canny | direct (new "Direct" — video is passed as a ref
+ *    directly, without depth/canny maps);
+ *  • Default "Refs: size mode" — Max (was Match);
+ *  • Extra parameters: steps (draft: 1, full: 2), sampler + scheduler (Pass 1),
+ *    Sigma profile + sampler (Pass 2), low-res resolution (Pass 1) — same as on
+ *    the "Generate" tab;
+ *  • Compress source to 480p — works in all modes (fix 511).
  */
 import { create } from 'zustand'
 import type { ControlNetType } from '@/lib/comfy/controlnet-template'
@@ -25,36 +25,36 @@ export interface ControlNetSource {
   url: string
   filename: string
   subfolder: string
-  /** Файл с диска, уже загруженный в ComfyUI input/. */
+  /** File from disk, already uploaded to ComfyUI input/. */
   inputSource?: string
 }
 
-/** Параметры вкладки ControlNet — переживают переключение вкладок. */
+/** ControlNet tab parameters — persist across tab switches. */
 export interface ControlNetUiParams {
-  /** Тип контроля: depth | canny | direct (прямой, без карт). */
+  /** Control type: depth | canny | direct (direct, without maps). */
   controlType: ControlNetType
-  /** Длительность генерации, секунды (клампится к длине исходника). */
+  /** Generation duration, seconds (clamped to source length). */
   duration: number
-  /** Короткая сторона генерации, px. Default 720. */
+  /** Generation short side, px. Default 720. */
   targetShortSide: number
-  /** «Только карта»: сохранить depth/canny-видео без генерации Minimax.
-   *  В режиме direct недоступно (карта не строится). */
+  /** "Map only": save depth/canny video without Minimax generation.
+   *  Unavailable in direct mode (no map is generated). */
   preprocessOnly: boolean
-  /** Рефы: режим размера входных картинок. Дефолт — 'max' (правка 511). */
+  /** Refs: input image size mode. Default — 'max' (fix 511). */
   refImageSize: 'match' | 'max'
-  /** 'draft' — однопроходный; 'full' — двухпроходный. */
+  /** 'draft' — single-pass; 'full' — two-pass. */
   pipeline: 'draft' | 'full'
-  /** Сжать исходное видео до 480p (сервер, кэш) — во всех режимах (правка 511). */
+  /** Compress source video to 480p (server, cache) — across all modes (fix 511). */
   compressSource: boolean
 
-  // ── Доп. параметры (правка 511) — как на вкладке «Генерация» ──
-  /** Draft pipeline: шаги единственного прохода (default 4, min 2, max 30). */
+  // ── Extra parameters (fix 511) — same as on the "Generate" tab ──
+  /** Draft pipeline: single-pass steps (default 4, min 2, max 30). */
   draftSteps: number
-  /** Full pipeline, Pass 1: эффективные шаги (SplitSigmas split, default 6). */
+  /** Full pipeline, Pass 1: effective steps (SplitSigmas split, default 6). */
   firstSamplerSteps: number
   /**
-   * ВСЕГО шагов в расписании BasicScheduler для pass 1.
-   * По умолчанию 6 — столько же, сколько забирает сплит («6 из 6»).
+   * TOTAL steps in the BasicScheduler schedule for pass 1.
+   * Default 6 — same as what split takes ("6 out of 6").
    */
   firstSamplerTotalSteps?: number
   /** Pass 1 sampler (default 'euler'). */
@@ -65,7 +65,7 @@ export interface ControlNetUiParams {
   sigmaVariant: string
   /** Pass 2 sampler (default 'euler'). */
   pass2Sampler: string
-  /** Full pipeline, Pass 1 low-res разрешение, MP (default 0.2). */
+  /** Full pipeline, Pass 1 low-res resolution, MP (default 0.2). */
   lowResMP: number
 }
 
@@ -74,9 +74,9 @@ const DEFAULT_PARAMS: ControlNetUiParams = {
   duration: 5,
   targetShortSide: 720,
   preprocessOnly: false,
-  refImageSize: 'max', // (правка 511) было 'match'
+  refImageSize: 'max', // (fix 511) was 'match'
   pipeline: 'draft',
-  compressSource: true, // (правка 512) default ON — во всех режимах
+  compressSource: true, // (fix 512) default ON — across all modes
   draftSteps: 4,
   firstSamplerSteps: 6,
   firstSamplerTotalSteps: 6,
@@ -87,7 +87,7 @@ const DEFAULT_PARAMS: ControlNetUiParams = {
   lowResMP: 0.2,
 }
 
-/** Картинка-референс вкладки ControlNet (персонаж/локация/кадр). */
+/** ControlNet tab reference image (character/location/frame). */
 export interface ControlNetRefImage {
   id: string
   path: string
@@ -102,8 +102,8 @@ interface ControlNetState {
   source: ControlNetSource | null
   setSource: (s: ControlNetSource | null) => void
   /**
-   * (правка 727) Папка результата — как на вкладке «Генерация». По умолчанию
-   * совпадает с папкой исходника ('' = общая), пользователь может сменить.
+   * (fix 727) Output folder — same as on the "Generate" tab. By default
+   * matches source folder ('' = shared), user can change it.
    */
   outputFolder: string
   setOutputFolder: (folder: string) => void
@@ -123,14 +123,14 @@ export const useControlNetTarget = create<ControlNetState>((set, get) => ({
   setTarget: (target) => set({ target }),
   clear: () => set({ target: null }),
   source: null,
-  // (правка 558) blob:URL предыдущего файла с диска ревокаем — каждый
-  // перевыбор источника оставлял блоб в памяти до конца сессии.
+  // (fix 558) Revoke blob:URL of previous file from disk — each
+  // reselection of source previously left blob in memory until session end.
   setSource: (source) => {
     const prev = get().source
     if (prev?.url.startsWith('blob:') && prev.url !== source?.url) {
       try { URL.revokeObjectURL(prev.url) } catch { /* noop */ }
     }
-    // (правка 727) Новый исходник — папка результата снова его папка.
+    // (fix 727) New source — output folder is set to its folder again.
     set({ source, outputFolder: source?.subfolder ?? '' })
   },
   outputFolder: '',
@@ -143,8 +143,8 @@ export const useControlNetTarget = create<ControlNetState>((set, get) => ({
   setSeed: (seed) => set({ seed }),
   refImages: [],
   addRefImages: (items) => set((s) => ({ refImages: [...s.refImages, ...items] })),
-  // (правка 716) Превью удалённого референса ревокаем — блоб жил до конца
-  // сессии.
+  // (fix 716) Revoke preview of removed reference — blob previously persisted
+  // until session end.
   removeRefImage: (id) => set((s) => {
     const gone = s.refImages.find((r) => r.id === id)
     if (gone?.previewUrl?.startsWith('blob:')) {

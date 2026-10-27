@@ -1,26 +1,26 @@
-"""MiniMax Studio: ноды бесшовного продления.
+"""MiniMax Studio: seamless video extension nodes.
 
-Проблема прежней схемы extend (SetLatentNoiseMask 0/1 на хвосте): маска
-держит токены хвоста «чистыми» в траектории сэмплера, но DiT получает
-один timestep на весь packed-латент и НЕ видит хвост как контекст —
-для модели залоченная зона выглядит шумом. Новый контент генерируется
-«вслепую» относительно головы → неплотное примыкание, двоения
-(гостинг), накапливающиеся от клипа к клипу.
+Problem with previous extend scheme (SetLatentNoiseMask 0/1 on tail): the mask
+keeps tail tokens "clean" in sampler trajectory, but DiT receives
+one timestep for the entire packed latent and DOES NOT see the tail as context —
+for the model the locked region looks like noise. New content is generated
+"blindly" relative to the head -> loose seam, ghosting,
+accumulating from clip to clip.
 
-Решение — два якоря:
+Solution — dual anchors:
 
-1. MiniMaxStudioExtendKeyframes — хвост-латент уходит в conditioning
-   каналом minimax_keyframes (нативный keyframe-механизм H3, тот же,
-   что во fl2va): PackedLayout пакует его строками cond с img_update=0
-   (никогда не денойзится), модель видит его чистым на КАЖДОМ шаге.
-   Аудио-хвост (плюс контекст до перекрытия) — тем же каналом.
+1. MiniMaxStudioExtendKeyframes — tail latent is fed into conditioning
+   via minimax_keyframes channel (native H3 keyframe mechanism, identical
+   to fl2va): PackedLayout packs it into cond rows with img_update=0
+   (never denoised), model sees it clean at EVERY step.
+   Audio tail (plus context before overlap) — via the same channel.
 
-2. MiniMaxStudioLatentLock — обёртка модели (model_function_wrapper):
-   после каждого шага предсказание x0 в залоченных позициях принудительно
-   заменяется чистым латентом хвоста. Замена out (предсказания), не x —
-   шаг сэмплера сам приводит x к локу. Видео-маска SetLatentNoiseMask
-   при этом не нужна (у H3Zero — единицы), аудио-маска остаётся: ядро
-   превращает её в audio_denoise_mask conds («чистый timestep»).
+2. MiniMaxStudioLatentLock — model wrapper (model_function_wrapper):
+   after every step predicted x0 at locked positions is forcibly
+   replaced with the clean tail latent. Replacing out (prediction), not x —
+   the sampler step naturally brings x to lock. Video mask SetLatentNoiseMask
+   is not required (H3Zero has ones), audio mask remains: kernel
+   turns it into audio_denoise_mask conds ("clean timestep").
 """
 
 import math
@@ -42,9 +42,9 @@ def _unpack(x, shapes):
 
 
 class _LockWrapper:
-    """model_function_wrapper: заменяет предсказанный x0 в залоченных зонах
-    (перекрытие с предыдущим клипом) чистым латентом хвоста — точный порт
-    LockWrapper."""
+    """model_function_wrapper: replaces predicted x0 in locked regions
+    (overlap with previous clip) with clean tail latent — exact port
+    of LockWrapper."""
 
     def __init__(self, lock_v=None, w_v=None, lock_a=None, w_a=None):
         self.lock_v, self.w_v, self.lock_a, self.w_a = lock_v, w_v, lock_a, w_a
@@ -67,12 +67,12 @@ class _LockWrapper:
 
 
 class MiniMaxStudioExtendKeyframes:
-    """Добавить minimax_keyframes в conditioning клипа продления.
+    """Add minimax_keyframes to extension clip conditioning.
 
-    Видео-латент хвоста ставится на resolved_frame_index=0 (хвост занимает
-    начало клипа); аудио-латент контекста — на отрицательный кадр (звук
-    «до» перекрытия, заканчивается на его границе). Ядро H3 пакует их
-    cond-строками, которые не денойзятся и видны модели на каждом шаге.
+    Tail video latent is placed at resolved_frame_index=0 (tail occupies
+    start of clip); context audio latent — at negative frame (audio
+    "before" overlap, ending at its boundary). H3 kernel packs them
+    as cond rows that are not denoised and visible to model at each step.
     """
 
     @classmethod
@@ -111,12 +111,12 @@ class MiniMaxStudioExtendKeyframes:
 
 
 class MiniMaxStudioLatentLock:
-    """Обёртка модели: жёсткий лок перекрытия (пресечённый дрейф хвоста).
+    """Model wrapper: hard lock of overlap (preventing tail drift).
 
-    Лок-тензоры — те же хвосты, что ушли в keyframes; веса — по числу
-    залоченных temporal-токенов видео (T) и аудио-шагов (A) от начала.
-    handoff_ramp: последние N аудио-шагов лок-зоны плавно отпускаются
-    (0 = жёсткая граница).
+    Lock tensors are the same tails passed to keyframes; weights correspond
+    to number of locked video temporal tokens (T) and audio steps (A) from start.
+    handoff_ramp: last N audio steps of lock zone are smoothly released
+    (0 = hard boundary).
     """
 
     @classmethod

@@ -1,40 +1,40 @@
 /**
- * (правка 136 / Bonsai) Адаптер протокола для Ternary Bonsai 2 27B.
+ * (fix 136 / Bonsai) Protocol adapter for Ternary Bonsai 2 27B.
  *
- * Bonsai-бэкенд — это prism llama-server с OpenAI-совместимым API
- * (/v1/chat/completions, stream:true), а вся остальная студия говорит на
- * протоколе tools/llm_server.py:
- *   запрос:  messages с медиа-частями {type:'image', image:'/abs/path.jpg'}
- *   ответ:   SSE `data: {"delta":"..."}\n\n` (+ {"done":true} в конце)
+ * The Bonsai backend is a prism llama-server with an OpenAI-compatible API
+ * (/v1/chat/completions, stream:true), while the rest of the studio uses
+ * the tools/llm_server.py protocol:
+ *   request:  messages with media parts {type:'image', image:'/abs/path.jpg'}
+ *   response: SSE `data: {"delta":"..."}\n\n` (+ {"done":true} at the end)
  *
- * Этот модуль bridg'ит оба направления:
- *  • toOpenAiMessages() — внутренние messages → OpenAI (картинки читаются
- *    с диска и уходят как data:image/...;base64 URI);
- *  • openAiSseToDelta() — OpenAI SSE → наш SSE-формат, чтобы ФРОНТЕНД
- *    (assistant-stream.ts) не менялся вовсе. reasoning_content (если вдруг
- *    появится несмотря на --reasoning-budget 0) отбрасывается.
+ * This module bridges both directions:
+ *  • toOpenAiMessages() — internal messages → OpenAI (images are read
+ *    from disk and sent as data:image/...;base64 URIs);
+ *  • openAiSseToDelta() — OpenAI SSE → our SSE format so that the FRONTEND
+ *    (assistant-stream.ts) remains completely unchanged. reasoning_content (if
+ *    it appears despite --reasoning-budget 0) is discarded.
  *
- * ВИДЕО: llama-server форка целые видео не принимает (наш python-сервер
- * умеет это через патч mtmd) — на Bonsai-бэкенде видео-кадры извлекаются
- * ffmpeg'ом в отдельные JPEG и уходят как image_url (правка 162).
+ * VIDEO: the llama-server fork does not accept full videos (our python server
+ * supports this via the mtmd patch) — on the Bonsai backend, video frames are extracted
+ * via ffmpeg into individual JPEGs and sent as image_url (fix 162).
  */
 import { readFileSync } from 'fs'
 
-/* ──────────────────── Запрос: messages → OpenAI ──────────────────── */
+/* ──────────────────── Request: messages → OpenAI ──────────────────── */
 
 interface InternalPart {
   type?: string
   text?: string
   image?: string
   video?: string
-  /** (правка 162) Массив путей к JPEG-кадрам, извлечённым из видео. */
+  /** (fix 162) Array of paths to JPEG frames extracted from video. */
   video_frames?: string[]
 }
 
 export interface InternalMessage {
   role: string
-  /** Как и во всём роуте чата: строка ИЛИ массив частей (типизация слабая —
-   * сужаем по полю type при обходе, как это делает estimateMessageTokens). */
+  /** As in the entire chat route: string OR array of parts (weak typing —
+   * narrow by type field during traversal, as estimateMessageTokens does). */
   content: string | unknown[]
 }
 
@@ -58,10 +58,10 @@ function imageToDataUri(absPath: string): string | null {
 }
 
 /**
- * Конвертация внутренних messages в OpenAI-формат. Каждая {type:'image'}
- * часть читается с диска и становится image_url data-URI; {type:'video'}
- * заменяется текстовой заметкой (модель не должна описывать то, чего
- * не видит). Текстовые части проходят как есть, в исходном порядке.
+ * Converts internal messages to OpenAI format. Each {type:'image'}
+ * part is read from disk and becomes an image_url data-URI; {type:'video'}
+ * is replaced with a text note (the model should not describe what it
+ * cannot see). Text parts pass through as-is, in original order.
  */
 export async function toOpenAiMessages(
   messages: Array<InternalMessage>,
@@ -92,7 +92,7 @@ export async function toOpenAiMessages(
           })
         }
       } else if (p && p.type === 'video') {
-        // (правка 162) Видео-кадры, извлечённые ffmpeg'ом — отправляем как картинки.
+        // (fix 162) Video frames extracted by ffmpeg — send as images.
         if (Array.isArray(p.video_frames) && p.video_frames.length > 0) {
           for (const framePath of p.video_frames) {
             const uri = imageToDataUri(framePath)
@@ -107,7 +107,7 @@ export async function toOpenAiMessages(
             })
           }
         } else {
-          // Кадры не извлечены — честная заметка.
+          // Frames not extracted — honest note.
           parts.push({
             type: 'text',
             text: '(a video reference exists, but its frames are NOT attached to this assistant — reference it as a tag only and do NOT describe, guess or invent its content)',
@@ -125,12 +125,12 @@ export async function toOpenAiMessages(
   return out
 }
 
-/* ──────────────────── Ответ: OpenAI SSE → наш SSE ──────────────────── */
+/* ──────────────────── Response: OpenAI SSE → our SSE ──────────────────── */
 
 /**
- * Оборачивает тело OpenAI-стрима (data: {"choices":[{"delta":{"content"}}]}
- * ... data: [DONE]) в наш формат (data: {"delta":"..."} / {"done":true}).
- * Фронтенд assistant-stream.ts остаётся нетронутым.
+ * Wraps the OpenAI stream body (data: {"choices":[{"delta":{"content"}}]}
+ * ... data: [DONE]) into our format (data: {"delta":"..."} / {"done":true}).
+ * The assistant-stream.ts frontend remains untouched.
  */
 export function openAiSseToDelta(
   body: ReadableStream<Uint8Array>,
@@ -140,13 +140,13 @@ export function openAiSseToDelta(
   let buf = ''
   let sentDone = false
 
-  // JSON.stringify экранирует переводы строк внутри строк сам —
-  // фрейминг SSE (разделитель \n\n) не ломается.
+  // JSON.stringify escapes newlines inside strings automatically —
+  // SSE framing (delimiter \n\n) is not broken.
   const emit = (
     controller: TransformStreamDefaultController<Uint8Array>,
     obj: Record<string, unknown>,
   ) => {
-    if (sentDone && obj.done) return // один done на стрим: [DONE] ИЛИ flush
+    if (sentDone && obj.done) return // single done per stream: [DONE] OR flush
     if (obj.done) sentDone = true
     controller.enqueue(
       encoder.encode(`data: ${JSON.stringify(obj)}\n\n`),
@@ -174,7 +174,7 @@ export function openAiSseToDelta(
             try {
               parsed = JSON.parse(payload)
             } catch {
-              continue // битый/недокачанный чанк — ждём следующего
+              continue // corrupted/partial chunk — wait for next
             }
             if (parsed.error) {
               const msg = typeof parsed.error === 'string'
@@ -184,8 +184,8 @@ export function openAiSseToDelta(
               continue
             }
             const delta = parsed.choices?.[0]?.delta
-            // reasoning_content отбрасываем: с --reasoning-budget 0 его
-            // быть не должно, но форк может прислать пустые куски.
+            // reasoning_content is discarded: with --reasoning-budget 0 it
+            // should not exist, but the fork might send empty chunks.
             if (typeof delta?.content === 'string' && delta.content.length > 0) {
               emit(controller, { delta: delta.content })
             }
@@ -193,7 +193,7 @@ export function openAiSseToDelta(
         }
       },
       flush(controller) {
-        // Стрим оборвался без [DONE] — закрываем наш протокол честно.
+        // Stream terminated without [DONE] — close our protocol cleanly.
         emit(controller, { done: true })
       },
     }),

@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 /**
- * scripts/release.mjs — подготовка портативной сборки к релизу.
+ * scripts/release.mjs — prepares portable build for release.
  *
- * Последовательность:
- *   1. clean       — убрать артефакты прошлой сборки и мусор
+ * Sequence:
+ *   1. clean       — remove artifacts from previous build and garbage
  *   2. typecheck   — tsc --noEmit (strict + noUnusedLocals/Parameters)
- *   3. build       — next build --webpack через scripts/build.mjs (хип 8 ГБ)
- *   4. verify      — проверить, что артефакты на месте и проект «чист»
+ *   3. build       — next build --webpack via scripts/build.mjs (heap 8 GB)
+ *   4. verify      — verify that artifacts are in place and project is clean
  *
- * Шаг 4 — самый ценный: он ловит ровно те проблемы, из-за которых
- * релиз «не запускается у пользователя»:
- *   • .next/ не собран или собран частично;
- *   • в корне остались логи / мусорные файлы;
- *   • пропал node_modules (без него start.bat не поднимет приложение);
- *   • нет .env (без него ComfyUI-бэкенд не найдёт);
- *   • не хватает electron/ (start.bat уйдёт в браузерный режим);
- *   • нет public/splash-videos/ (заставка останется чёрной).
+ * Step 4 is the most valuable: it catches exactly those problems that cause
+ * "release does not start for the user":
+ *   • .next/ is not built or partially built;
+ *   • logs / junk files remain in root;
+ *   • node_modules is missing (without it start.bat will not start app);
+ *   • .env is missing (without it ComfyUI backend cannot be found);
+ *   • electron/ is missing (start.bat will fall back to browser mode);
+ *   • public/splash-videos/ is missing (splash screen remains black).
  *
- * Использование:
- *   node scripts/release.mjs            — полный цикл
- *   node scripts/release.mjs --verify   — только проверка (без сборки)
+ * Usage:
+ *   node scripts/release.mjs            — full cycle
+ *   node scripts/release.mjs --verify   — verification only (no build)
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -34,7 +34,7 @@ function run(label, cmd, args) {
   console.log(`\n[release] === ${label} ===`);
   const r = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
   if (r.status !== 0) {
-    console.error(`[release] ПРОВАЛ: ${label}`);
+    console.error(`[release] FAILED: ${label}`);
     failed = true;
     return false;
   }
@@ -54,75 +54,75 @@ function dirSize(dir) {
   }
 }
 
-// ── 1. Очистка ────────────────────────────────────────────────────────────
+// ── 1. Clean ──────────────────────────────────────────────────────────────
 if (!VERIFY_ONLY) {
   if (!run('clean', process.execPath, ['scripts/clean.mjs'])) process.exit(1);
 
-  // ── 2. Проверка типов ───────────────────────────────────────────────────
+  // ── 2. Typecheck ────────────────────────────────────────────────────────
   if (!run('typecheck', process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'])) process.exit(1);
 
-  // ── 3. Сборка ──────────────────────────────────────────────────────────
+  // ── 3. Build ────────────────────────────────────────────────────────────
   if (!run('build', process.execPath, ['scripts/build.mjs'])) process.exit(1);
 
-  // ── 3b. Ужатие сборки ──────────────────────────────────────────────────
-  // .next/cache (кэш пересборки, ~300 МБ) и манифесты .nft.json (~530 МБ)
-  // в рантайме не нужны: server.js запускает next() из node_modules.
+  // ── 3b. Prune build ─────────────────────────────────────────────────────
+  // .next/cache (rebuild cache, ~300 MB) and .nft.json manifests (~530 MB)
+  // are not needed at runtime: server.js launches next() from node_modules.
   if (!run('prune build', process.execPath, ['scripts/prune-build.mjs'])) process.exit(1);
 
-  // ── 3c. Имя процесса ───────────────────────────────────────────────────
-  // Копия electron.exe с именем MinimaxH3Studio.exe — чтобы в диспетчере
-  // задач процесс студии не выглядел как «electron».
+  // ── 3c. Process name ────────────────────────────────────────────────────
+  // Copy electron.exe as MinimaxH3Studio.exe — so that in Task Manager
+  // the studio process does not look like "electron".
   run('prepare electron', process.execPath, ['scripts/prepare-electron.mjs']);
 }
 
-// ── 4. Проверка артефактов ───────────────────────────────────────────────
+// ── 4. Artifact verification ──────────────────────────────────────────────
 console.log(`\n[release] === verify ===`);
 
 const checks = [];
 const check = (ok, label, hint) => checks.push({ ok, label, hint });
 
-// Сборка.
+// Build.
 const buildId = join(ROOT, '.next', 'BUILD_ID');
-check(existsSync(buildId), 'production build (.next/BUILD_ID)', 'запустите `npm run build`');
-check(existsSync(join(ROOT, '.next', 'server')), 'серверный бандл (.next/server)');
-check(existsSync(join(ROOT, '.next', 'static')), 'клиентские ассеты (.next/static)');
+check(existsSync(buildId), 'production build (.next/BUILD_ID)', 'run `npm run build`');
+check(existsSync(join(ROOT, '.next', 'server')), 'server bundle (.next/server)');
+check(existsSync(join(ROOT, '.next', 'static')), 'client assets (.next/static)');
 
-// Рантайм.
-check(existsSync(join(ROOT, 'node_modules')), 'node_modules (npm-зависимости)', 'запустите `npm install`');
+// Runtime.
+check(existsSync(join(ROOT, 'node_modules')), 'node_modules (npm dependencies)', 'run `npm install`');
 check(
   existsSync(join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe')),
-  'Electron (окно приложения)',
-  'скопируйте node_modules целиком с исходного ПК',
+  'Electron (app window)',
+  'copy node_modules entirely from source PC',
 );
 check(
   existsSync(join(ROOT, 'node_modules', 'electron', 'dist', 'MinimaxH3Studio.exe')),
-  'переименованный MinimaxH3Studio.exe (имя в диспетчере задач)',
-  'выполните `node scripts/prepare-electron.mjs`',
+  'renamed MinimaxH3Studio.exe (Task Manager name)',
+  'run `node scripts/prepare-electron.mjs`',
 );
 check(existsSync(join(ROOT, 'electron', 'main.js')), 'electron/main.js');
 check(existsSync(join(ROOT, 'electron', 'preload.js')), 'electron/preload.js');
 
-// Точка входа.
-check(existsSync(join(ROOT, 'start.bat')), 'start.bat (точка входа)');
+// Entry point.
+check(existsSync(join(ROOT, 'start.bat')), 'start.bat (entry point)');
 check(existsSync(join(ROOT, 'start_hidden.vbs')), 'start_hidden.vbs');
 check(existsSync(join(ROOT, 'server.js')), 'server.js');
-check(existsSync(join(ROOT, '.env')), '.env (COMFY_URL)', 'скопируйте .env из исходного ПК');
+check(existsSync(join(ROOT, '.env')), '.env (COMFY_URL)', 'copy .env from source PC');
 
-// Ресурсы.
-check(existsSync(join(ROOT, 'public', 'splash-videos')), 'public/splash-videos (видео-заставка)');
+// Resources.
+check(existsSync(join(ROOT, 'public', 'splash-videos')), 'public/splash-videos (splash video)');
 check(existsSync(join(ROOT, 'public', 'logo.svg')), 'public/logo.svg');
 check(existsSync(join(ROOT, 'config', 'config.ini')), 'config/config.ini');
 
-// Мусор в корне.
+// Garbage in root.
 const junk = [];
 for (const e of readdirSync(ROOT, { withFileTypes: true })) {
   if (e.isFile() && (e.name.toLowerCase().endsWith('.log') || e.name === '_nul' || e.name.endsWith('.tsbuildinfo'))) {
     junk.push(e.name);
   }
 }
-check(junk.length === 0, 'в корне нет логов/мусора', `удалите: ${junk.join(', ')}`);
+check(junk.length === 0, 'no logs/garbage in root', `delete: ${junk.join(', ')}`);
 
-// Итог.
+// Summary.
 console.log('');
 for (const c of checks) {
   console.log(`  ${c.ok ? 'OK  ' : 'FAIL'}  ${c.label}${c.ok ? '' : `   → ${c.hint}`}`);
@@ -130,34 +130,34 @@ for (const c of checks) {
 
 const bad = checks.filter((c) => !c.ok);
 if (bad.length > 0) {
-  console.error(`\n[release] ПРОВАЛ: ${bad.length} проверок не пройдено.`);
+  console.error(`\n[release] FAILED: ${bad.length} checks failed.`);
   process.exit(1);
 }
 
-// Мягкие предупреждения — не блокируют релиз, но показывают, что можно ужать.
+// Soft warnings — do not block release, but show what could be pruned.
 const warnings = [];
 const cacheDir = join(ROOT, '.next', 'cache');
 if (existsSync(cacheDir)) {
   const cacheSize = dirSize(cacheDir);
-  // Мелкий кэш (tsconfig.tsbuildinfo на ~200 КБ) — норма, он пересоздаётся
-  // при каждом запуске typecheck. Предупреждаем только про тяжёлый кэш webpack.
+  // Minor cache (tsconfig.tsbuildinfo ~200 KB) is normal, recreated on every
+  // typecheck run. Warn only about heavy webpack cache.
   if (cacheSize > 10 * 1024 * 1024) {
     warnings.push(
-      `в .next/cache остался кэш пересборки (${(cacheSize / 1024 / 1024).toFixed(0)} МБ) — выполните 'npm run release'`,
+      `rebuild cache remains in .next/cache (${(cacheSize / 1024 / 1024).toFixed(0)} MB) — run 'npm run release'`,
     );
   }
 }
 const nextSize = dirSize(join(ROOT, '.next'));
 if (nextSize > 100 * 1024 * 1024) {
-  warnings.push(`.next весит ${(nextSize / 1024 / 1024).toFixed(0)} МБ — выполните 'node scripts/prune-build.mjs'`);
+  warnings.push(`.next size is ${(nextSize / 1024 / 1024).toFixed(0)} MB — run 'node scripts/prune-build.mjs'`);
 }
 
 const size = dirSize(join(ROOT, '.next'));
 const buildIdValue = existsSync(buildId) ? readFileSync(buildId, 'utf-8').trim() : '?';
 console.log(
-  `\n[release] OK — сборка готова к релизу ` +
-    `(.next: ${(size / 1024 / 1024).toFixed(1)} МБ, BUILD_ID ${buildIdValue}).`,
+  `\n[release] OK — build is ready for release ` +
+    `(.next: ${(size / 1024 / 1024).toFixed(1)} MB, BUILD_ID ${buildIdValue}).`,
 );
 for (const w of warnings) {
-  console.log(`  ВНИМАНИЕ  ${w}`);
+  console.log(`  WARNING  ${w}`);
 }

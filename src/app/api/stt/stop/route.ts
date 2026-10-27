@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { stopStt } from '@/lib/stt-runner'
 
 /**
- * (правка 65) POST /api/stt/stop — остановить STT-сервис (освободить память).
+ * (fix 65) POST /api/stt/stop — stop STT service (free memory).
  */
 export const dynamic = 'force-dynamic'
 

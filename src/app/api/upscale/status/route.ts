@@ -3,18 +3,18 @@ import { getAppConfig } from '@/lib/app-config'
 import { upscaleStatus, upscaleDir, upscalePort, fetchUpscaleHealth } from '@/lib/upscale-runner'
 
 /**
- * (правка 74) GET /api/upscale/status
- * Вкладка Upscale (DLSS-мост): конфиг + состояние сервиса + health моста.
+ * (fix 74) GET /api/upscale/status
+ * Upscale tab (DLSS bridge): config + service state + bridge health.
  *
- * (правка 77) Чисто чтение — без side-эффектов. Автозапуск убран отсюда:
- * раньше каждый GET, заставший сервис «не запущен», спавнил ensureUpscale —
- * при сироте/зомби на порту это было бесконечным спамом процессов.
- * Автозапуск теперь живёт в клиентском синглтоне useUpscaleService
- * (src/lib/upscale-service.ts) и переживает переключение вкладок.
+ * (fix 77) Pure read — without side effects. Autostart was removed from here:
+ * previously every GET that caught the service "not running" spawned ensureUpscale —
+ * with an orphan/zombie on the port this caused infinite process spam.
+ * Autostart now lives in the client singleton useUpscaleService
+ * (src/lib/upscale-service.ts) and survives tab switching.
  *
- * Пока сервис стартует (starting) делаем best-effort health: мост мог уже
- * отвечать, и тогда UI увидит живой log_tail («Подготовка рантайма…»)
- * вместо мёртвого спиннера «запуск…».
+ * While service is starting, we do a best-effort health check: the bridge may already
+ * be responding, so UI sees a live log_tail ("Preparing runtime...")
+ * instead of a dead "starting..." spinner.
  */
 export const dynamic = 'force-dynamic'
 

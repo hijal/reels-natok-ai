@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 /**
- * scripts/prune-build.mjs — ужатие production-сборки перед релизом.
+ * scripts/prune-build.mjs — compact production build before release.
  *
- * Что делает:
- *   1. Удаляет `.next/cache/` (≈300 МБ) — это кэш webpack для УСКОРЕНИЯ
- *      пересборок. На работу приложения не влияет.
- *   2. Обрезает `.next/server` — манифесты `.nft.json` (≈530 МБ): это
- *      списки файлов, которые Next считает нужными для standalone-деплоя
- *      (output-file-tracing). Каждый перечисляет ~87 000 файлов деревьев
- *      ComfyUI / embedded-Python, к которым приложение обращается по
- *      АБСОЛЮТНОМУ пути в рантайме, а не через require().
+ * What it does:
+ *   1. Removes `.next/cache/` (≈300 MB) — webpack cache used to SPEED UP
+ *      rebuilds. Has no impact on application runtime.
+ *   2. Trims `.next/server` — `.nft.json` manifests (≈530 MB): file lists
+ *      that Next considers necessary for standalone deployment
+ *      (output-file-tracing). Each lists ~87,000 files across ComfyUI /
+ *      embedded-Python trees accessed by the app via ABSOLUTE paths at
+ *      runtime rather than require().
  *
- * Почему не `outputFileTracingExcludes` в next.config.ts:
- * Next склеивает паттерн с корнем проекта через `path.join`, а на Windows
- * это даёт обратные слэши — picomatch считает обратный слэш экранирующим
- * символом, и ни один паттерн не совпадает. Проверено на Next 16.1.1:
- *   path.join(dir, GLOB) даёт 'E:\\proj\\**\\ComfyUI-Easy-Install\\**'
- *   и такой шаблон НЕ совпадает с абсолютным путём, тогда как сырой
- *   шаблон с прямыми слэшами совпадает. Поэтому обрезаем манифесты
- *   после сборки — предсказуемо на любой платформе.
+ * Why not `outputFileTracingExcludes` in next.config.ts:
+ * Next concatenates the pattern with the project root via `path.join`, which
+ * on Windows yields backslashes — picomatch treats backslash as an escape
+ * character, and no pattern matches. Verified on Next 16.1.1:
+ *   path.join(dir, GLOB) produces 'E:\\proj\\**\\ComfyUI-Easy-Install\\**'
+ *   and such a template DOES NOT match an absolute path, whereas a raw
+ *   pattern with forward slashes matches. Therefore we trim manifests
+ *   post-build — predictable across all platforms.
  *
- * Безопасность: манифесты .nft.json читаются только при standalone-сборке
- * (output: 'standalone') и при деплое. Здесь приложение запускается как
- * `next()` из node_modules (server.js) — манифесты в рантайме не нужны.
+ * Safety: .nft.json manifests are only read during standalone builds
+ * (output: 'standalone') and deployment. Here the application runs via
+ * `next()` from node_modules (server.js) — manifests are unused at runtime.
  *
- * Использование:
+ * Usage:
  *   node scripts/prune-build.mjs
  *   node scripts/prune-build.mjs --dry
  */
@@ -35,8 +35,8 @@ const ROOT = process.cwd();
 const DRY = process.argv.includes('--dry');
 
 /**
- * Куски путей, которые не нужны приложению в рантайме.
- * Сравнение — по нормализованному пути (без обратных слэшей).
+ * Path segments that the app does not need at runtime.
+ * Matched against normalized paths (no backslashes).
  */
 const EXCLUDE_SEGMENTS = [
   'ComfyUI-Easy-Install',
@@ -46,14 +46,14 @@ const EXCLUDE_SEGMENTS = [
   '.local-input',
 ];
 
-/** Файлы, которые нужно оставить в манифесте всегда. */
+/** Files that must always be retained in the manifest. */
 const KEEP_SUFFIXES = ['node_modules/next/dist/compiled'];
 
 function normalize(p) {
   return p.split(sep).join('/').split('\\').join('/');
 }
 
-/** Нужно ли исключить этот путь из манифеста? */
+/** Should this path be excluded from the manifest? */
 function isExcluded(filePath) {
   const p = normalize(filePath);
   for (const seg of EXCLUDE_SEGMENTS) {
@@ -86,15 +86,15 @@ function walk(dir, out = []) {
   return out;
 }
 
-// ── 1. Кэш сборки ─────────────────────────────────────────────────────────
+// ── 1. Build cache ────────────────────────────────────────────────────────
 const cacheDir = join(ROOT, '.next', 'cache');
 if (existsSync(cacheDir)) {
   const size = dirSize(cacheDir);
-  console.log(`[prune] .next/cache            ${(size / 1024 / 1024).toFixed(0)} МБ — удаляю (кэш пересборки)`);
+  console.log(`[prune] .next/cache            ${(size / 1024 / 1024).toFixed(0)} MB — removing (rebuild cache)`);
   if (!DRY) rmSync(cacheDir, { recursive: true, force: true });
 }
 
-// ── 2. Манифесты .nft.json ────────────────────────────────────────────────
+// ── 2. .nft.json manifests ────────────────────────────────────────────────
 const serverDir = join(ROOT, '.next', 'server');
 const manifests = walk(serverDir).filter((f) => f.endsWith('.nft.json'));
 
@@ -126,10 +126,10 @@ for (const file of manifests) {
 }
 
 console.log(
-  `[prune] .nft.json (${manifests.length} шт.)  ` +
-    `${(before / 1024 / 1024).toFixed(0)} МБ → ${(after / 1024 / 1024).toFixed(1)} МБ` +
-    (trimmed ? `  (исключено записей: ${trimmed.toLocaleString('ru-RU')})` : ''),
+  `[prune] .nft.json (${manifests.length} files)  ` +
+    `${(before / 1024 / 1024).toFixed(0)} MB → ${(after / 1024 / 1024).toFixed(1)} MB` +
+    (trimmed ? `  (entries excluded: ${trimmed.toLocaleString('en-US')})` : ''),
 );
 
 const total = dirSize(join(ROOT, '.next'));
-console.log(`[prune] итоговый размер .next:  ${(total / 1024 / 1024).toFixed(1)} МБ${DRY ? '  (--dry: ничего не удалено)' : ''}`);
+console.log(`[prune] final .next size:         ${(total / 1024 / 1024).toFixed(1)} MB${DRY ? '  (--dry: nothing deleted)' : ''}`);

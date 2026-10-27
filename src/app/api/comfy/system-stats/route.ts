@@ -36,10 +36,10 @@ function measureCpu(): void {
 }
 
 // Prime the baseline, then measure every second in the background
-// (правка 716) Таймер создаётся ЛЕНИВО (при первом GET) и хранится в
-// module-level переменной. Раньше он создавался на уровне модуля — в dev-режиме
-// Next.js перезагружает модуль при каждом HMR-обновлении, и каждый перезапуск
-// добавлял ещё один 1-секундный таймер (и ещё один полный os.cpus()).
+// (fix 716) The timer is created LAZILY (on the first GET) and stored in a
+// module-level variable. Previously it was created at module level — in dev mode
+// Next.js reloads the module on every HMR update, and every restart
+// added another 1-second timer (and another full os.cpus()).
 let cpuTimer: ReturnType<typeof setInterval> | null = null
 
 function ensureCpuTimer() {

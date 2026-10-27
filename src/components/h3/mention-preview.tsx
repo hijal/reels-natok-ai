@@ -142,7 +142,7 @@ export function PreviewCard({
         )}
         {kind === 'video' && loaded && (
           <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-medium">
-            Видео
+            Video
           </div>
         )}
         {label && loaded && (
@@ -168,9 +168,8 @@ export interface MentionTagWithPreviewProps {
   /** Render extra children after the tag text inside the span (rarely needed). */
   children?: ReactNode
   /**
-   * (правка 719) Клик по тегу — действие (например, открыть референс во
-   * весь экран). В textarea-подложке не передаётся: там клик должен
-   * редактировать текст.
+   * Tag click action (e.g. open reference in fullscreen).
+   * Not passed in textarea backdrop: there a click should edit text.
    */
   onClick?: () => void
 }

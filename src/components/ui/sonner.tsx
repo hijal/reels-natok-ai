@@ -5,7 +5,7 @@ import { Toaster as Sonner, ToasterProps } from "sonner"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
-  /* все тёмные темы (dark, dark-gray) → тёмный тостер */
+  /* all dark themes (dark, dark-gray) → dark toaster */
   const sonnerTheme: ToasterProps["theme"] = theme === "light" ? "light" : "dark"
 
   return (
@@ -14,14 +14,14 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       style={
         {
-          /* (правка 717) Серая НЕПРОЗРАЧНАЯ плашка по теме приложения.
-             Раньше фон задавался через color-mix(... , transparent) — тосты
-             были полупрозрачными и просвечивали интерфейс. Теперь фон —
-             сплошной --toast-surface (своя переменная каждой темы: светлая,
-             тёмная, серая, «Студия»), рамка — --border, текст — --foreground.
-             Тип тоста (ошибка/успех/…) читается по ЦВЕТУ ИКОНКИ — она
-             красится через [data-sonner-toast][data-type=…] в globals.css.
-             Плашка и кнопка закрытия описаны там же (см. [data-sonner-toast]). */
+          /* (fix 717) Gray OPAQUE plate styled to application theme.
+             Previously background was set via color-mix(... , transparent) — toasts
+             were translucent and the interface showed through. Now background is
+             solid --toast-surface (a custom variable for each theme: light,
+             dark, gray, "Studio"), border — --border, text — --foreground.
+             Toast type (error/success/…) is distinguished by ICON COLOR — styled
+             via [data-sonner-toast][data-type=…] in globals.css.
+             The plate and close button are defined there as well (see [data-sonner-toast]). */
           "--normal-bg": "var(--toast-surface)",
           "--normal-text": "var(--foreground)",
           "--normal-border": "var(--border)",
@@ -39,10 +39,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--info-border": "var(--border)",
         } as React.CSSProperties
       }
-      /* (правка 717) Компактный размер тоста. Размеры/скругление/фон/рамку/
-         тень/кнопку закрытия переопределяет globals.css ([data-sonner-toast]).
-         Tailwind-классы "!border !shadow-sm" убраны: они конфликтовали с
-         нашими правилами по !important (порядок каскада не гарантирован). */
+      /* (fix 717) Compact toast size. Dimensions/rounded corners/background/border/
+         shadow/close button are overridden by globals.css ([data-sonner-toast]).
+         Tailwind classes "!border !shadow-sm" were removed: they conflicted with
+         our rules via !important (cascade order not guaranteed). */
       toastOptions={{
         style: {
           fontSize: "12px",

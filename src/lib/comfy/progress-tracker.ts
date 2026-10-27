@@ -38,7 +38,7 @@ interface ProgressEntry {
   /** True when `executing` reported node===null (prompt finished). */
   done: boolean
   /**
-   * STICKY (правка 50): becomes true the moment ANY pass-2 node is observed
+   * STICKY (fix 50): becomes true the moment ANY pass-2 node is observed
    * (progress event, executing event, or KJ preview node_id '13') and never
    * reverts. The workflow runs pass 1 → pass 2 strictly once, so the stage
    * must be monotonic. The old logic derived the stage from the most recent
@@ -54,40 +54,40 @@ interface ProgressEntry {
    */
   previewStage: number
   /**
-   * (правка 255) Динамические стадии: сабмит регистрирует список сэмплер-узлов
-   * воркфлоу В ПОРЯДКЕ выполнения (generate full: ['46:21'],['46:16']; draft:
-   * одна; extend: ext_samp_i по клипам; refine chunks: cs_k по окнам).
-   * Общий прогресс = (стадия + дробь)/N — честные 0→100 для ЛЮБОГО числа
-   * проходов, а не только для двухпроходной генерации.
+   * (fix 255) Dynamic stages: submit registers a list of sampler nodes
+   * in the workflow IN EXECUTION ORDER (generate full: ['46:21'],['46:16']; draft:
+   * single; extend: ext_samp_i across clips; refine chunks: cs_k across windows).
+   * Overall progress = (stage + fraction)/N — honest 0→100 for ANY number
+   * of passes, not just two-pass generation.
    */
   stageSpecs: string[][] | null
-  /** node_id → индекс стадии (из stageSpecs; только сэмплер-узлы). */
+  /** node_id → stage index (from stageSpecs; sampler nodes only). */
   nodeStage: Record<string, number> | null
   /**
-   * (фикс порядка) Сэмплер-узлы в порядке ПЕРВОГО события. ComfyUI
-   * исполняет независимые окна рефайна не по порядку нумерации
-   * (наблюдалось cs_0 → cs_2 → cs_1): стадия для метки/процента —
-   * порядковый номер НАЧАВШЕГОСЯ сэмплера, а не индекс его узла,
-   * иначе «Кусок 3/3» появляется во время второго и процент скачет.
+   * (order fix) Sampler nodes in order of FIRST event. ComfyUI
+   * executes independent refine windows out of numerical order
+   * (observed cs_0 → cs_2 → cs_1): stage for label/percentage is
+   * sequential index of STARTED sampler, not its node index,
+   * otherwise "Chunk 3/3" appears during the second and percentage jumps.
    */
   stageObserved: string[]
-  /** Sticky-максимум наблюдаемой стадии (−1 = ничего не видели). */
+  /** Sticky-maximum of observed stage (−1 = nothing seen). */
   maxStage: number
-  /** Узел, который ComfyUI исполняет прямо сейчас (из 'executing'). */
+  /** Node currently being executed by ComfyUI (from 'executing'). */
   executingNode: string | null
   /**
-   * Последний сэмплер, от которого было ЛЮБОЕ событие (executing или
-   * progress). Прогресс сэмплера течёт непрерывно, пока он работает, —
-   * это самое надёжное «что исполняется СЕЙЧАС»: одиночное забегающее
-   * вперёд событие следующего сэмплера отбрасывается первым же событием
-   * реального (фикс метки «Кусок 3/3» при работе второго окна).
+   * Last sampler from which ANY event occurred (executing or
+   * progress). Sampler progress flows continuously while it runs —
+   * this is the most reliable indicator of "what is executing NOW": a single
+   * runaway event from the next sampler is discarded by the very first event
+   * of the actual one (fixes "Chunk 3/3" label during second window execution).
    */
   lastStageEvidence: string | null
   /**
-   * (правка 479) Tile-upscale: геометрия (число тайлов, чанков, шагов).
-   * Задана при сабмите, если удалось вычислить. КJ-события счётчики:
-   * kjEventCount = сколько KJ-превью уже пришло (каждое = 1 шаг 1 тайла-чанка).
-   * Общий прогресс = kjEventCount / (totalUnits × stepsPerUnit), монотонно 0→1.
+   * (fix 479) Tile-upscale: geometry (number of tiles, chunks, steps).
+   * Set on submission if successfully computed. KJ-events counters:
+   * kjEventCount = how many KJ previews already arrived (each = 1 step of 1 tile-chunk).
+   * Overall progress = kjEventCount / (totalUnits × stepsPerUnit), monotonically 0→1.
    */
   tileTotalUnits: number | null
   tileTotalTiles: number | null
@@ -104,10 +104,10 @@ interface PreviewEntry {
   step: number
   total: number
   timestamp: number
-  /** (правка 198) Проход, из которого пришёл ЭТОТ кадр (1|2) — по node_id
-   *  KJ-события ('12'/'extpv' = 1, '13'/'extpv2' = 2). Нестикадный: нужен,
-   *  чтобы роут /api/comfy/preview скрывал ранние «перешумлённые» кадры
-   *  прохода 2, не трогая черновики прохода 1. */
+  /** (fix 198) Pass from which THIS frame came (1|2) — based on node_id
+   *  of KJ event ('12'/'extpv' = 1, '13'/'extpv2' = 2). Non-sticky: needed so
+   *  that /api/comfy/preview route can hide early "over-noised" frames
+   *  of pass 2 without affecting drafts of pass 1. */
   stage?: number
 }
 
@@ -124,7 +124,7 @@ function newEntry(): ProgressEntry {
   }
 }
 
-/** (правка 479) Геометрия тайлов для прогресс-трекера. */
+/** (fix 479) Tile geometry for progress tracker. */
 export interface TileGeometry {
   totalTiles: number
   tilesW: number
@@ -135,10 +135,10 @@ export interface TileGeometry {
 }
 
 /**
- * (правка 255) Регистрация стадий промпта: список групп сэмплер-узлов в
- * порядке выполнения. Вызывается сразу после успешного сабмита — до любых
- * WS-событий. Без регистрации работает легаси-модель «ровно 2 прохода».
- * (правка 479) Опциональная tileGeometry — для tile-upscale прогресса.
+ * (fix 255) Prompt stage registration: list of sampler node groups in
+ * execution order. Called immediately after successful submit — before any
+ * WS events. Without registration the legacy "exactly 2 passes" model runs.
+ * (fix 479) Optional tileGeometry — for tile-upscale progress.
  */
 export function registerPromptStages(
   promptId: string,
@@ -156,14 +156,14 @@ export function registerPromptStages(
   })
   entry.nodeStage = map
   entry.stageObserved = []
-  // (правка 479) tile-upscale геометрия
+  // (fix 479) tile-upscale geometry
   if (tileGeometry) {
     entry.tileTotalUnits = tileGeometry.totalUnits
     entry.tileTotalTiles = tileGeometry.totalTiles
     entry.tileTotalChunks = tileGeometry.totalChunks
-    // (правка 716) stepsPerUnit обязан быть > 0: в вычислениях прогресса
-    // идёт деление на него (tileKjCount / tileStepsPerUnit) — клиент мог
-    // прислать steps: 0, и получался NaN-шаг/NaN-прогресс.
+    // (fix 716) stepsPerUnit must be > 0: progress calculations
+    // divide by it (tileKjCount / tileStepsPerUnit) — client could
+    // send steps: 0, resulting in NaN-step/NaN-progress.
     entry.tileStepsPerUnit = Math.max(1, Math.floor(tileGeometry.stepsPerUnit || 0) || 1)
     entry.tileKjCount = 0
   }
@@ -190,7 +190,7 @@ let connecting = false
 let activePromptId: string | null = null
 /** The prompt_id currently executing (from 'executing' WS event). */
 let executingPromptId: string | null = null
-/** Предыдущее значение queue_remaining из status-событий ComfyUI. */
+/** Previous queue_remaining value from ComfyUI status events. */
 let lastQueueRemaining = 0
 
 /** Set the active prompt_id (called when we submit a job). */
@@ -218,12 +218,12 @@ function connect() {
       } catch { /* ignore parse errors */ }
     })
 
-    // (правка 716) Обработчики проверяют, что событие пришло ИМЕННО от
-    // текущего сокета. Раньше обработчик СТАРОГО сокета присваивал ws = null
-    // безусловно: если к этому моменту уже был создан новый сокет, модуль
-    // терял ссылку на живое соединение (оно оставалось открытым), а
-    // следующий connect() создавал ВТОРОЕ соединение → дубликат событий
-    // ComfyUI и дубликатные обновления прогресса/превью.
+    // (fix 716) Handlers verify that the event came SPECIFICALLY from
+    // the current socket. Previously handler of OLD socket assigned ws = null
+    // unconditionally: if by then a new socket had already been created, module
+    // lost reference to live connection (which remained open), and
+    // next connect() created a SECOND connection → duplicate ComfyUI events
+    // and duplicate progress/preview updates.
     const isCurrent = () => ws === sock
 
     sock.on('close', () => {
@@ -237,9 +237,9 @@ function connect() {
       if (!isCurrent()) return
       ws = null
       connecting = false
-      // Обычно после 'error' следует 'close' с реконнектом, но это не
-      // гарантировано — страхуемся собственным таймером (безопасно: connect
-      // сам идемпотентен через connecting-флаг).
+      // Usually 'error' is followed by 'close' with reconnect, but this is not
+      // guaranteed — safeguard with our own timer (safe: connect
+      // is idempotent via connecting flag).
       setTimeout(connect, 3000)
     })
   } catch {
@@ -250,26 +250,26 @@ function connect() {
 }
 
 /**
- * Обработка одного WS-сообщения ComfyUI (тело ws.on('message')).
- * Выделено в экспорт (правка 255) для smoke-тестов математики стадий
- * без живого соединения.
+ * Handling of a single ComfyUI WS message (body of ws.on('message')).
+ * Extracted as export (fix 255) for smoke-testing stage math
+ * without a live connection.
  */
 export function applyTrackerMessage(msg: {
   type?: string
   data?: Record<string, unknown> & { prompt_id?: string; node?: string | null }
 }) {
   try {
-    // Опустошение очереди → фоновая выгрузка моделей MiniMax из VRAM
-    // (vram-arbiter: GPU освобождается сразу после завершения генераций)
+    // Queue drained → background unload of MiniMax models from VRAM
+    // (vram-arbiter: GPU released immediately after generation finishes)
     if (msg.type === 'status') {
       const remaining = (msg.data as { status?: { exec_info?: { queue_remaining?: number } } } | undefined)
         ?.status?.exec_info?.queue_remaining
       if (typeof remaining === 'number') {
         if (remaining === 0 && lastQueueRemaining > 0) {
-          // (правка 716) .catch обязателен: onQueueDrained внутри ждёт
-          // мьютекс VRAM-диспетчера, который может быть занят дольше
-          // таймаута — без обработчика это необработанный rejection, а Node
-          // по умолчанию завершает процесс на unhandled rejection.
+          // (fix 716) .catch is required: onQueueDrained internally waits
+          // for VRAM arbiter mutex, which can be locked longer than
+          // timeout — without handler this is an unhandled rejection, and Node
+          // terminates process on unhandled rejection by default.
           void onQueueDrained().catch((err) => {
             console.warn('[progress-tracker] onQueueDrained failed:', err instanceof Error ? err.message : String(err))
           })
@@ -295,9 +295,9 @@ export function applyTrackerMessage(msg: {
       if (!entry.nodes.includes(node)) {
         entry.nodes.push(node)
       }
-      // Правка 50: sticky stage — pass-2 evidence never reverts to pass 1
+      // Fix 50: sticky stage — pass-2 evidence never reverts to pass 1
       if (STAGE2_NODES.has(node)) entry.stage2Seen = true
-      // (фикс порядка) стадия в ПОРЯДКЕ НАБЛЮДЕНИЯ сэмплеров
+      // (order fix) stage in ORDER OF OBSERVATION of samplers
       const obsIdx = obsStageOf(entry, node)
       if (obsIdx !== null) {
         entry.maxStage = Math.max(entry.maxStage, obsIdx)
@@ -336,7 +336,7 @@ export function applyTrackerMessage(msg: {
         step: d.step || 0,
         total: d.total || 0,
         timestamp: Date.now(),
-        // (правка 198) проход ЭТОГО кадра (нестикадно, по node_id события)
+        // (fix 198) pass of THIS frame (non-sticky, from event node_id)
         stage: STAGE2_NODES.has(kjNodeForStage) ? 2 : 1,
       })
       // Also update progress from step/total
@@ -346,13 +346,13 @@ export function applyTrackerMessage(msg: {
           entry = newEntry()
           progressMap.set(pid, entry)
         }
-        // (правка 479) Tile-upscale: каждый KJ-событие = 1 шаг 1 тайла-чанка.
-        // Считаем ВСЕ события монотонно — это честный прогресс 0→100.
-        // (правка 487) Boundary-0 событие (step=0 — затравка из шума ДО
-        // первого шага, шлётся при старте каждого сэмплинга) шагом НЕ
-        // является: считаем только step>=1, иначе каждый тайл добавлял
-        // лишнюю единицу и шкала убегала вперёд (прогресс «тайлы уже
-        // проходят» ещё во время инициализации модели).
+        // (fix 479) Tile-upscale: each KJ event = 1 step of 1 tile-chunk.
+        // Count ALL events monotonically — this is honest 0→100 progress.
+        // (fix 487) Boundary-0 event (step=0 — noise seed BEFORE
+        // first step, sent at start of each sampling) is NOT a step:
+        // count only step>=1, otherwise each tile added an extra unit
+        // and progress bar drifted ahead ("tiles already processing"
+        // while model was still initializing).
         if (entry.tileTotalUnits !== null && entry.tileStepsPerUnit !== null) {
           if ((d.step || 0) >= 1) entry.tileKjCount++
         }
@@ -361,24 +361,24 @@ export function applyTrackerMessage(msg: {
         entry.byNode[node].value = d.step || 0
         entry.byNode[node].max = d.total as number
         if (!entry.nodes.includes(node)) entry.nodes.push(node)
-        // Правка 50: the KJ event knows its own node_id ('12' pass 1 /
+        // Fix 50: the KJ event knows its own node_id ('12' pass 1 /
         // '13' pass 2) — tag the shared pseudo-node with that pass and
         // latch the sticky stage from real pass-2 evidence.
         const kjNode = kjNodeForStage
-        // (правка 255 + фикс порядка) псевдо-узел 'preview' отражает стадию
-        // ИСПОЛНЯЕМОГО сэмплера в ПОРЯДКЕ НАБЛЮДЕНИЯ (KJ-обёртка общая
-        // для всех клипов/окон — её node_id не различает стадии).
+        // (fix 255 + order fix) pseudo-node 'preview' reflects stage of
+        // EXECUTING sampler in ORDER OF OBSERVATION (KJ wrapper is shared
+        // across all clips/windows — its node_id does not distinguish stages).
         const obsIdx = obsStageOf(entry, entry.executingNode)
         if (obsIdx !== null) {
           entry.previewStage = obsIdx
           entry.maxStage = Math.max(entry.maxStage, obsIdx)
         } else {
-          // (правка 716) Единицы приведены к 0-BASED индексу стадии — как в
-          // ветке выше. Раньше здесь писался 1-BASED номер прохода (1|2), а
-          // поле previewStage использовалось ещё и в динамическом пути как
-          // 0-based индекс (сравнение `idx !== cur`, где cur — 0-based). Из-за
-          // смешения единиц доля KJ-превью приписывалась НЕ ТОЙ стадии
-          // (off-by-one) — прогресс-бар прыгал.
+          // (fix 716) Units normalized to 0-BASED stage index — as in
+          // branch above. Previously 1-BASED pass number (1|2) was written here,
+          // while previewStage field was also used in dynamic path as
+          // 0-based index (comparison `idx !== cur`, where cur is 0-based).
+          // Due to mixing units, KJ preview share was attributed to WRONG stage
+          // (off-by-one) — progress bar jumped.
           entry.previewStage = STAGE2_NODES.has(kjNode) ? 1 : 0
         }
         if (STAGE2_NODES.has(kjNode)) entry.stage2Seen = true
@@ -414,11 +414,10 @@ export function applyTrackerMessage(msg: {
         if (executingPromptId === msg.data.prompt_id) {
           executingPromptId = null
         }
-        // (правка 716) activePromptId тоже сбрасываем: он НИКОГДА не
-        // обнулялся, и позднее KJ-событие после завершения джоба
-        // приписывалось ПРЕДЫДУЩЕМУ промпту (pid = executingPromptId ||
-        // activePromptId) — в галерее появлялось «призрачное» превью
-        // у уже завершённого ролика.
+        // (fix 716) Also reset activePromptId: it was NEVER cleared,
+        // and late KJ events after job completion were attributed to
+        // PREVIOUS prompt (pid = executingPromptId || activePromptId) —
+        // in gallery "phantom" preview appeared on already finished video.
         if (activePromptId === msg.data.prompt_id) {
           activePromptId = null
         }
@@ -428,8 +427,8 @@ export function applyTrackerMessage(msg: {
           entry = newEntry()
           progressMap.set(msg.data.prompt_id, entry)
         }
-        // (правка 255) помним исполняемый узел — по нему KJ-превью
-        // псевдо-узел 'preview' получает стадию (обёртка превью общая)
+        // (fix 255) remember executing node — pseudo-node 'preview'
+        // takes stage from it (preview wrapper is shared)
         entry.executingNode = msg.data.node
         if (STAGE2_NODES.has(msg.data.node)) entry.stage2Seen = true
         const obsIdx = obsStageOf(entry, msg.data.node)
@@ -475,10 +474,10 @@ function trimPreviewMap() {
 const TOTAL_STAGES = 2
 
 /** Pass 1: SamplerCustomAdvanced '46:21', KJ preview override '12';
- *  (правка 194) extend-режим: KJ preview 'extpv' (pass 1 Extender'а). */
+ *  (fix 194) extend mode: KJ preview 'extpv' (Extender pass 1). */
 const STAGE1_NODES = new Set(['46:21', '12', 'extpv'])
 /** Pass 2: SamplerCustomAdvanced '46:16', KJ preview override '13';
- *  (правка 194) extend-режим: KJ preview 'extpv2' (MiniMaxH3ExtenderPass2). */
+ *  (fix 194) extend mode: KJ preview 'extpv2' (MiniMaxH3ExtenderPass2). */
 const STAGE2_NODES = new Set(['46:16', '13', 'extpv2'])
 /** Pseudo-node carrying KJ preview step/total for whichever pass is active. */
 const PREVIEW_PSEUDO = 'preview'
@@ -490,8 +489,8 @@ function stageOf(node: string): 1 | 2 | null {
 }
 
 /**
- * (правка 255) Стадия узла по динамическим спецификациям (0-базированный
- * индекс); null — спецификации не зарегистрированы или узел вне списков.
+ * (fix 255) Node stage according to dynamic specs (0-based
+ * index); null — specs not registered or node is outside lists.
  */
 function dynStageOf(entry: ProgressEntry, node: string | null): number | null {
   if (!entry.nodeStage || !node) return null
@@ -500,11 +499,11 @@ function dynStageOf(entry: ProgressEntry, node: string | null): number | null {
 }
 
 /**
- * (фикс порядка) ПОРЯДКОВЫЙ номер сэмпла по первому событию (0-базированный).
- * ComfyUI исполняет независимые окна рефайна не по порядку узлов
- * (cs_0 → cs_2 → cs_1): «Кусок X/N» и процент обязаны идти монотонно,
- * поэтому стадия = сколько сэмплеров уже начиналось, а не чей это узел.
- * Вызов с новым сэмплером добавляет его в конец порядка наблюдения.
+ * (order fix) SEQUENTIAL sample index by first event (0-based).
+ * ComfyUI executes independent refine windows out of node order
+ * (cs_0 → cs_2 → cs_1): "Chunk X/N" and percentage must advance monotonically,
+ * so stage = how many samplers have already started, not whose node it is.
+ * Calling with a new sampler appends it to the end of observation order.
  */
 function obsStageOf(entry: ProgressEntry, node: string | null): number | null {
   if (dynStageOf(entry, node) === null) return null
@@ -518,14 +517,13 @@ function obsStageOf(entry: ProgressEntry, node: string | null): number | null {
 }
 
 /**
- * Текущая стадия динамической модели (0-базированная, в порядке наблюдения).
+ * Current stage of dynamic model (0-based, in order of observation).
  *
- * Основа — ПОСЛЕДНЕЕ событие сэмплера (lastStageEvidence): прогресс
- * работающего сэмплера течёт непрерывно, поэтому одиночное «забегающее
- * вперёд» событие чужого сэмплера (executing/KJ-превью на смене узла)
- * отбрасывается первым же событием реального. Если сэмплеров в событиях
- * ещё не было (или они кончились) — sticky-максимум наблюдавшихся
- * порядков: назад workflow не возвращается.
+ * Based on LAST sampler event (lastStageEvidence): progress of running
+ * sampler flows continuously, so a single "runaway" event of another sampler
+ * (executing/KJ-preview on node switch) is discarded by the very first event
+ * of the actual one. If samplers haven't appeared in events yet (or finished) —
+ * sticky-maximum of observed orders: workflow never goes backward.
  */
 function curDynStage(entry: ProgressEntry): number {
   const n = entry.stageSpecs?.length ?? 1
@@ -535,18 +533,18 @@ function curDynStage(entry: ProgressEntry): number {
 }
 
 /** Stage of a node; the shared 'preview' pseudo-node follows the pass that
- *  last wrote it (правка 50), so its step/total never leaks into the wrong
+ *  last wrote it (fix 50), so its step/total never leaks into the wrong
  *  stage fraction. */
 function stageOfTracked(entry: ProgressEntry, node: string): 1 | 2 | null {
-  // Легаси-ветка: previewStage хранится как 0-BASED индекс стадии (0 = проход
-  // 1, 1 = проход 2) — как и в динамическом пути (правка 716). Здесь
-  // переводим в 1|2 (номер прохода) для легаси-шкалы.
+  // Legacy branch: previewStage is stored as 0-BASED stage index (0 = pass
+  // 1, 1 = pass 2) — just like in dynamic path (fix 716). Here
+  // we translate to 1|2 (pass number) for legacy scale.
   if (node === PREVIEW_PSEUDO) return entry.previewStage >= 1 ? 2 : 1
   return stageOf(node)
 }
 
 /**
- * The stage currently executing. STICKY (правка 50): once pass 2 has any
+ * The stage currently executing. STICKY (fix 50): once pass 2 has any
  * evidence it stays 2 — the workflow never goes back from pass 2 to pass 1.
  */
 function currentStage(entry: ProgressEntry): 1 | 2 {
@@ -570,12 +568,12 @@ function ensureConnected() {
 /**
  * Compute the overall progress fraction (0..1) across ALL sampling stages.
  *
- * (правка 255) Если при сабмите зарегистрированы stageSpecs — прогресс честно
- * делится на N стадий (draft/extend-клипы/refine-окна дают свою длину шкалы):
+ * (fix 255) If stageSpecs registered on submit — progress is fairly
+ * divided across N stages (draft/extend clips/refine windows define scale length):
  *   overall = (stageIdx + stageFraction) / N
- * Легаси-режим (без регистрации) — прежняя модель «ровно 2 прохода»:
+ * Legacy mode (unregistered) — previous "exactly 2 passes" model:
  *   overall = ((stage − 1) + stageFraction) / 2
- * В обоих случаях шкала проходится 0→100 ровно один раз, монотонно.
+ * In both cases progress traverses 0→100 exactly once, monotonically.
  * Returns null if the prompt is unknown.
  */
 export function getOverallProgress(promptId: string): number | null {
@@ -584,9 +582,9 @@ export function getOverallProgress(promptId: string): number | null {
   if (!entry || entry.nodes.length === 0) return null
   if (entry.done) return 1
 
-  // (правка 479) Tile-upscale: монотонный прогресс по счётчику KJ-событий.
-  // Каждый KJ-превью = 1 шаг 1 тайла-чанка. Общее число шагов =
-  // totalUnits × stepsPerUnit. Бар идёт 0→100 ровно один раз.
+  // (fix 479) Tile-upscale: monotonic progress from KJ events counter.
+  // Each KJ preview = 1 step of 1 tile-chunk. Total steps count =
+  // totalUnits × stepsPerUnit. Bar traverses 0→100 exactly once.
   if (entry.tileTotalUnits !== null && entry.tileStepsPerUnit !== null && entry.tileTotalUnits > 0) {
     const totalSteps = entry.tileTotalUnits * entry.tileStepsPerUnit
     return clamp01(entry.tileKjCount / totalSteps)
@@ -597,8 +595,8 @@ export function getOverallProgress(promptId: string): number | null {
     const cur = curDynStage(entry)
     let stageFrac = 0
     for (const node of entry.nodes) {
-      // Псевдо-узел 'preview' получает стадию из previewStage (по исполняемому
-      // сэмплеру в момент KJ-события); реальные сэмплеры — в порядке наблюдения.
+      // Pseudo-node 'preview' gets stage from previewStage (by executing
+      // sampler at moment of KJ event); actual samplers — in order of observation.
       const idx = node === PREVIEW_PSEUDO ? entry.previewStage : obsStageOf(entry, node)
       if (idx === null || idx !== cur) continue
       const np = entry.byNode[node]
@@ -633,7 +631,7 @@ export interface TileStageInfo {
   totalStages: number
   step: number
   total: number
-  /** (правка 479) Тайл-инфо для UI: «Тайл X/Y» + текущий тайл/чанк. */
+  /** (fix 479) Tile info for UI: "Tile X/Y" + current tile/chunk. */
   tileInfo?: {
     totalTiles: number
     currentTile: number
@@ -642,9 +640,9 @@ export interface TileStageInfo {
     stepsPerUnit: number
   }
   /**
-   * (правка 487) Сэмплинг ещё не начался: идёт подготовка/динамическая
-   * загрузка модели в VRAM (логи «Model Initialization», SLA и т.п.).
-   * UI показывает «Подготовка модели…» вместо ложного «Тайл 1/N · шаг 1/2».
+   * (fix 487) Sampling hasn't started yet: preparation / dynamic
+   * loading of model into VRAM underway ("Model Initialization" logs, SLA, etc.).
+   * UI displays "Preparing model..." instead of false "Tile 1/N · step 1/2".
    */
   preparing?: boolean
 }
@@ -656,15 +654,15 @@ export function getStageInfo(
   const entry = progressMap.get(promptId)
   if (!entry) return null
 
-  // (правка 479) Tile-upscale: «Тайл X/Y» по счётчику KJ-событий.
-  // Тайлы идут в порядке row-major: тайл 1 (чанк 1..N), тайл 2 (чанк 1..N), …
+  // (fix 479) Tile-upscale: "Tile X/Y" by KJ event counter.
+  // Tiles proceed in row-major order: tile 1 (chunk 1..N), tile 2 (chunk 1..N), …
   // currentTile = floor((unit-1) / totalChunks) + 1
   if (entry.tileTotalUnits !== null && entry.tileStepsPerUnit !== null && entry.tileTotalUnits > 0) {
     const completedUnits = Math.floor(entry.tileKjCount / entry.tileStepsPerUnit)
     const currentUnit = Math.min(completedUnits + 1, entry.tileTotalUnits)
     const stepInUnit = (entry.tileKjCount % entry.tileStepsPerUnit) + 1
-    // Текущий тайл (1-based): тайлы идут в порядке row-major, каждый тайл
-    // имеет totalChunks временных чанков.
+    // Current tile (1-based): tiles proceed in row-major order, each tile
+    // has totalChunks temporal chunks.
     const totalChunks = entry.tileTotalChunks ?? 1
     const totalTiles = entry.tileTotalTiles ?? entry.tileTotalUnits
     const currentTile = Math.min(
@@ -676,9 +674,9 @@ export function getStageInfo(
       totalStages: totalTiles,
       step: stepInUnit,
       total: entry.tileStepsPerUnit,
-      // (правка 487) Пока ни одного реального шага — модель готовится
-      // (инициализация, динамическая подгрузка весов): не обманываем
-      // пользователя меткой «Тайл 1/N».
+      // (fix 487) While no actual steps completed — model is preparing
+      // (initialization, dynamic weight loading): don't mislead
+      // user with "Tile 1/N" label.
       preparing: entry.tileKjCount === 0,
       tileInfo: {
         totalTiles,
@@ -696,8 +694,8 @@ export function getStageInfo(
     let step = 0
     let total = 0
     for (const node of entry.nodes) {
-      // Псевдо-узел 'preview' — стадия из previewStage; реальные — порядок
-      // наблюдения (см. getOverallProgress).
+      // Pseudo-node 'preview' — stage from previewStage; actual — order
+      // of observation (see getOverallProgress).
       const idx = node === PREVIEW_PSEUDO ? entry.previewStage : obsStageOf(entry, node)
       if (idx === null || idx !== cur) continue
       const np = entry.byNode[node]
@@ -721,6 +719,18 @@ export function getStageInfo(
     }
   }
   return { stage, totalStages: TOTAL_STAGES, step, total }
+}
+
+/** Get progress for a prompt_id. Returns null if unknown. */
+export function getProgress(promptId: string): ProgressEntry | null {
+  ensureConnected()
+  return progressMap.get(promptId) ?? null
+}
+
+/** Get the latest preview image for a prompt_id. Returns null if none. */
+export function getPreview(promptId: string): PreviewEntry | null {
+  ensureConnected()
+  return previewMap.get(promptId) ?? null
 }
 
 /** Get progress for a prompt_id. Returns null if unknown. */

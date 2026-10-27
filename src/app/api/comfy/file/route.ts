@@ -3,7 +3,7 @@ import { promises as fs, existsSync } from 'fs'
 import path from 'path'
 import { fileUrl } from '@/lib/comfy/minimax-h3-client'
 import { getThumb, thumbKind, safeOutputPath } from '@/lib/thumb'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { serveLocalFile } from '@/lib/local-file'
 import { stagedPath } from '@/lib/staging'
 import { getAppConfig } from '@/lib/app-config'
@@ -15,9 +15,9 @@ import sharp from 'sharp'
  *  the browser a multi-MB (possibly incomplete) file under a poster URL. */
 let placeholderPromise: Promise<Buffer> | null = null
 function posterPlaceholder(): Promise<Buffer> {
-  // (правка 349) Rejected-промис больше не кэшируется навсегда: при сбое
-  // sharp (OOM и т.п.) сбрасываем кэш, чтобы следующий запрос попробовал
-  // сгенерировать placeholder заново.
+  // (fix 349) Rejected promise is no longer cached forever: on sharp failure
+  // (OOM, etc.) we reset the cache so that the next request attempts
+  // to generate the placeholder again.
   placeholderPromise ??= sharp({
     create: { width: 64, height: 36, channels: 3, background: { r: 22, g: 26, b: 33 } },
   })
@@ -43,8 +43,8 @@ export async function GET(req: NextRequest) {
     return new Response('Missing filename', { status: 400 })
   }
   const subfolderRaw = searchParams.get('subfolder') ?? ''
-  // (правка 91) Подпапка = путь папки галереи.
-  // (правка 495) Многоуровневый относительный путь ('a/b'), без обхода.
+  // (fix 91) Subfolder = gallery folder path.
+  // (fix 495) Multi-level relative path ('a/b'), without traversal.
   const subfolder = sanitizeFolderPath(subfolderRaw)
   const type = searchParams.get('type') ?? 'output'
   const widthParam = searchParams.get('width')
@@ -125,8 +125,8 @@ export async function GET(req: NextRequest) {
   }
 
   /* ── Fallback: stream from ComfyUI /view (no buffering) ── */
-  // (правка 349) basename на всякий случай: локальные ветки выше уже
-  // санитизировали путь, а здесь filename уходит в upstream-запрос как есть.
+  // (fix 349) basename just in case: local branches above already
+  // sanitized the path, but here filename goes into upstream request as is.
   const upstream = fileUrl(path.basename(filename), subfolder, type)
   const rangeHeader = req.headers.get('range')
 
@@ -134,9 +134,9 @@ export async function GET(req: NextRequest) {
     const headers: Record<string, string> = {}
     if (rangeHeader) headers['Range'] = rangeHeader
 
-    // (правка 587) Таймаут + связь с клиентом: ComfyUI во время генерации
-    // может принять соединение и не отвечать долго — без сигнала этот fetch
-    // висел вечно. AbortSignal.any: обрыв клиента ИЛИ 120 с форсажа.
+    // (fix 587) Timeout + client connection: ComfyUI during generation
+    // might accept the connection and not respond for a long time — without a signal this fetch
+    // hung forever. AbortSignal.any: client disconnect OR 120s timeout.
     const UPSTREAM_TIMEOUT_MS = 120_000
     const signal =
       typeof AbortSignal.any === 'function'
@@ -182,8 +182,8 @@ export async function GET(req: NextRequest) {
         }
         await writer.close()
       } catch {
-        // (правка 587) Клиент ушёл/стрим сорвался — отменяем чтение upstream,
-        // иначе недочитанное тело ComfyUI висело открытым (утечка соединений).
+        // (fix 587) Client left / stream broke — cancel upstream reading,
+        // otherwise unread ComfyUI body hung open (connection leak).
         try { await reader.cancel().catch(() => {}) } catch { /* ignore */ }
         try { await writer.close() } catch { /* already closed */ }
       }

@@ -666,12 +666,12 @@ class DLSSFrameSession:
                     raise RuntimeError("Native DLSS worker returned an invalid completion count.")
             self.completed_frames = self._processed_frames
             self.controller.unregister(self.worker)
-            # (правка 716) Флаг closed выставляется ДО закрытия потоков.
-            # Раньше он стоял после них, и любое исключение между
-            # unregister и закрытием потоков оставляло close() неидемпотентным:
-            # повторный вызов (например session.close(), затем session.abort()
-            # в neural_rendering/image/batch.py) заходил в abort() для уже
-            # завершённого воркера.
+            # (fix 716) The closed flag is set BEFORE closing streams.
+            # Previously it was placed after them, and any exception between
+            # unregister and closing streams left close() non-idempotent:
+            # repeated calls (e.g. session.close(), then session.abort()
+            # in neural_rendering/image/batch.py) entered abort() for an
+            # already finished worker.
             self.closed = True
             for stream in (self.worker.stdout, self.worker.stderr):
                 if stream is not None and not stream.closed:

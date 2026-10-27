@@ -53,10 +53,10 @@ def _cuda_device_identities() -> dict[str, dict[str, Any]]:
     return identities
 
 
-# (правка 716) Результат (в т.ч. ОШИБКА) кэшируется вручную: lru_cache
-# НЕ кэширует исключения, поэтому на машине без nvidia-smi каждый вызов
-# (а он идёт на каждый рендер и пробу) платил полный 10-секундный таймаут
-# nvidia-smi — по 10 секунд на каждую операцию.
+# (fix 716) Result (including ERROR) is cached manually: lru_cache
+# does NOT cache exceptions, so on a machine without nvidia-smi every call
+# (which occurs on every render and probe) paid the full 10-second timeout
+# of nvidia-smi — 10 seconds per operation.
 _GPU_CACHE: tuple[dict[str, Any], ...] | Exception | None = None
 
 
@@ -65,7 +65,7 @@ def detect_gpus() -> tuple[dict[str, Any], ...]:
     if _GPU_CACHE is None:
         try:
             _GPU_CACHE = _detect_gpus_uncached()
-        except Exception as exc:  # noqa: BLE001 — кэшируем и ошибку
+        except Exception as exc:  # noqa: BLE001 — cache error as well
             _GPU_CACHE = exc
     if isinstance(_GPU_CACHE, Exception):
         raise _GPU_CACHE

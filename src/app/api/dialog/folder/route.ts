@@ -15,13 +15,13 @@ export const dynamic = 'force-dynamic'
  *  * originally: ShowDialog() on the main thread → the dialog worked but
  *    opened BEHIND the browser (Node-spawned processes have no foreground
  *    rights); the user had to minimize the browser to find it;
- *  * правка 63: moved ShowDialog() to a background STA thread so the main
+ *  * fix 63: moved ShowDialog() to a background STA thread so the main
  *    thread could call SetForegroundWindow. BROKEN: PowerShell 5.1 on the
  *    target machine hard-crashes (silent exit 2) whenever a thread started
  *    with a script-block delegate runs — verified by bisection (a thread
  *    doing only Start-Sleep already kills the process). The dialog stopped
  *    appearing at all, and the UI swallowed the 500 as a plain "cancelled";
- *  * правка 66 (current): NO THREADS. The dialog runs on the main thread
+ *  * fix 66 (current): NO THREADS. The dialog runs on the main thread
  *    (the proven pattern). A separate helper process —
  *    tools/folder_dialog_focus.ps1, main thread only — finds the dialog
  *    window (class #32770 + the dialog process pid, since the caption is a
@@ -31,16 +31,16 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}))
-    const title: string = body.title || 'Выберите папку'
+    const title: string = body.title || 'Select folder'
     const initialDir: string = body.initialDir || ''
 
-    // Dialog script — main thread, the pattern that worked before правка 63.
+    // Dialog script — main thread, the pattern that worked before fix 63.
     const psScript = [
       'Add-Type -AssemblyName System.Windows.Forms',
       `$dialog = New-Object System.Windows.Forms.FolderBrowserDialog`,
       `$dialog.Description = '${title.replace(/'/g, "''")}'`,
-      // SelectedPath открывает диалог сразу в нужной папке (RootFolder при
-      // этом должен позволять её видеть — MyComputer покрывает все диски)
+      // SelectedPath opens the dialog directly in the target folder (RootFolder
+      // must allow seeing it — MyComputer covers all drives)
       initialDir
         ? `$dialog.SelectedPath = '${initialDir.replace(/'/g, "''")}'; $dialog.RootFolder = [System.Environment+SpecialFolder]::MyComputer`
         : '',
@@ -51,18 +51,18 @@ export async function POST(request: Request) {
       '}',
     ].filter(Boolean).join('\n')
 
-    // (правка 66) Start the DIALOG first so we know its pid, then start the
+    // (fix 66) Start the DIALOG first so we know its pid, then start the
     // focus helper (fire-and-forget) with that pid. The helper polls for
     // the dialog window and forces it to the front. If the helper fails to
     // start, the dialog still opens (possibly behind the browser — the
-    // original pre-правка-63 behaviour, acceptable degradation).
+    // original pre-fix-63 behaviour, acceptable degradation).
     const dialog = spawn(
       'powershell',
       ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
       { windowsHide: true },
     )
 
-    // (правка 66) IMPORTANT: this environment mangles backslash paths in
+    // (fix 66) IMPORTANT: this environment mangles backslash paths in
     // `powershell -File` arguments (they get stripped, e.g. C:\Users\PC ->
     // C:UsersPC...), while forward slashes work. Convert to POSIX form —
     // verified on the target machine (absolute forward-slash path OK).
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
 
     if (result.code !== 0) {
       return NextResponse.json(
-        { error: `Не удалось открыть диалог выбора папки: ${result.stderr.trim() || `код ${result.code}`}` },
+        { error: `Failed to open folder selection dialog: ${result.stderr.trim() || `code ${result.code}`}` },
         { status: 500 },
       )
     }
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json(
-      { error: `Не удалось открыть диалог выбора папки: ${msg}` },
+      { error: `Failed to open folder selection dialog: ${msg}` },
       { status: 500 },
     )
   }

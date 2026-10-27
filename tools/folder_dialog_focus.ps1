@@ -1,4 +1,4 @@
-# (правка 66) Helper process for the native folder picker.
+# (fix 66) Helper process for the native folder picker.
 #
 # WHY THIS FILE EXISTS:
 # The dialog (FolderBrowserDialog) runs in its own powershell.exe process
@@ -6,16 +6,16 @@
 # in the foreground, so Windows opens the dialog BEHIND the browser window
 # and the user never sees it.
 #
-# правка 63 tried to fix this by showing the dialog on a BACKGROUND THREAD
+# fix 63 tried to fix this by showing the dialog on a BACKGROUND THREAD
 # and calling SetForegroundWindow from the main thread. That broke the
 # dialog completely: PowerShell 5.1 on this machine HARD-CRASHES (silent
 # exit code 2) whenever a thread started with a script-block delegate runs -
 # even a thread that only does Start-Sleep. Verified by bisection on the
 # target machine (t3/t4/t5 diagnostics).
 #
-# THIS APPROACH (правка 66) uses NO THREADS AT ALL:
+# THIS APPROACH (fix 66) uses NO THREADS AT ALL:
 #   * dialog process - main thread, ShowDialog() (the pattern that worked
-#                      before правка 63);
+#                      before fix 63);
 #   * helper process - THIS file, main thread only. It enumerates top-level
 #                      windows of class #32770 (the standard Win32 dialog
 #                      class; the FolderBrowserDialog caption is a fixed

@@ -5,14 +5,14 @@ import { activeLlmModelId, llmBackend } from '@/lib/llm-runner'
 export const dynamic = 'force-dynamic'
 
 /**
- * POST /api/models/delete — удалить скачанные файлы модели (правка 139).
+ * POST /api/models/delete — delete downloaded model files (fix 139).
  *
  * Guards:
- *  • Активная LLM-квантизация (llm_assistant*, llm_assistant_qwen) — нельзя:
- *    сначала переключите модель ассистента в селекторе.
- *  • Bonsai выбрана ассистентом → основной квант PQ2_0, движок, mmproj —
- *    под замком (нужны запущенному бэкенду). Лёгкая optional PTQ1_0 —
- *    удаляется свободно: бэкенд подхватит её, только если PQ2_0 отсутствует.
+ *  • Active LLM quantization (llm_assistant*, llm_assistant_qwen) — cannot delete:
+ *    first switch the assistant model in the selector.
+ *  • Bonsai selected as assistant → main PQ2_0 quant, engine, mmproj —
+ *    locked (required by running backend). Lightweight optional PTQ1_0 —
+ *    can be deleted freely: backend picks it up only if PQ2_0 is absent.
  */
 export async function POST(request: Request) {
   try {
@@ -20,27 +20,27 @@ export async function POST(request: Request) {
     const modelId: string = body.modelId || ''
 
     if (!modelId) {
-      return NextResponse.json({ error: 'Укажите modelId' }, { status: 400 })
+      return NextResponse.json({ error: 'Specify modelId' }, { status: 400 })
     }
 
-    // (правка 164) Лёгкий квант Bonsai (optional) — не блокируем даже когда
-    // Bonsai выбрана: бэкенд подхватит PTQ1_0, только если PQ2_0 отсутствует.
-    // Удалять его — легитимное действие (освобождение места, когда PQ2_0 стоит).
+    // (fix 164) Lightweight Bonsai quant (optional) — do not block even when
+    // Bonsai is selected: backend will pick up PTQ1_0 only if PQ2_0 is absent.
+    // Deleting it is a valid action (reclaiming space when PQ2_0 is installed).
     const isBonsaiLight = modelId === 'bonsai_model_light'
 
-    // Основная модель Bonsai (PQ2_0), движок, mmproj — под замком, когда
-    // Bonsai выбрана ассистентом: без них бэкенд не запустится.
+    // Main Bonsai model (PQ2_0), engine, mmproj — locked when
+    // Bonsai is selected as assistant: without them backend will not start.
     if (llmBackend() === 'bonsai' && modelId.startsWith('bonsai_') && !isBonsaiLight) {
       return NextResponse.json(
-        { error: 'Bonsai сейчас выбрана моделью ассистента. Сначала переключите модель ассистента (Настройки → LLM), затем удаляйте.' },
+        { error: 'Bonsai is currently selected as the assistant model. First switch the assistant model (Settings → LLM), then delete.' },
         { status: 409 },
       )
     }
 
-    // Активная LLM-квантизация (Gemma/Qwen) — под замком.
+    // Active LLM quantization (Gemma/Qwen) — locked.
     if (modelId === activeLlmModelId()) {
       return NextResponse.json(
-        { error: 'Эта модель сейчас выбрана ассистентом. Сначала переключите модель ассистента (Настройки → LLM), затем удаляйте.' },
+        { error: 'This model is currently selected as the assistant. First switch the assistant model (Settings → LLM), then delete.' },
         { status: 409 },
       )
     }

@@ -16,7 +16,7 @@ import {
 import { existsSync, mkdirSync, unlinkSync, rmdirSync, readdirSync, statSync } from 'fs'
 import path, { join } from 'path'
 import sharp from 'sharp'
-import { stagedPath } from '@/lib/staging' // (правка 697)
+import { stagedPath } from '@/lib/staging' // (fix 697)
 
 export const dynamic = 'force-dynamic'
 
@@ -25,9 +25,9 @@ export const dynamic = 'force-dynamic'
  * Body: {
  *   messages: [{role, content}],
  *   references?: [{ path: "file.png", trigger: "Picture 1", intent: "identity" }],
- *   chatAttachments?: [{ path, name, kind: 'image'|'video', legacyComfy?: boolean }] — (правка 108)
- *   вложения чата из data/chat-attachments/ (или legacy input/): ТОЛЬКО для
- *   LLM-описания, НЕ ген-рефы — прикрепляются как «Chat N» с запретом тегов.
+ *   chatAttachments?: [{ path, name, kind: 'image'|'video', legacyComfy?: boolean }] — (fix 108)
+ *   chat attachments from data/chat-attachments/ (or legacy input/): ONLY for
+ *   LLM description, NOT generation refs — attached as "Chat N" with tags forbidden.
  *   maxTokens?, temperature?
  * }
  * Lazily starts the local LLM server, then proxies the SSE stream.
@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const messages = body?.messages as Array<{ role: string; content: string | unknown[]; images?: string[] }> | undefined
-    // (правка 717) request_id прокидывается до llm_server.py — по нему
-    // /abort адресуется ровно в эту генерацию.
+    // (fix 717) request_id is forwarded to llm_server.py — used to
+    // route /abort directly to this generation.
     const requestId = typeof body?.request_id === 'string' && body.request_id ? body.request_id : null
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages required' }), {
@@ -49,20 +49,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Cleanup temp vision files (idempotent; called on error paths and at stream end)
-    // (правка 162) Папки с кадрами (Bonsai видео-видение) удаляем rmdirSync.
+    // (fix 162) Frame folders (Bonsai video-vision) deleted via rmdirSync.
     const tempFiles: string[] = []
     const cleanup = () => { tempFiles.forEach((f) => { try { unlinkSync(f) } catch { try { rmdirSync(f, { recursive: true }) } catch {} } }) }
 
-    // (правка 108) Sweep орфанов: temp-файлы _tmp_vision старше 1 часа — остаток
-    // после краха процесса (свой cleanup уже не сработал). Свежие НЕ трогаем
-    // (они могут принадлежать активному стриму, завершённому позже).
+    // (fix 108) Orphan sweep: temp files in _tmp_vision older than 1 hour — leftover
+    // after process crash (local cleanup did not run). Do NOT touch fresh ones
+    // (they may belong to an active stream completing later).
     const cfg = getAppConfig()
-    // (правка 136) Активный бэкенд ассистента: 'standard' (llm_server.py)
-    // или 'bonsai' (prism llama-server, OpenAI-протокол).
+    // (fix 136) Active assistant backend: 'standard' (llm_server.py)
+    // or 'bonsai' (prism llama-server, OpenAI protocol).
     const backend = llmBackend()
     try {
-      // (правка 108) ВАЖНО: путь берётся из cfg.comfyRoot — реальный корень
-      // ComfyUI конфигурируемый (по умолчанию ./ComfyUI-Easy-Install), а не cwd.
+      // (fix 108) IMPORTANT: path is taken from cfg.comfyRoot — actual ComfyUI
+      // root is configurable (defaults to ./ComfyUI-Easy-Install), not cwd.
       const sweepDir = path.join(cfg.comfyRoot, 'ComfyUI', 'models', 'llm', '_tmp_vision')
       const now = Date.now()
       for (const f of readdirSync(sweepDir)) {
@@ -71,27 +71,27 @@ export async function POST(req: NextRequest) {
           if (st.isFile() && now - st.mtimeMs > 3600_000) {
             unlinkSync(join(sweepDir, f))
           } else if (
-            // (правка 172) Директории кадров llmvidframes_*/llmvidcaframes_*
-            // (Bonsai видео-видение, src/lib/llm-media.ts) после крахов
-            // копились бесконечно — свип раньше удалял только файлы.
-            // Удаляем рекурсивно с тем же age-порогом (1 час).
+            // (fix 172) Frame directories llmvidframes_*/llmvidcaframes_*
+            // (Bonsai video-vision, src/lib/llm-media.ts) accumulated infinitely
+            // after crashes — sweep previously deleted only files.
+            // Delete recursively with the same age threshold (1 hour).
             st.isDirectory() && /^(llmvidframes_|llmvidcaframes_|digest_)/.test(f) &&
             now - st.mtimeMs > 3600_000
           ) {
             rmdirSync(join(sweepDir, f), { recursive: true })
           }
-        } catch { /* файл мог исчезнуть — игнорируем */ }
+        } catch { /* file may have disappeared — ignore */ }
       }
-    } catch { /* папки нет — ок */ }
+    } catch { /* folder does not exist — ok */ }
 
-    // Guard + выгрузка MiniMax (verified) под mutex. Вся подготовка запроса и
-    // открытие upstream-соединения происходят ТОЛЬКО под тем же mutex, а
-    // счётчик стриминга включается до его освобождения (контракт startChat):
-    // с этого момента генерация получает 409 до конца ответа ассистента.
+    // Guard + MiniMax unload (verified) under mutex. All request preparation and
+    // upstream connection opening happen ONLY under the same mutex, and
+    // streaming counter increments before its release (startChat contract):
+    // from this point generation gets 409 until the assistant response finishes.
     const gate = await startChat(async () => {
       const started = await ensureLlm()
       if (!started.ok) {
-        return { kind: 'start-error' as const, error: started.error ?? 'LLM сервер не отвечает' }
+        return { kind: 'start-error' as const, error: started.error ?? 'LLM server not responding' }
       }
 
       // Inject references as multimodal CONTENT PARTS (llama-cpp-python 0.3.46
@@ -110,32 +110,32 @@ export async function POST(req: NextRequest) {
         kind?: 'image' | 'video' | 'audio'
         includeAudio?: boolean
       }> | undefined
-      // (правка 717) Бюджет под медиа считаем по УЖЕ ОБРЕЗАННОЙ истории.
-      // Раньше videoBudgetSec() получал полный (необрезанный) список
-      // сообщений: в длинном чате «свободного места» не оставалось, и
-      // видео-реф обрезался до 2-секундного пола (Math.max(2, …)) — модель
-      // описывала 2 секунды ролика вместо, скажем, 20. Смысл обрезки — «в
-      // контекст влезает только хвост», значит и бюджет медиа считать надо
-      // по хвосту.
+      // (fix 717) Media budget is calculated on ALREADY TRIMMED history.
+      // Previously videoBudgetSec() received full (untrimmed) message
+      // list: in a long chat no "free space" remained, and
+      // video ref was trimmed to 2-second floor (Math.max(2, ...)) — model
+      // described 2 seconds of the video instead of, say, 20. The point of trimming is
+      // "only the tail fits the context", so media budget must also be calculated
+      // from the tail.
       const budgetBase = trimToContext(
         messages as unknown as Parameters<typeof trimToContext>[0],
         actualLlmContextSize(),
         cfg.llmMaxOutputTokens,
       )
-      // ПРАВКА 36: аудио в LLM не отправляется (модель не может его слышать),
-      // поэтому hasAudioParts всегда false и аудио-проба (llm-audio-guard) —
-      // no-op safety net. Оставлено на случай, если поддержку аудио в LLM
-      // вернут: тогда прогон на надёжность снова заработает автоматически.
+      // FIX 36: audio is not sent to LLM (model cannot hear it),
+      // therefore hasAudioParts is always false and audio probe (llm-audio-guard) is a
+      // no-op safety net. Preserved in case LLM audio support
+      // is restored: reliability run will work automatically again.
       let hasAudioParts = false
-      // (правка 716/717) Потолок на число референсов — по видам, ровно как
-      // на клиенте (getReferences в assistant-stream.ts: REF_LIMITS =
-      // image 9 / video 3 / audio 3, всего 15) и как у самой модели H3.
+      // (fix 716/717) Cap on reference count — by type, exactly matching
+      // client (getReferences in assistant-stream.ts: REF_LIMITS =
+      // image 9 / video 3 / audio 3, total 15) and H3 model itself.
       //
-      // Раньше был единый потолок 9 ПО ПОРЯДКУ: системный промпт нумеровал
-      // ВСЕ референсы (номер по виду), а на провод уходили только первые 9
-      // позиций. Модель писала в промпт <Picture 12> и описывала картинки,
-      // которых НЕ видела. Теперь обе стороны режут одинаково, по видам, —
-      // промпт и фактическое крепление всегда совпадают.
+      // Previously there was a single cap of 9 IN ORDER: system prompt numbered
+      // ALL references (number by type), but only the first 9 positions
+      // were sent over the wire. The model wrote <Picture 12> in prompt and described pictures
+      // it DID NOT see. Now both sides clamp identically by type —
+      // prompt and actual attachment always match.
       const REF_LIMITS = { image: 9, video: 3, audio: 3, total: 15 } as const
       const cappedReferences = (() => {
         if (!Array.isArray(references)) return undefined
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
       })()
       if (references && cappedReferences && references.length > cappedReferences.length) {
         console.warn(
-          `[llm] референсов ${references.length} — используем ${cappedReferences.length} (лимиты по видам)`,
+          `[llm] references ${references.length} — using ${cappedReferences.length} (per-type limits)`,
         )
       }
       if (cappedReferences?.length) {
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
         // system message so a short answer like "1" is not buried under a big
         // reference-description block in the last user message.
         const digestTextParts: string[] = []
-        // (правка 53) true, если к запросу прикреплены кадры хотя бы одного видео-рефа
+        // (fix 53) true if frames of at least one video ref are attached to request
         let videoAttached = false
         // Reference digests: video first (as agreed with the user), then images.
         // Each one is generated in an isolated LLM request and cached by file
@@ -202,18 +202,18 @@ export async function POST(req: NextRequest) {
             const inside = absPath.startsWith(path.resolve(outputDir) + path.sep)
             return inside && existsSync(absPath) ? absPath : null
           }
-          // ControlNet direct берёт источник из галереи (output), а не из input:
-          // при совпадении имён input-копия может быть от другой задачи.
-          // Обычные референсы output не ищут: там может лежать чужой файл с
-          // тем же именем, а staged-копия — их законный fallback.
+          // ControlNet direct takes source from gallery (output), not from input:
+          // if filenames match, input copy might belong to another task.
+          // Regular references do not look in output: a different file with
+          // the same name may reside there, while staged copy is their valid fallback.
           if (preferOutput) {
             const output = tryOutput()
             if (output) return output
           }
           const input = tryInput()
           if (input) return input
-          // (правка 697) Fallback на staging: когда ComfyUI не запущен,
-          // uploadInputFile() кладёт реф в .local-input/ и возвращает staged-имя.
+          // (fix 697) Staging fallback: when ComfyUI is down,
+          // uploadInputFile() places ref in .local-input/ and returns staged name.
           return await stagedPath(refPath)
         }
         if (useRefDigest) {
@@ -253,26 +253,26 @@ export async function POST(req: NextRequest) {
           }
         }
         const uid = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        // (правка 169) сколько целых видео уйдёт в контекст (standard backend
-        // с включённым видением): длительность каждого ограничиваем свободным
-        // местом ЗАРАНЕЕ — кадр 512px стоит ~768 vision-токенов, и 60-секундный
-        // реф на 8 fps один занял бы всё окно контекста.
+        // (fix 169) how many whole videos will enter context (standard backend
+        // with vision enabled): we limit duration of each by available
+        // space IN ADVANCE — a 512px frame costs ~768 vision tokens, and a 60-second
+        // ref at 8 fps would consume entire context window alone.
         const genVideoCount = cfg.llmVideoVision && backend !== 'bonsai'
           ? cappedReferences.filter((r) => r.kind === 'video').length
           : 0
         const refVideoSec = videoBudgetSec(budgetBase, genVideoCount, actualLlmContextSize(), cfg.llmMaxOutputTokens)
 
         for (const ref of cappedReferences) {
-          // (правка 170) SECURITY: ref.path приходит от клиента без проверок —
-          // path traversal (../../ или абсолютный путь) давал чтение
-          // произвольных файлов. resolveRefPath держит путь внутри input/output
-          // (подход safeAttachPath) и делает fallback на staging.
+          // (fix 170) SECURITY: ref.path comes from client without validation —
+          // path traversal (../../ or absolute path) allowed arbitrary file reading.
+          // resolveRefPath keeps path inside input/output
+          // (safeAttachPath approach) and falls back to staging.
           const resolvedPath = await resolveRefPath(ref.path, ref.intent === 'control_source')
           if (!resolvedPath) {
-            // ПРАВКА 36: файл рефа отсутствует на диске — явно сообщаем модели,
-            // чтобы она НЕ выдумывала его содержимое. Раньше тихий `continue`
-            // давал расхождение: системный промпт реф перечислял, а медиа не
-            // было прикреплено → модель конфабулировала (баг #3).
+            // FIX 36: ref file is missing on disk — explicitly notify model
+            // so it DOES NOT invent its contents. Previously silent `continue`
+            // caused mismatch: system prompt listed ref, but media was
+            // not attached → model confabulated (bug #3).
             textParts.push(`[${ref.trigger}] file="${ref.path}" (COULD NOT ATTACH — file not found on disk; do NOT describe, reference, or invent its content; if it matters, ask the user to re-attach it)`)
             continue
           }
@@ -289,22 +289,22 @@ export async function POST(req: NextRequest) {
               )
               continue
             }
-            // (правка 53) По умолчанию ассистент НЕ смотрит кадры видео —
-            // экономия контекста: модель знает только о НАЛИЧИИ видео-рефа и
-            // НЕ описывает/не выдумывает его содержимое. Полное видение включается
-            // галочкой «Видение видео ассистентом» в настройках (llm.video_vision).
+            // (fix 53) By default assistant does NOT view video frames —
+            // saves context: model only knows about EXISTENCE of video ref and
+            // does NOT describe/invent its contents. Full vision is enabled
+            // via "Assistant video vision" checkbox in settings (llm.video_vision).
             if (!cfg.llmVideoVision) {
               textParts.push(
-                `[${ref.trigger}] file="${ref.path}" (video reference — its frames are NOT attached: assistant video-vision is OFF. You only know the video EXISTS. Reference it as <Video N> when the user asks to use it; do NOT describe, guess or invent what happens inside it. If the user wants you to "see" the video, tell them to enable «Видение видео ассистентом» in Settings → LLM)`,
+                `[${ref.trigger}] file="${ref.path}" (video reference — its frames are NOT attached: assistant video-vision is OFF. You only know the video EXISTS. Reference it as <Video N> when the user asks to use it; do NOT describe, guess or invent what happens inside it. If the user wants you to "see" the video, tell them to enable "Assistant video vision" in Settings → LLM)`,
               )
               continue
             }
-            // (правка 162) Bonsai: целые видео не принимает — извлекаем кадры
-            // ffmpeg'ом в JPEG и отправляем как image_url (OpenAI-формат).
+            // (fix 162) Bonsai: does not accept whole videos — extract frames
+            // via ffmpeg to JPEG and send as image_url (OpenAI format).
             if (backend === 'bonsai') {
               const stamp = uid()
               const framesDir = path.join(tmpDir, `llmvidframes_${stamp}`)
-              const frames = await extractVideoFrames(resolvedPath, framesDir) // (правка 697)
+              const frames = await extractVideoFrames(resolvedPath, framesDir) // (fix 697)
               if (frames) {
                 mediaParts.push({ type: 'video', video_frames: frames })
                 videoAttached = true
@@ -323,22 +323,22 @@ export async function POST(req: NextRequest) {
             // and cap the rate at 8 fps so the frame count — and hence the
             // vision tokens — stay small.
             //
-            // ПРАВКА 36: звуковую дорожку видео НЕ отправляем в LLM — модель
-            // НЕ может прослушать аудио (в тестах отвечает «unable to hear»),
-            // а старый промпт говорил «ты её слышишь» → выдумывала реплики.
-            // Аудио уходит в MiniMax напрямую (ref_video_audio); LLM лишь
-            // расставляет <Video N> в тексте промпта.
+            // FIX 36: video audio track is NOT sent to LLM — the model
+            // CANNOT listen to audio (in tests it responds "unable to hear"),
+            // while old prompt said "you hear it" → invented dialogue.
+            // Audio goes to MiniMax directly (ref_video_audio); LLM only
+            // places <Video N> in prompt text.
             const stamp = uid()
             const baseName = ref.path.replace(/[^a-zA-Z0-9]/g, '_')
             const videoOut = path.join(tmpDir, `llmvid_${stamp}_${baseName}.mp4`)
             const audioOut = path.join(tmpDir, `llmvidaud_${stamp}_${baseName}.wav`)
-            // (правка 169) длительность — по свободному месту в контексте
-            const prepared = await prepVideoForLlm(resolvedPath, videoOut, audioOut, 512, 8, refVideoSec) // (правка 697)
+            // (fix 169) duration — based on available context room
+            const prepared = await prepVideoForLlm(resolvedPath, videoOut, audioOut, 512, 8, refVideoSec) // (fix 697)
             if (prepared) {
               mediaParts.push({ type: 'video', video: prepared.videoPath, est_frames: refVideoSec * 8 })
               videoAttached = true
               tempFiles.push(prepared.videoPath)
-              if (prepared.audioPath) tempFiles.push(prepared.audioPath) // создаётся для MiniMax, но в LLM не идёт
+              if (prepared.audioPath) tempFiles.push(prepared.audioPath) // created for MiniMax, but not sent to LLM
               textParts.push(
                 `[${ref.trigger}] file="${ref.path}" (whole video attached — describe the scene, motion and camera behaviour over time, ONLY what is actually in the frames${ref.includeAudio !== false ? '; it has an audio track for MiniMax — reference as <Video N> and do NOT invent what is "heard" in it' : ''})`,
               )
@@ -349,12 +349,12 @@ export async function POST(req: NextRequest) {
           }
 
           if (ref.kind === 'audio') {
-            // ПРАВКА 36: аудио НЕ отправляем в LLM. Модель НЕ может его
-            // прослушать (в тестах: «I'm unable to hear or process the audio»),
-            // а старый промпт утверждал «ты их СЛЫШИШЬ» → модель либо отказывала,
-            // либо ВЫДУМЫВАЛА содержимое (баги #2 и #3). Аудио уходит в MiniMax
-            // как ref_audios напрямую (см. use-video-gen.ts), LLM лишь расставляет
-            // <Audio N> в тексте промпта. WAV для LLM не генерируем вообще.
+            // FIX 36: audio is NOT sent to LLM. The model CANNOT listen
+            // to it (in tests: "I'm unable to hear or process the audio"),
+            // while old prompt claimed "you HEAR them" → model either refused,
+            // or INVENTED content (bugs #2 and #3). Audio goes to MiniMax
+            // as ref_audios directly (see use-video-gen.ts), LLM only places
+            // <Audio N> in prompt text. WAV is not generated for LLM at all.
             textParts.push(
               `[${ref.trigger}] file="${ref.path}" (audio reference for MiniMax voice/tone, intent: ${ref.intent || 'voice'} — the model CANNOT hear it; reference it as <Audio N> and do NOT describe or quote its content)`,
             )
@@ -372,7 +372,7 @@ export async function POST(req: NextRequest) {
           // Image: resize to max 512px longest side — keeps vision tokens low
           const outPath = path.join(tmpDir, `vision_${uid()}_${safeName}`)
           try {
-            await sharp(resolvedPath) // (правка 697) staged-fallback
+            await sharp(resolvedPath) // (fix 697) staged-fallback
               .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
               .jpeg({ quality: 80 })
               .toFile(outPath)
@@ -380,7 +380,7 @@ export async function POST(req: NextRequest) {
             tempFiles.push(outPath)
           } catch {
             // Fallback: use original (might be slow)
-            mediaParts.push({ type: 'image', image: resolvedPath }) // (правка 697)
+            mediaParts.push({ type: 'image', image: resolvedPath }) // (fix 697)
           }
           textParts.push(`[${ref.trigger}] file="${ref.path}" (intent: ${ref.intent || 'identity'})`)
         }
@@ -409,15 +409,15 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // (правка 53) прикрепляем не только при наличии медиа: textParts могут
-        // содержать «tag-only» заметки (видео с выключенным видением, аудио).
-        // Раньше такие заметки молча терялись, и модель не знала о рефах.
+        // (fix 53) attach not only when media is present: textParts may
+        // contain "tag-only" notes (video with vision disabled, audio).
+        // Previously such notes were quietly lost, and the model didn't know about refs.
         if (mediaParts.length > 0 || textParts.length > 0) {
-          // Привязываем к ПОСЛЕДНЕМУ user-сообщению (текущий ход), а не к
-          // первому (правки 35): модель отвечает именно на последний ход —
-          // референсы должны стоять рядом с ним; а trimToContext режет
-          // историю с начала, и старое первое сообщение (с медиа) улетало
-          // первым — видение тихо терялось в длинных чатах.
+          // Bind to the LAST user message (current turn) rather than the
+          // first (fix 35): model responds to the last turn —
+          // references should stand next to it; trimToContext cuts
+          // history from the beginning, and old first message (with media) was dropped
+          // first — vision was quietly lost in long chats.
           const introText = digestUsed
             ? [
                 'Reference digests are in the system context (internal visual memory; not a user request).',
@@ -453,17 +453,17 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // (правка 108) Вложения чата — ИЗОЛИРОВАНЫ от референсов генерации.
-      // Файлы лежат в data/chat-attachments/ (новое хранилище) или legacy
-      // ComfyUI/input/ (правки 86–87, legacyComfy). Они нужны ТОЛЬКО для
-      // LLM-описания/анализа:
-      //   • прикрепляются к LLM как «Chat N» (НЕ «Picture N»/«Video N»);
-      //   • модели явно запрещено использовать их как <Picture N>/<Video N> в
-      //     промпте — они НЕ являются ген-референсами (MiniMax не должен их
-      //     подтягивать из input/ в генерацию);
-      //   • видео-вложения ВСЕГДА прикрепляются как кадры (пользователь явно
-      //     приложил их в чат ради описания) — НЕ зависят от llmVideoVision
-      //     (тот флаг управляет только видео-реферами генерации).
+      // (fix 108) Chat attachments — ISOLATED from generation references.
+      // Files reside in data/chat-attachments/ (new storage) or legacy
+      // ComfyUI/input/ (fixes 86–87, legacyComfy). They are needed ONLY for
+      // LLM description/analysis:
+      //   • attached to LLM as "Chat N" (NOT "Picture N"/"Video N");
+      //   • model is explicitly forbidden to use them as <Picture N>/<Video N> in
+      //     prompt — they are NOT generation references (MiniMax must not
+      //     pull them from input/ into generation);
+      //   • video attachments are ALWAYS attached as frames (user explicitly
+      //     attached them to chat for description) — independent of llmVideoVision
+      //     (that flag controls only video refs for generation).
       const chatAttachments = body?.chatAttachments as Array<{
         path: string
         name?: string
@@ -479,8 +479,8 @@ export async function POST(req: NextRequest) {
         const caTextParts: string[] = []
         const caUid = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
         let caNum = 0
-        // (правка 169) длительность видео-вложений — тоже по свободному месту
-        // в контексте (кадр 512px ≈ 768 токенов; см. videoBudgetSec).
+        // (fix 169) duration of video attachments — also based on free space
+        // in context (512px frame ≈ 768 tokens; see videoBudgetSec).
         const caVideoSec = videoBudgetSec(
           budgetBase,
           chatAttachments.filter((a) => a.kind === 'video').length,
@@ -489,20 +489,20 @@ export async function POST(req: NextRequest) {
         )
         for (const att of chatAttachments) {
           caNum++
-          // (правка 117) att.path — имя файла в хранилище вложений АС-ЕСТЬ.
-          // Эндпоинт загрузки уже генерирует безопасное имя из basename
-          // оригинала (например mtyx1rqu-j776gm-photo.jpg — С ДЕФИСАМИ).
-          // Раньше мы повторно «обезвреживали» имя
-          // (replace(/[^a-zA-Z0-9.]/g, '_')), и дефисы превращались в
-          // подчёркивания → файл «не находился» у КАЖДОГО нового вложения
-          // (модель получала COULD NOT ATTACH). Теперь берём basename как есть
-          // (traversal-безопасно: разделителей в имени нет по построению).
+          // (fix 117) att.path — filename in attachment store AS-IS.
+          // Upload endpoint already generates safe filename from original's basename
+          // (e.g. mtyx1rqu-j776gm-photo.jpg — WITH HYPHENS).
+          // Previously we re-sanitized the name
+          // (replace(/[^a-zA-Z0-9.]/g, '_')), converting hyphens into
+          // underscores → file was "not found" on EVERY new attachment
+          // (model received COULD NOT ATTACH). Now we take basename as-is
+          // (traversal-safe: no separators in name by construction).
           const attName = String(att.path).split(/[\\/]/).pop() || ''
           const safeName = (attName || 'attachment').replace(/[^a-zA-Z0-9.]/g, '_')
-          // (правка 170) SECURITY: флаг legacyComfy контролируется клиентом, а
-          // startsWith-проверка раньше применялась только к не-legacy ветке —
-          // path traversal через att.path. Резолвим и требуем остаться внутри
-          // caInputDir; нарушение отклоняется как «файл не найден» ниже.
+          // (fix 170) SECURITY: legacyComfy flag is controlled by client, while
+          // startsWith check previously applied only to non-legacy branch —
+          // path traversal via att.path. Resolve and enforce staying inside
+          // caInputDir; violation is rejected as "file not found" below.
           const legacyResolved = att.legacyComfy ? path.resolve(caInputDir, att.path) : null
           const legacySafe = legacyResolved !== null &&
             legacyResolved.startsWith(path.resolve(caInputDir) + path.sep)
@@ -522,7 +522,7 @@ export async function POST(req: NextRequest) {
             continue
           }
           if (att.kind === 'video') {
-            // (правка 162) Bonsai: извлекаем кадры → отправляем как картинки.
+            // (fix 162) Bonsai: extract frames → send as images.
             if (backend === 'bonsai') {
               const stamp = caUid()
               const framesDir = path.join(caTmpDir, `llmvidcaframes_${stamp}`)
@@ -540,9 +540,9 @@ export async function POST(req: NextRequest) {
               }
               continue
             }
-            // (правка 108) видео-вложение чата ВСЕГДА как кадры (не зависит
-            // от llmVideoVision — он только для ген-рефов).
-            // (правка 169) длительность — по свободному месту в контексте.
+            // (fix 108) chat video attachment ALWAYS as frames (does not depend
+            // on llmVideoVision — that is only for gen refs).
+            // (fix 169) duration — based on available context space.
             const stamp = caUid()
             const videoOut = path.join(caTmpDir, `llmvidca_${stamp}_${safeName}.mp4`)
             const audioOut = path.join(caTmpDir, `llmvidaudca_${stamp}_${safeName}.wav`)
@@ -578,12 +578,12 @@ export async function POST(req: NextRequest) {
             `[Chat ${caNum}] file="${att.path}" (chat attachment — attached ONLY for your description/analysis; it is NOT a generation reference: NEVER reference it as <Picture N>, <Video N> or <Audio N> in the prompt)`,
           )
         }
-        // (правка 689) Отладка: подтверждаем, что вложения чата прикреплены
+        // (fix 689) Debug: verify that chat attachments are attached
         console.log('[llm] chatAttachments:', caTextParts.length, 'text parts,', caMediaParts.length, 'media parts')
         if (caTextParts.length > 0) {
-          // (правка 108) Прикрепляем к ТОМУ ЖЕ последнему user-сообщению (текущий
-          // ход) — модель отвечает именно на него; trimToContext не режет
-          // медиа-сообщения, а история режется с начала (правки 35, 53, 108).
+          // (fix 108) Attach to the SAME last user message (current turn) —
+          // model responds to it; trimToContext doesn't trim
+          // media messages, and history is cut from start (fixes 35, 53, 108).
           const caIntro =
             'CHAT ATTACHMENTS (isolated from generation references — they exist ONLY in this chat and are used ONLY for your description/analysis; they are NOT <Picture N>/<Video N>/<Audio N> — do NOT reference them as such in any prompt):'
           let caLastIdx = -1
@@ -596,12 +596,12 @@ export async function POST(req: NextRequest) {
               ? (existing as Array<Record<string, unknown>>)
               : []
             ).filter((p) => p && p.type !== 'text')
-            // (правка 717) Порядок маркеров и порядок медиа теперь СОВПАДАЮТ:
-            // текст в порядке [рефы…, Chat N…], затем медиа в том же порядке
-            // (сначала медиа ген-рефов, потом медиа вложений чата).
-            // Раньше текст начинался с caIntro (маркеры чата — ПЕРВЫМИ), а
-            // медиа шли сначала рефов: шаблон чата рендерит маркеры строго по
-            // порядку частей, и модель сопоставляла маркер с ЧУЖОЙ картинкой.
+            // (fix 717) Marker order and media order now MATCH:
+            // text in order [refs..., Chat N...], then media in same order
+            // (gen-ref media first, then chat attachment media).
+            // Previously text started with caIntro (chat markers FIRST), while
+            // media went refs first: chat template renders markers strictly in
+            // part order, and the model matched the marker to the WRONG image.
             const refTextParts = typeof existing === 'string'
               ? existing
               : (Array.isArray(existing)
@@ -630,44 +630,44 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Автозаполнение остатка контекста, но не больше ручной настройки
-      // [llm] max_output_tokens (UI «Max output tokens»).
-      // ВАЖНО: считаем вход по УЖЕ обрезанной истории — иначе в длинном чате
-      // необрезанный объём прижимал maxTokens к полу, и ответы обрубались
-      // даже там, где трим освобождал кучу контекста.
-      // (правка 169, 338) пол адаптивный: обычно 256 (минимально полезный
-      // ответ), но при почти полном окне — 64: короткий ответ лучше
-      // гарантированного переполнения. Медиа к этому моменту уже ограничено
-      // (videoBudgetSec), а кадры Bonsai при нужде прореживает
+      // Autofill remaining context, but not exceeding manual setting
+      // [llm] max_output_tokens (UI "Max output tokens").
+      // IMPORTANT: compute input on ALREADY trimmed history — otherwise in a long chat
+      // untrimmed volume pressed maxTokens to floor, and answers were cut off
+      // even where trim freed up plenty of context.
+      // (fix 169, 338) adaptive floor: usually 256 (minimally useful
+      // response), but when window is almost full — 64: a short response is better than
+      // guaranteed overflow. Media is already constrained by this point
+      // (videoBudgetSec), and Bonsai frames are thinned if needed by
       // degradeMediaToBudget.
-      // (правка 338) ОДИН проход trimToContext (было два: для подсчёта room
-      // и для итога). Трим резервирует под ответ ручной лимит
-      // cfg.llmMaxOutputTokens; итоговый maxTokens никогда его не превышает
-      // (раньше Math.max(256, …) пробивал ручной лимит снизу). Минимум 64:
-      // при критически малом room контекст честно дотримится до бюджета 64.
+      // (fix 338) SINGLE pass of trimToContext (previously two: for room calculation
+      // and for result). Trim reserves manual limit cfg.llmMaxOutputTokens
+      // for response; resulting maxTokens never exceeds it
+      // (previously Math.max(256, ...) punctured manual limit from below). Minimum 64:
+      // with critically small room context is trimmed to 64 budget.
       const ctxSize = actualLlmContextSize()
       const preTrimmed = trimToContext(messages, ctxSize, cfg.llmMaxOutputTokens)
       const inputTokens = preTrimmed.reduce((sum, m) => sum + messageTokens(m), 0)
       const room = ctxSize - inputTokens - 128
       const maxTokens = Math.max(64, Math.min(cfg.llmMaxOutputTokens, room))
-      // (правка 169) трим → деградация медиа: гарантия, что [system + хвост]
-      // реально влезает в окно даже при «тяжёлом» последнем сообщении.
+      // (fix 169) trim → media degradation: guarantee that [system + tail]
+      // actually fits the window even with a "heavy" last message.
       const trimmed = degradeMediaToBudget(preTrimmed, ctxSize, maxTokens)
 
-      // (правка 135) Тонкая настройка сэмплинга: набор подбирается под
-      // семейство АКТИВНОЙ модели (Gemma 4 12B vs Qwen3.5 9B) — см.
-      // src/lib/llm-sampling.ts. До этой правки в llm_server уходил только
-      // temperature, а top_p/top_k/min_p/penalty шли дефолтами llama-cpp
-      // (top_k=40, top_p=0.95, min_p=0.05), что хуже под наши модели →
-      // периодическое зацикливание и дегенерация thought-канала.
-      // Приоритет — стабильность (меньше глючей), а не креативность.
+      // (fix 135) Fine-tuning sampling: set tailored for
+      // family of ACTIVE model (Gemma 4 12B vs Qwen3.5 9B) — see
+      // src/lib/llm-sampling.ts. Prior to this fix only temperature went to llm_server,
+      // while top_p/top_k/min_p/penalty took llama-cpp defaults
+      // (top_k=40, top_p=0.95, min_p=0.05), which performs worse on our models →
+      // periodic looping and thought channel degeneration.
+      // Priority is stability (fewer glitches), not creativity.
       const baseSampling = body.sampling ?? samplingForModel(activeLlmModelId())
 
-      // (правка 716) Сэмплинг от клиента ВАЛИДИРУЕТСЯ и клампится. Раньше
-      // body.sampling/body.temperature уходили вверх как есть, обходя все
-      // ограничения, которые app-config.ts применяет к тем же полям при
-      // чтении из config.ini (top_p <= 1, top_k 1..200, penalties 0..2.5).
-      // Строка вместо числа тоже проходила дальше.
+      // (fix 716) Client sampling is VALIDATED and clamped. Previously
+      // body.sampling/body.temperature were passed upstream as-is, bypassing all
+      // constraints that app-config.ts applies to the same fields when
+      // reading from config.ini (top_p <= 1, top_k 1..200, penalties 0..2.5).
+      // String instead of number also slipped through.
       const clampNum = (v: unknown, def: number, lo: number, hi: number): number => {
         const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
         if (!Number.isFinite(n)) return def
@@ -684,14 +684,14 @@ export async function POST(req: NextRequest) {
         repeat_penalty: clampNum(rawSampling.repeat_penalty, baseSampling.repeat_penalty, 0, 2.5),
       }
 
-      // Аудио-надёжность (без Whisper): модель нестабильна на «сыром» аудио —
-      // часть прогонов дегенерирует в зацикливание (<|channel>thought × N и
-      // повтор одной фразы × N). Если в запросе есть аудио — делаем короткий
-      // не-стриминговый прогон (~48 токенов) с возрастающей температурой и
-      // берём первый НЕ-дегенеративный: его температура пойдёт в основной
-      // ответ. Stop-токены (LLM_STOP_TOKENS) в любом случае обрезают
-      // thought-канал на лету. Проба не падает ассистента: любой сбой —
-      // продолжаем с исходной температурой.
+      // Audio reliability (without Whisper): model is unstable on "raw" audio —
+      // some runs degenerate into looping (<|channel>thought × N and
+      // repeat of single phrase × N). If request contains audio — do a short
+      // non-streaming run (~48 tokens) with increasing temperature and
+      // take first NON-degenerative: its temperature goes into main
+      // response. Stop tokens (LLM_STOP_TOKENS) trim thought channel on the fly anyway.
+      // Probe does not crash assistant: on any error —
+      // continue with initial temperature.
       let finalTemperature = clampNum(body.temperature, sampling.temperature, 0, 2)
       if (hasAudioParts) {
         try {
@@ -699,7 +699,7 @@ export async function POST(req: NextRequest) {
             baseUrl: `http://127.0.0.1:${LLM_PORT}`,
             messages: trimmed,
             baseTemperature: finalTemperature,
-            sampling, // (правка 135) — проба идёт с тем же top_p/top_k/penalty, что и основной ответ
+            sampling, // (fix 135) — probe runs with same top_p/top_k/penalty as main response
             log: (m) => console.log('[llm] audio-probe:', m),
           })
           finalTemperature = probe.temperature
@@ -709,19 +709,19 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Таймаут только на установку соединения (см. комментарий у fetch).
+      // Timeout only for establishing connection (see comment on fetch).
       const headerTimeout = {
         controller: new AbortController(),
         timer: setTimeout(() => headerTimeout.controller.abort(), 120_000),
       }
-      // (правка 136) Bonsai-бэкенд: OpenAI /v1/chat/completions + конвертация
-      // медиа-частей в data-URI, ответ заворачивается в наш SSE-формат.
+      // (fix 136) Bonsai backend: OpenAI /v1/chat/completions + conversion
+      // of media parts into data-URI, response is wrapped in our SSE format.
       noteLlmActivity()
       let upstream: Response
       let upstreamBody: ReadableStream<Uint8Array> | null = null
-      // (правка 717) Таймер снимается в finally: раньше clearTimeout стоял
-      // ПОСЛЕ fetch, и при исключении (сервер LLM не поднят → ECONNREFUSED)
-      // таймер оставался взведённым на 120 с на каждый упавший запрос.
+      // (fix 717) Timer is cleared in finally: previously clearTimeout was
+      // AFTER fetch, and on exception (LLM server not running → ECONNREFUSED)
+      // timer remained armed for 120 s on each failed request.
       try {
         if (backend === 'bonsai') {
           const oaiMessages = await toOpenAiMessages(trimmed)
@@ -732,12 +732,12 @@ export async function POST(req: NextRequest) {
               messages: oaiMessages,
               max_tokens: maxTokens,
               stream: true,
-              // (фикс) Выключаем «думание» на уровне ШАБЛОНА — флаг запуска
-              // --reasoning-budget 0 у форка не работает, и с включённым
-              // thinking ответы деградировали (уезжали не на ту тему, а при
-              // малых max_tokens не успевали родиться вовсе — finish:length
-              // внутри reasoning). enable_thinking=false — параметр шаблона
-              // Qwen-семейства: <think> закрывается сразу, отвечает мгновенно.
+              // (fix) Disable "thinking" at TEMPLATE level — launch flag
+              // --reasoning-budget 0 does not work in fork, and with thinking
+              // enabled responses degraded (drifted off-topic, and with
+              // small max_tokens did not complete at all — finish:length
+              // inside reasoning). enable_thinking=false is a template parameter
+              // of Qwen family: <think> closes immediately, responds instantly.
               chat_template_kwargs: { enable_thinking: false },
               temperature: finalTemperature,
               top_p: sampling.top_p,
@@ -746,8 +746,8 @@ export async function POST(req: NextRequest) {
               presence_penalty: sampling.presence_penalty,
               frequency_penalty: sampling.frequency_penalty,
               repeat_penalty: sampling.repeat_penalty,
-              // stop-токены НЕ шлём: <|channel|> — специфичный маркер Qwen3.5,
-              // для Bonsai-шаблона не нужен (EOS обрабатывает llama-server).
+              // do NOT send stop tokens: <|channel|> is a Qwen3.5 specific marker,
+              // not needed for Bonsai template (EOS is handled by llama-server).
             }),
             signal: headerTimeout.controller.signal,
           })
@@ -759,13 +759,13 @@ export async function POST(req: NextRequest) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              // (правка 717) request_id — адрес прерывания: /abort с этим id
-              // останавливает именно эту генерацию.
+              // (fix 717) request_id — abort address: /abort with this id
+              // stops this exact generation.
               ...(requestId ? { request_id: requestId } : {}),
               messages: trimmed,
               max_tokens: maxTokens,
-              // (правка 135) — передаём весь набор сэмплинга; llm_server.py читает
-              // каждый ключ и передаёт в llama-cpp-python create_chat_completion.
+              // (fix 135) — pass full sampling set; llm_server.py reads
+              // each key and forwards to llama-cpp-python create_chat_completion.
               temperature: finalTemperature,
               top_p: sampling.top_p,
               top_k: sampling.top_k,
@@ -775,12 +775,12 @@ export async function POST(req: NextRequest) {
               repeat_penalty: sampling.repeat_penalty,
               stop: LLM_STOP_TOKENS,
             }),
-            // Страховка от зависшего llm_server: таймаут действует ТОЛЬКО на
-            // установку соединения (заголовки SSE приходят сразу, поэтому в норме
-            // fetch разрешается за миллисекунды). Как только ответ получен,
-            // таймер снимается — AbortSignal.timeout здесь нельзя: он абортирует
-            // и body-стрим, обрывая любой ответ длиннее 2 минут. От зависания
-            // самого стрима защищает idle-watchdog ниже.
+            // Insurance against frozen llm_server: timeout applies ONLY to
+            // connection establishment (SSE headers arrive immediately, so normally
+            // fetch resolves in milliseconds). Once response is received,
+            // timer is cleared — AbortSignal.timeout cannot be used here: it aborts
+            // the body stream too, cutting off any response longer than 2 minutes. Idle watchdog
+            // below protects against stream freezes.
             signal: headerTimeout.controller.signal,
           })
           if (upstream.ok && upstream.body) {
@@ -793,16 +793,16 @@ export async function POST(req: NextRequest) {
       if (!upstream.ok || !upstreamBody) {
         const errText = await upstream.text().catch(() => '')
         cleanup()
-        // (правка 173) 409 от llm_server.py («LLM уже генерирует другой
-        // ответ») — это НЕ сбой 502: прокидываем чистый 409 с понятным
-        // JSON, а не вложенный JSON в тексте ошибки (UI его не распознавал).
+        // (fix 173) 409 from llm_server.py ("LLM already generating another
+        // response") is NOT a 502 failure: forward clean 409 with clear
+        // JSON rather than nested JSON inside error text (UI could not parse it).
         if (upstream.status === 409) {
           return { kind: 'busy' as const }
         }
         return { kind: 'upstream-error' as const, error: `LLM error: ${errText || upstream.status}` }
       }
-      // Счётчик стриминга включается под mutex (контракт startChat): с этого
-      // момента и до конца ответа генерация получает 409.
+      // Streaming counter is enabled under mutex (startChat contract): from this
+      // moment until response ends generation receives 409.
       noteLlmStreaming(1)
       return { kind: 'ok' as const, body: upstreamBody }
     })
@@ -823,10 +823,10 @@ export async function POST(req: NextRequest) {
       })
     }
     if (v.kind === 'busy') {
-      // (правка 173) Чистый 409 для параллельного запроса — клиент
-      // (assistant-stream) парсит { error } и показывает его как есть.
+      // (fix 173) Clean 409 for parallel request — client
+      // (assistant-stream) parses { error } and displays it as-is.
       return new Response(
-        JSON.stringify({ ok: false, error: 'Ассистент уже генерирует другой ответ — дождитесь завершения' }),
+        JSON.stringify({ ok: false, error: 'Assistant is already generating another response — please wait for completion' }),
         { status: 409, headers: { 'Content-Type': 'application/json' } },
       )
     }
@@ -837,49 +837,49 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Виден в catch ниже (переменные try-блока там не в скоупе).
+    // Visible in catch below (try-block variables are out of scope there).
     let finishRef: (() => void) | null = null
 
-    // Проксируем SSE вручную (reader → writer): во-первых, сервер ЗНАЕТ момент
-    // конца ответа (включая обрыв соединения) и снимает блокировку генерации;
-    // во-вторых, idle-сторож прерывает ЗАВИСШИЙ стрим — иначе счётчик
-    // стриминга завис бы навсегда и генерация навечно получила бы 409.
-    // temp-файлы: safety net. 60 с мало — ленивое декодирование видео и
-    // сама генерация идут ПОСЛЕ старта стрима и могут длиться минутами;
-    // normally finish() чистит файлы сразу по концу ответа.
-    // 15 минут = граница finishWatchdog: temp-файлы удаляются не раньше,
-    // чем стрим гарантированно завершён (при 10 мин живой стрим мог
-    // остаться без своих видео-файлов в разгар ленивой токенизации).
+    // Proxy SSE manually (reader → writer): first, server KNOWS when
+    // response ends (including disconnection) and lifts generation lock;
+    // second, idle watchdog aborts FROZEN stream — otherwise streaming counter
+    // would hang forever and generation would receive 409 forever.
+    // temp-files: safety net. 60 s is not enough — lazy video decoding and
+    // generation itself run AFTER stream starts and can last minutes;
+    // normally finish() cleans up files right after response ends.
+    // 15 minutes = finishWatchdog boundary: temp files are deleted no earlier
+    // than stream is guaranteed finished (at 10 min a live stream could
+    // lose its video files in the midst of lazy tokenization).
     const safetyTimer = setTimeout(cleanup, 15 * 60_000)
-    // (правка 110) Сторож finish(): если drain-насос завис (зависший
-    // writer.write/close на half-open сокете клиента), finish() из finally
-    // никогда бы не выполнился и счётчик стриминга держал блокировку генерации
-    // ВЕЧНО (кнопка 409 навсегда). Здорогому стриму не жить 15 минут —
-    // idle-сторож прерывает LLM после 5 мин тишины.
+    // (fix 110) finish() watchdog: if drain pump hangs (hung
+    // writer.write/close on client's half-open socket), finish() from finally
+    // would never execute and streaming counter would hold generation lock
+    // FOREVER (409 button permanently). A healthy stream doesn't live 15 minutes —
+    // idle watchdog aborts LLM after 5 min of silence.
     let finishWatchdog: ReturnType<typeof setTimeout> | null = null
     try {
       const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
       const reader = v.body.getReader()
       const writer = writable.getWriter()
 
-      // Правка 31: чтение модели и подача клиенту ДЕКОУПЛЕНЫ через буфер.
-      // Старый насос был последовательным (read → await writer.write): медленный
-      // клиент (фоновая вкладка) создавал back-pressure на llm_server, и
-      // idle-сторож мог сработать из-за «клиент не читает», а не из-за
-      // зависшей модели. Теперь: upstream-цикл только читает модель в буфер,
-      // drain-цикл только кормит клиента — ни один не ждёт другого.
+      // Fix 31: model reading and serving client are DECOUPLED via buffer.
+      // Old pump was sequential (read → await writer.write): slow
+      // client (background tab) created back-pressure on llm_server, and
+      // idle watchdog could trigger because "client isn't reading" rather than
+      // frozen model. Now: upstream loop only reads model into buffer,
+      // drain loop only feeds client — neither waits on the other.
       const buffer: Uint8Array[] = []
       let bufferedBytes = 0
       let upstreamDone = false
       let upstreamFailed = false
       let clientGone = false
-      const MAX_BUFFERED = 8 * 1024 * 1024 // не копим в памяти больше 8 МБ
+      const MAX_BUFFERED = 8 * 1024 * 1024 // do not buffer more than 8 MB in memory
 
       let idleTimer: ReturnType<typeof setTimeout> | null = null
       const armIdleWatchdog = () => {
         if (idleTimer) clearTimeout(idleTimer)
         idleTimer = setTimeout(() => {
-          console.log('[llm] стрим завис (нет данных 5 мин) — прерываю')
+          console.log('[llm] stream frozen (no data for 5 min) — aborting')
           upstreamFailed = true
           void reader.cancel().catch(() => {})
         }, 5 * 60_000)
@@ -891,23 +891,23 @@ export async function POST(req: NextRequest) {
         finished = true
         if (idleTimer) clearTimeout(idleTimer)
         clearTimeout(safetyTimer)
-        if (finishWatchdog) clearTimeout(finishWatchdog) // (правка 110)
+        if (finishWatchdog) clearTimeout(finishWatchdog) // (fix 110)
         noteLlmStreaming(-1)
         cleanup()
       }
       finishRef = finish
 
-      // (правка 110) Форсируем finish() даже если drain-цикл завис навсегда.
+      // (fix 110) Force finish() even if drain loop hangs forever.
       finishWatchdog = setTimeout(() => {
         if (!finished) {
-          console.warn('[llm] (правка 110) finish-сторож: 15 мин без finish() — форсирую снятие блокировки')
+          console.warn('[llm] (fix 110) finish watchdog: 15 min without finish() — forcing lock release')
           finish()
         }
       }, 15 * 60_000)
 
-      // Upstream: читаем модель в буфер независимо от клиента. Если клиент
-      // сильно отстал — ждём, пока буфер стечёт (back-pressure на модель, а
-      // не на вкладку).
+      // Upstream: read model into buffer independently from client. If client
+      // lags behind significantly — wait until buffer drains (back-pressure on model,
+      // not on browser tab).
       void (async () => {
         try {
           armIdleWatchdog()
@@ -916,17 +916,17 @@ export async function POST(req: NextRequest) {
             const { done, value } = await reader.read()
             if (done) break
             armIdleWatchdog()
-            // (правка 171) Bonsai idle-watchdog (llm-runner, 10 мин) убивал
-            // сервер посреди длинного ответа: активность отмечалась один раз
-            // до стрима. Обновляем на каждую SSE-дельту — как touch() на
-            // каждый чанк в standard-бэкенде (tools/llm_server.py).
+            // (fix 171) Bonsai idle-watchdog (llm-runner, 10 min) killed
+            // server in the middle of long response: activity was recorded once
+            // before stream. Update on every SSE delta — same as touch() on
+            // every chunk in standard backend (tools/llm_server.py).
             if (backend === 'bonsai') noteLlmActivity()
             buffer.push(value)
             bufferedBytes += value.length
             while (bufferedBytes > MAX_BUFFERED && !clientGone) {
-              // Медленный клиент ≠ зависшая модель: перезапускаем idle-сторож,
-              // иначе 8 МБ буфера, стекающие дольше 5 мин, ложно убивали
-              // здоровый стрим.
+              // Slow client ≠ frozen model: reset idle watchdog,
+              // otherwise 8 MB buffer draining longer than 5 min would falsely kill
+              // a healthy stream.
               armIdleWatchdog()
               await new Promise((r) => setTimeout(r, 20))
             }
@@ -937,7 +937,7 @@ export async function POST(req: NextRequest) {
         }
       })()
 
-      // Drain: кормим клиента, пока буфер не опустеет и upstream не завершён.
+      // Drain: feed client until buffer is empty and upstream is done.
       void (async () => {
         try {
           for (;;) {
@@ -951,13 +951,13 @@ export async function POST(req: NextRequest) {
             await new Promise((r) => setTimeout(r, 10))
           }
           if (upstreamFailed && !clientGone) {
-            try { await writer.abort() } catch { /* уже закрыт */ }
+            try { await writer.abort() } catch { /* already closed */ }
           } else if (!clientGone) {
-            try { await writer.close() } catch { /* уже закрыт */ }
+            try { await writer.close() } catch { /* already closed */ }
           }
         } catch {
-          // клиент отключился (вкладка закрыта, сеть) — останавливаем и чтение
-          // upstream, чтобы не держать соединение с llm_server
+          // client disconnected (tab closed, network) — abort upstream
+          // reading as well, so we don't hold connection with llm_server
           clientGone = true
           void reader.cancel().catch(() => {})
         } finally {
@@ -974,19 +974,19 @@ export async function POST(req: NextRequest) {
         },
       })
     } catch (err) {
-      // Гатчина между «стрим начат» и «насос запущен»: снимаем счётчик и
-      // перебрасываем во внешний catch (500), не оставляя блокировку.
-      // Через finish() — он идемпотентен (guard `finished`); прямой
-      // noteLlmStreaming(-1) здесь дал бы двойное декрементирование, если
-      // насосы уже успели запланировать свой finish().
+      // Gap between "stream started" and "pump running": decrement counter and
+      // forward to outer catch (500), without leaving lock behind.
+      // Via finish() — it is idempotent (`finished` guard); direct
+      // noteLlmStreaming(-1) here would double-decrement if
+      // pumps already scheduled their own finish().
       if (finishRef) {
         finishRef()
       } else {
-        // throw случился до создания finish — сырой откат
+        // throw occurred before finish creation — raw rollback
         noteLlmStreaming(-1)
         cleanup()
         clearTimeout(safetyTimer)
-        if (finishWatchdog) clearTimeout(finishWatchdog) // (правка 110)
+        if (finishWatchdog) clearTimeout(finishWatchdog) // (fix 110)
       }
       throw err
     }

@@ -12,17 +12,17 @@
 import { buildMiniMaxH3Workflow, videoSamplerStages, type MiniMaxH3Params } from './minimax-h3-template'
 import { buildRefineWorkflow, type RefineParams } from './refine-template'
 import { getClientId, registerPromptStages, type TileGeometry } from './progress-tracker'
-import { getVideoFormatSettings } from '../video-format-server' // (правка 386)
+import { getVideoFormatSettings } from '../video-format-server' // (fix 386)
 
 export const COMFY_URL =
   process.env.COMFY_URL?.replace(/\/+$/, '') || 'http://127.0.0.1:8188'
 
 /**
- * (фикс Phase 6) Рутинные логи опроса статуса ([status] … RUNNING/QUEUED/…)
- * заспамили консоль start.bat — по строке на каждый тик поллинга (1/с на
- * задачу) и пугали пользователя. Теперь они видны ТОЛЬКО при запуске с
- * переменной окружения H3_DEBUG=1. Предупреждения об аномалиях (NOT FOUND,
- * ошибки выполнения) остаются в консоли всегда.
+ * (fix Phase 6) Routine status polling logs ([status] … RUNNING/QUEUED/…)
+ * spammed the start.bat console — one line per polling tick (1/s per
+ * task) and alarmed the user. Now they are visible ONLY when running with
+ * the environment variable H3_DEBUG=1. Anomaly warnings (NOT FOUND,
+ * execution errors) always remain in the console.
  */
 const statusDbg = process.env.H3_DEBUG
   ? (...args: unknown[]) => console.log('[status]', ...args)
@@ -33,9 +33,9 @@ export interface SubmitResult {
   number?: number
 }
 
-/** (правка 161) Descriptor возвращаемый нодой MiniMaxH3Extender после
- *  upload картинки-рефа через /h3_extender/ref/upload. ID — 64 hex-символа
- *  (content-addressed), не имя файла из input/ ComfyUI. */
+/** (fix 161) Descriptor returned by MiniMaxH3Extender node after
+ *  uploading reference image via /h3_extender/ref/upload. ID is 64 hex characters
+ *  (content-addressed), not a filename from ComfyUI input/. */
 export interface ExtenderRefDescriptor {
   id: string
   source_id?: string
@@ -48,10 +48,10 @@ export interface ExtenderRefDescriptor {
   brightness?: number
 }
 
-/** (правка 161) Upload одной картинки-рефа в внутренний кэш Extender-ноды.
- *  В отличие от uploadImage() — это НЕ имя файла в input/ ComfyUI, а
- *  content-addressed descriptor, который нода понимает и использует сама.
- *  Возвращает descriptor (id — 64 hex). */
+/** (fix 161) Upload one reference image to Extender node internal cache.
+ *  Unlike uploadImage() — this is NOT a filename in ComfyUI input/, but a
+ *  content-addressed descriptor that the node understands and uses itself.
+ *  Returns descriptor (id — 64 hex). */
 export async function uploadExtenderRef(
   buffer: Buffer,
   filename: string,
@@ -94,8 +94,8 @@ export async function uploadImage(
   timeoutMs = 300_000,
 ): Promise<string> {
   const form = new FormData()
-  // (правка 347) Blob (например, fs.openAsBlob) — потоковая отдача тела
-  // без буферизации всего файла в heap.
+  // (fix 347) Blob (e.g. fs.openAsBlob) — streaming body transmission
+  // without buffering the whole file in heap.
   const blob = buffer instanceof Blob ? buffer : new Blob([new Uint8Array(buffer)])
   form.append('image', blob, filename)
   form.append('subfolder', '')
@@ -116,8 +116,8 @@ export async function uploadImage(
 
 /** Submit a MiniMax H3 workflow. Returns prompt_id. */
 export async function submitVideo(params: MiniMaxH3Params): Promise<SubmitResult> {
-  const workflow = buildMiniMaxH3Workflow({ ...params, videoFormat: getVideoFormatSettings() }) // (правка 386)
-  // (правка 255) стадии сэмплеров → честный 0–100% в трекере
+  const workflow = buildMiniMaxH3Workflow({ ...params, videoFormat: getVideoFormatSettings() }) // (fix 386)
+  // (fix 255) sampler stages → honest 0–100% in tracker
   return submitWorkflowJson(workflow, videoSamplerStages(params))
 }
 
@@ -127,8 +127,8 @@ export async function submitVideo(params: MiniMaxH3Params): Promise<SubmitResult
  * Same VHS output options as submitVideo (no PNG poster / silent intermediate).
  */
 export async function submitRefine(params: RefineParams): Promise<SubmitResult> {
-  const workflow = buildRefineWorkflow({ ...params, videoFormat: getVideoFormatSettings() }) // (правка 386)
-  // (правка 255) единственный проход — шкала 0–100 без деления на 2
+  const workflow = buildRefineWorkflow({ ...params, videoFormat: getVideoFormatSettings() }) // (fix 386)
+  // (fix 255) single pass — 0–100 scale without dividing by 2
   return submitWorkflowJson(workflow, [['46:21']])
 }
 
@@ -136,7 +136,7 @@ export async function submitRefine(params: RefineParams): Promise<SubmitResult> 
 export async function submitWorkflowJson(
   workflow: Record<string, unknown>,
   stages?: string[][],
-  tileGeometry?: TileGeometry | null, // (правка 479)
+  tileGeometry?: TileGeometry | null, // (fix 479)
 ): Promise<SubmitResult> {
   const body = {
     prompt: workflow,
@@ -169,17 +169,17 @@ export async function submitWorkflowJson(
     })
   } catch (err) {
     throw new Error(
-      `ComfyUI не отвечает на ${COMFY_URL}. ` +
-        `Запустите ComfyUI и проверьте порт. (${String(err)})`,
+      `ComfyUI is not responding at ${COMFY_URL}. ` +
+        `Start ComfyUI and verify the port. (${String(err)})`,
     )
   }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    // (правка 504) Детектируем «модели не найдены» (value_not_in_list для
-    // vae_name / unet_name / clip_name / tiny_vae) — даём дружелюбное
-    // сообщение вместо сырого JSON-ошибки.
-    let msg = `ComfyUI отклонил воркфлоу (HTTP ${res.status}): ${detail.slice(0, 500)}`
+    // (fix 504) Detect "models not found" (value_not_in_list for
+    // vae_name / unet_name / clip_name / tiny_vae) — give a friendly
+    // message instead of raw JSON error.
+    let msg = `ComfyUI rejected workflow (HTTP ${res.status}): ${detail.slice(0, 500)}`
     try {
       const parsed = JSON.parse(detail)
       const nodeErrors: Record<string, { errors?: Array<{ type?: string; details?: string }> }> |
@@ -194,19 +194,19 @@ export async function submitWorkflowJson(
         )
         if (isModelMissing) {
           msg =
-            'Модели не найдены на диске. ' +
-            'Откройте «Настройки → Модели» и скачайте необходимые файлы, ' +
-            'либо положите их вручную в ComfyUI-Easy-Install/ComfyUI/models/ (vae/, text_encoders/, diffusion_models/).'
+            'Models not found on disk. ' +
+            'Open "Settings → Models" and download the required files, ' +
+            'or place them manually in ComfyUI-Easy-Install/ComfyUI/models/ (vae/, text_encoders/, diffusion_models/).'
         }
       }
-    } catch { /* не JSON — оставляем оригинальное сообщение */ }
+    } catch { /* not JSON — keep original message */ }
     throw new Error(msg)
   }
 
   const data = (await res.json()) as SubmitResult
-  if (!data.prompt_id) throw new Error('ComfyUI вернул ответ без prompt_id.')
-  // (правка 255) регистрируем стадии ДО первых WS-событий промпта
-  // (правка 479) + tile-геометрию для монотонного прогресса tile-upscale
+  if (!data.prompt_id) throw new Error('ComfyUI returned response without prompt_id.')
+  // (fix 255) register stages BEFORE first WS events of prompt
+  // (fix 479) + tile geometry for monotonic progress of tile-upscale
   if (stages && stages.length > 0) {
     registerPromptStages(data.prompt_id, stages, tileGeometry)
   }
@@ -214,9 +214,9 @@ export async function submitWorkflowJson(
 }
 
 /**
- * (фикс) Ретраи при сетевых сбоях. Раньше один обрыв TCP (WinError 10054)
- * = getStatus возвращал 'unknown' → клиент считал это ошибкой и падал.
- * Теперь автоматически повторяем 2 раза с задержкой 1с, 2с.
+ * (fix) Retries on network errors. Previously a single TCP drop (WinError 10054)
+ * = getStatus returned 'unknown' → client treated this as an error and failed.
+ * Now we automatically retry 2 times with 1s, 2s delays.
  */
 export async function getStatusWithRetry(promptId: string, maxRetries = 2): Promise<StatusResult> {
   let lastError: Error | null = null
@@ -224,8 +224,8 @@ export async function getStatusWithRetry(promptId: string, maxRetries = 2): Prom
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       if (attempt > 0) {
-        // Экспоненциальная задержка: 1с, 2с
-        // (правка 587) pow(2, attempt-1) — как model-downloader: было 2с/4с
+        // Exponential backoff: 1s, 2s
+        // (fix 587) pow(2, attempt-1) — same as model-downloader: was 2s/4s
         const delay = Math.pow(2, attempt - 1) * 1000
         await new Promise(r => setTimeout(r, delay))
       }
@@ -234,12 +234,12 @@ export async function getStatusWithRetry(promptId: string, maxRetries = 2): Prom
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e))
       
-      // Если это последний ретрай — бросаем ошибку
+      // If this is the last retry — rethrow error
       if (attempt === maxRetries) {
         throw lastError
       }
       
-      // Иначе — пробуем снова
+      // Otherwise — try again
     }
   }
   
@@ -249,10 +249,10 @@ export async function getStatusWithRetry(promptId: string, maxRetries = 2): Prom
 /** Poll the status of a submitted prompt. */
 export async function getStatus(promptId: string): Promise<StatusResult> {
   statusDbg(`getStatus(${promptId})`)
-  // (фикс) Увеличенные таймауты для видео генерации. Раньше 5 секунд было
-  // мало — при длинной генерации TCP-соединение разрывалось (WinError 10054),
-  // и getStatus возвращал 'unknown' → клиент считал это ошибкой.
-  // Теперь 30 секунд — достаточно даже для медленных машин.
+  // (fix) Increased timeouts for video generation. Previously 5 seconds was
+  // too short — during long generation TCP connection dropped (WinError 10054),
+  // and getStatus returned 'unknown' → client treated this as an error.
+  // Now 30 seconds is enough even for slow machines.
   const histRes = await fetch(`${COMFY_URL}/history/${promptId}`, {
     signal: AbortSignal.timeout(30_000),
   }).catch(() => null)
@@ -262,12 +262,12 @@ export async function getStatus(promptId: string): Promise<StatusResult> {
     const entry = hist[promptId]
     if (entry) {
       const statusStr = entry.status?.status_str?.toLowerCase() ?? ''
-      // (правка 432) status.messages — это МАССИВ ПАР [type, data]
-      // (['execution_error', {...}], ['execution_start', {...}], ...), а не
-      // объектов {type, data}. Старый find(m.type === 'execution_error')
-      // никогда не срабатывал → errMsg undefined → detail = голое «error»
-      // без причины (в логе: «ERROR from history — error undefined»).
-      // Ищем в ОБОИХ форматах (tuple и объект) — ComfyUI-версии разнятся.
+      // (fix 432) status.messages is an ARRAY OF PAIRS [type, data]
+      // (['execution_error', {...}], ['execution_start', {...}], ...), not
+      // objects {type, data}. Old find(m.type === 'execution_error')
+      // never triggered → errMsg undefined → detail = bare "error"
+      // without reason (in log: "ERROR from history — error undefined").
+      // Check in BOTH formats (tuple and object) — ComfyUI versions differ.
       const msgs: unknown[] = Array.isArray(entry.status?.messages) ? entry.status.messages : []
       const pickMsg = (pred: (t: unknown, d: unknown) => boolean) => {
         for (const m of msgs) {
@@ -291,16 +291,16 @@ export async function getStatus(promptId: string): Promise<StatusResult> {
           node_type?: string
           node_id?: string | number
         }
-        // Читаемая причина сбоя: exception_message + тип исключения + нода.
+        // Readable failure reason: exception_message + exception type + node.
         const reason =
           (typeof ed.exception_message === 'string' && ed.exception_message.trim()) ||
           (typeof ed.exception_type === 'string' && ed.exception_type.trim()) ||
           (entry.status?.status_str && entry.status.status_str !== 'error' ? entry.status.status_str : '') ||
-          'Ошибка выполнения в ComfyUI'
+          'Execution error in ComfyUI'
         const node = ed.node_type
-          ? ` [нода: ${ed.node_type}${ed.node_id != null ? ` #${ed.node_id}` : ''}]`
+          ? ` [node: ${ed.node_type}${ed.node_id != null ? ` #${ed.node_id}` : ''}]`
           : ''
-        // Однострочник с капом: traceback-строки и \n не даём в баннер/очередь.
+        // Single line with cap: don't pass traceback lines and \n into banner/queue.
         const detail = `${reason}${node}`.replace(/\s+/g, ' ').slice(0, 500)
         console.warn(`[status] ${promptId}: ERROR from history —`, detail)
         return {
@@ -333,7 +333,7 @@ export async function getStatus(promptId: string): Promise<StatusResult> {
   }
 
   // Check queue
-  // (фикс) Увеличенный таймаут — см. выше
+  // (fix) Increased timeout — see above
   const queueRes = await fetch(`${COMFY_URL}/queue`, {
     signal: AbortSignal.timeout(30_000),
   }).catch(() => null)
@@ -358,12 +358,12 @@ export async function getStatus(promptId: string): Promise<StatusResult> {
     statusDbg(`${promptId}: queue request failed (queueRes=${!!queueRes})`)
   }
 
-  // Оба запроса упали — ComfyUI недоступен/перезапускается. Это НЕ «queued»:
-  // раньше такой ответ бесконечно показывал «В очереди…», пока не истекал
-  // 60-минутный таймаут. Клиент считает подряд идущие 'unknown' и падает
-  // в ошибку после N попыток.
+  // Both requests failed — ComfyUI is unavailable/restarting. This is NOT "queued":
+  // previously such response endlessly displayed "Queued...", until the
+  // 60-minute timeout expired. Client counts consecutive 'unknown' and fails
+  // with an error after N attempts.
   if (!histRes && !queueRes) {
-    return { status: 'unknown', detail: 'ComfyUI не отвечает' }
+    return { status: 'unknown', detail: 'ComfyUI is not responding' }
   }
 
   // Not in queue and not in history. ComfyUI answers (both requests
@@ -372,40 +372,39 @@ export async function getStatus(promptId: string): Promise<StatusResult> {
   // this client_id), lost (ComfyUI restart), or never properly queued.
   //
   // Returning 'queued' here was a trap: the client polls forever, shows
-  // «Генерация…» for the full 60-minute timeout, and the user sees a
+  // "Generating..." for the full 60-minute timeout, and the user sees a
   // phantom generation. Returning 'unknown' lets the client's consecutive-
   // unknown counter kick in (20 polls × 1s = 20s) and surface a clear
-  // error: «ComfyUI не отвечает» — which, while slightly misleading in
+  // error: "ComfyUI is not responding" — which, while slightly misleading in
   // this specific case (ComfyUI IS responding), is far better than
   // waiting an hour for a job that will never finish.
   console.warn(
-    `[status] ${promptId}: NOT FOUND — ComfyUI отвечает (history+queue OK), ` +
-    `но prompt_id отсутствует в обоих. Возможно, ComfyUI отклонил задачу, ` +
-    `или был перезапущен. Возвращаю 'unknown'.`
+    `[status] ${promptId}: NOT FOUND — ComfyUI is responding (history+queue OK), ` +
+    `but prompt_id is absent from both. ComfyUI may have rejected the task ` +
+    `or restarted. Returning 'unknown'.`
   )
-  return { status: 'unknown', detail: 'Задача не найдена в ComfyUI (отклонена или потеряна)' }
+  return { status: 'unknown', detail: 'Task not found in ComfyUI (rejected or lost)' }
 }
 
 /**
- * Cancel a specific prompt (правка 145).
+ * Cancel a specific prompt (fix 145).
  *
- * ГЛАВНОЕ: /interrupt убивает ТЕКУЩУЮ выполняющуюся задачу ComfyUI — независимо
- * от того, какой prompt_id мы имеем в виду. Раньше /interrupt слался ВСЕГДА:
- * удаление ОЖИДАЮЩЕЙ задачи (или уже завершённой) прерывало ЧУЖУЮ идущую
- * генерацию (баг: «удалил последнюю из трёх — прервалась та, что генерировалась»).
+ * IMPORTANT: /interrupt kills the CURRENTLY executing task in ComfyUI — regardless
+ * of which prompt_id we intend. Previously /interrupt was ALWAYS sent:
+ * deleting a WAITING task (or already completed one) interrupted SOMEONE ELSE's running
+ * generation (bug: "deleted the last of three — interrupted the one being generated").
  *
- * Теперь:
- *  • задача ВЫПОЛНЯЕТСЯ → /interrupt + удалить из очереди;
- *  • задача ОЖИДАЕТ → только удалить из очереди; затем перепроверка: если за
- *    это время она успела стартовать (гонка pending→running между GET и
- *    DELETE) — прерываем именно её;
- *  • задачи нет в очереди (завершена/потеряна) → ничего не делаем, /interrupt
- *    не трогаем.
+ * Now:
+ *  • task is RUNNING → /interrupt + delete from queue;
+ *  • task is PENDING → only delete from queue; then re-check: if during
+ *    this time it started running (race condition pending→running between GET and
+ *    DELETE) — interrupt specifically this task;
+ *  • task not in queue (completed/lost) → do nothing, do not touch /interrupt.
  */
 export async function cancelPrompt(promptId: string): Promise<void> {
-  // (правка 356) null = /queue недоступен (сетевой сбой/ComfyUI лежит).
-  // Раньше это молча трактовалось как «задачи нет» → no-op, а клиент
-  // получал ok:true — «отмена» не происходила.
+  // (fix 356) null = /queue unavailable (network failure / ComfyUI down).
+  // Previously this was silently treated as "no task" → no-op, while client
+  // received ok:true — "cancellation" did not occur.
   const inQueueState = async (): Promise<{ running: boolean; pending: boolean } | null> => {
     try {
       const res = await fetch(`${COMFY_URL}/queue`, { signal: AbortSignal.timeout(5_000) })
@@ -432,27 +431,27 @@ export async function cancelPrompt(promptId: string): Promise<void> {
 
   const state = await inQueueState()
   if (state === null) {
-    // (правка 356) /queue недоступен — не молчим: вызывающий роут вернёт ошибку.
-    throw new Error('ComfyUI /queue недоступен — отмена не выполнена')
+    // (fix 356) /queue unavailable — do not remain silent: caller route will return error.
+    throw new Error('ComfyUI /queue is unavailable — cancellation not performed')
   }
 
   if (state.running) {
-    // Наша задача исполняется: прерываем и вычищаем остатки из очереди.
+    // Our task is running: interrupt and clean remnants from queue.
     await interruptRunning()
     await deleteFromQueue()
     return
   }
   if (state.pending) {
-    // Только удаление из очереди — НЕ трогаем чужую выполняющуюся задачу.
+    // Only remove from queue — do NOT touch another running task.
     await deleteFromQueue()
-    // Гонка: задача могла стартовать между GET и DELETE — тогда DELETE её не
-    // взял, и она теперь running. Перепроверяем и прерываем ИМЕННО её.
+    // Race condition: task might have started between GET and DELETE — then DELETE did not
+    // catch it, and it is now running. Re-check and interrupt SPECIFICALLY this task.
     const after = await inQueueState()
     if (after?.running) await interruptRunning()
     return
   }
-  // Задачи в очереди нет (завершена/отклонена/потеряна): полный no-op.
-  // Раньше здесь уходил безусловный /interrupt — и убивал чужую генерацию.
+  // Task is not in queue (completed/rejected/lost): complete no-op.
+  // Previously an unconditional /interrupt was sent here — killing someone else's generation.
 }
 
 /** Build a URL for viewing a generated file. */

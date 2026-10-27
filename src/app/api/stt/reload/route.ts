@@ -3,12 +3,12 @@ import { getAppConfig } from '@/lib/app-config'
 import { sttStatus, ensureStt, stopStt, STT_PORT } from '@/lib/stt-runner'
 
 /**
- * (правка 65) POST /api/stt/reload
- * Body: { model?, language?, threads? } — применить новые параметры:
- *  * если сервис уже работает — Python-сервер сам перегружает модель;
- *  * если запущен со старыми параметрами (язык/потоки отличаются) — полный
- *    перезапуск процесса;
- *  * если не запущен — просто старт.
+ * (fix 65) POST /api/stt/reload
+ * Body: { model?, language?, threads? } — apply new settings:
+ *  * if service is already running — Python server reloads the model itself;
+ *  * if running with old parameters (language/threads differ) — full
+ *    process restart;
+ *  * if not running — simple start.
  */
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       res.ok
         ? { ok: true, reloaded: !st.running }
-        : { ok: false, error: res.error ?? 'STT-сервер не запустился' },
+        : { ok: false, error: res.error ?? 'STT server failed to start' },
       { status: res.ok ? 200 : 500 },
     )
   } catch (err) {

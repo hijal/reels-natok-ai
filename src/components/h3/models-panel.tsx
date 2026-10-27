@@ -3,9 +3,9 @@
 /**
  * Models Panel — check, download, and track progress of required model files.
  *
- * Визуально разделено на две секции:
- *   1. "Minimax H3 (генерация)" — diffusion, text encoder, VAE, LoRA, upscaler, preview
- *   2. "LLM ассистент" — только выбранная квантизация + mmproj
+ * Visually divided into two sections:
+ *   1. "Minimax H3 (generation)" — diffusion, text encoder, VAE, LoRA, upscaler, preview
+ *   2. "LLM Assistant" — only selected quantization + mmproj
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
@@ -38,7 +38,7 @@ interface ModelStatus {
   totalBytes?: number | null
   speed?: number
   error?: string
-  /** (правка 138) Опциональная модель: «Скачать все» не тянет. */
+  /** Optional model: "Download all" does not fetch it. */
   optional?: boolean
 }
 
@@ -70,9 +70,9 @@ function resolveSelectedLlm(llmModel: string): string {
   return llmModel
 }
 
-/** (правка 52) какая «семья» LLM выбрана: gemma/qwen/bonsai — от этого
- *  зависит, какой mmproj показывать/требовать.
- *  (правка 162) добавлена семья 'bonsai' — свой mmproj. */
+/** Which LLM family is selected: gemma/qwen/bonsai — determines
+ *  which mmproj to show/require.
+ *  'bonsai' family has its own mmproj. */
 function selectedLlmFamily(llmModel: string): 'gemma' | 'qwen' | 'bonsai' {
   if (/bonsai/i.test(llmModel)) return 'bonsai'
   return /qwen/i.test(llmModel) ? 'qwen' : 'gemma'
@@ -138,16 +138,16 @@ export function ModelsPanel() {
   }, [models, startPolling, stopPolling])
 
   // Split into three sections
-  // (правка 269) FPS (VFI) — отдельная секция (models-config.ts, category 'fps')
+  // FPS (VFI) — separate section (models-config.ts, category 'fps')
   const h3Models = models.filter(m => m.category !== 'llm' && m.category !== 'fps')
   const fpsModels = models.filter(m => m.category === 'fps')
   const family = selectedLlmFamily(selectedLlm)
-  // (правка 138) Bonsai-набор показывается только когда выбрана Bonsai
+  // Bonsai set is shown only when Bonsai is selected
   const isBonsai = selectedLlm === 'bonsai' || selectedLlm === 'bonsai_light'
   const llmModels = models.filter(m => {
     if (m.category !== 'llm') return false
     if (m.id.startsWith('bonsai_')) return isBonsai
-    // (правка 52) mmproj — только для выбранной семьи (Gemma ↔ Qwen3.5)
+    // mmproj — only for selected family (Gemma <-> Qwen3.5)
     if (m.id === 'llm_assistant_mmproj') return family === 'gemma'
     if (m.id === 'llm_assistant_qwen_mmproj') return family === 'qwen'
     if (isLlmQuant(m.id)) {
@@ -169,28 +169,27 @@ export function ModelsPanel() {
       })
       const data = await res.json()
       if (!data.ok) {
-        toast.error('Не удалось начать скачивание', { description: data.error })
+        toast.error('Failed to start download', { description: data.error })
       } else {
-        toast.info('Скачивание начато', { description: 'Отслеживайте прогресс ниже' })
+        toast.info('Download started', { description: 'Track progress below' })
         setTimeout(() => void fetchStatus(), 500)
       }
     } catch {
-      toast.error('Ошибка сети при запуске скачивания')
+      toast.error('Network error when starting download')
     } finally {
       setStarting(null)
     }
   }, [fetchStatus])
 
   const downloadAll = useCallback(async () => {
-    // (правка 79) Скачиваем ТОЛЬКО видимые модели (H3 + выбранная LLM-семья):
-    // раньше «Скачать все» тянул из полного списка /api/models/status и
-    // квантизации НЕвыбранной LLM-семьи (Gemma ↔ Qwen3.5), которых панель
-    // даже не показывает — лишние гигабайты без ведома юзера.
+    // Download ONLY visible models (H3 + selected LLM family):
+    // previously "Download all" pulled from full /api/models/status list
+    // including quantizations of unselected LLM families.
     const visibleIds = new Set(visibleModels.map(m => m.id))
     const missing = models.filter(
       m => (m.status === 'missing' || m.status === 'error') && visibleIds.has(m.id)
-        // (правка 138) опциональные модели «Скачать все» не тянет —
-        // только явная кнопка «Скачать» у самой модели.
+        // optional models are not pulled by "Download all" —
+        // only explicit "Download" button on the model itself.
         && !m.optional,
     )
     for (const m of missing) {
@@ -205,19 +204,18 @@ export function ModelsPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ modelId }),
       })
-      toast.info('Скачивание отменено')
+      toast.info('Download cancelled')
       setTimeout(() => void fetchStatus(), 300)
     } catch {
-      toast.error('Не удалось отменить скачивание')
+      toast.error('Failed to cancel download')
     }
   }, [fetchStatus])
 
-  // (правка 139) Удаление скачанной модели: освобождает место, когда модель
-  // не нужна (например, выбрана альтернатива). Сервер не даст удалить модель,
-  // которая сейчас выбрана ассистентом.
+  // Delete downloaded model: frees disk space when model is not needed
+  // (e.g. alternative selected). Server will not delete active assistant model.
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const remove = useCallback(async (model: ModelStatus) => {
-    if (!window.confirm(`Удалить файлы модели с диска?\n\n«${model.label}» (${model.sizeLabel})\n\nПри необходимости её можно скачать снова.`)) return
+    if (!window.confirm(`Delete model files from disk?\n\n"${model.label}" (${model.sizeLabel})\n\nYou can download it again if needed.`)) return
     setDeletingId(model.id)
     try {
       const res = await fetch('/api/models/delete', {
@@ -226,22 +224,22 @@ export function ModelsPanel() {
         body: JSON.stringify({ modelId: model.id }),
       })
       if (res.ok) {
-        toast.success('Модель удалена с диска')
+        toast.success('Model deleted from disk')
       } else {
         const d = await res.json().catch(() => ({}))
-        toast.error('Не удалось удалить модель', { description: d.error || `HTTP ${res.status}` })
+        toast.error('Failed to delete model', { description: d.error || `HTTP ${res.status}` })
       }
     } catch {
-      toast.error('Не удалось удалить модель')
+      toast.error('Failed to delete model')
     } finally {
       setDeletingId(null)
       setTimeout(() => void fetchStatus(), 300)
     }
   }, [fetchStatus])
 
-  // (правка 720) Опциональные модели (Veda, FPS и т.п.) в счётчик НЕ входят:
-  // иначе панель вечно показывала бы «8/9» жёлтым и держала кнопку
-  // «Скачать все», хотя эта кнопка их всё равно не тянет (см. downloadAll).
+  // Optional models (Veda, FPS, etc.) are NOT included in the counter:
+  // otherwise panel would constantly show "8/9" in yellow and keep "Download all"
+  // button active, even though "Download all" does not fetch them.
   const requiredModels = visibleModels.filter(m => !m.optional)
   const readyCount = requiredModels.filter(m => m.status === 'ready').length
   const totalCount = requiredModels.length
@@ -261,7 +259,7 @@ export function ModelsPanel() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <PackageIcon className="w-4 h-4 text-cyan-400" />
-          <span className="text-sm font-medium">Модели</span>
+          <span className="text-sm font-medium">Models</span>
           <span className={cn(
             'text-xs px-1.5 py-0.5 rounded',
             allReady ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400',
@@ -287,7 +285,7 @@ export function ModelsPanel() {
               disabled={!!starting}
             >
               <DownloadIcon className="w-3 h-3" />
-              Скачать все
+              Download all
             </Button>
           )}
         </div>
@@ -298,7 +296,7 @@ export function ModelsPanel() {
         <div className="flex items-center gap-2 px-1 pt-1">
           <CpuIcon className="w-3.5 h-3.5 text-cyan-500/70" />
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Minimax H3 (генерация)
+            Minimax H3 (generation)
           </span>
         </div>
         {h3Models.map(model => (
@@ -314,13 +312,13 @@ export function ModelsPanel() {
         ))}
       </div>
 
-      {/* ─── (правка 269) Section: FPS (VFI) ─── */}
+      {/* ─── Section: FPS (VFI) ─── */}
       {fpsModels.length > 0 && (
         <div className="space-y-1.5 pt-2 border-t border-border">
           <div className="flex items-center gap-2 px-1 pt-1">
             <GaugeIcon className="w-3.5 h-3.5 text-cyan-500/70" />
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              FPS (вставка кадров)
+              FPS (frame interpolation)
             </span>
           </div>
           {fpsModels.map(model => (
@@ -343,7 +341,7 @@ export function ModelsPanel() {
           <div className="flex items-center gap-2 px-1 pt-1">
             <BotIcon className="w-3.5 h-3.5 text-violet-500/70" />
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              LLM ассистент
+              LLM Assistant
             </span>
           </div>
           {llmModels.map(model => (
@@ -405,11 +403,10 @@ function ModelRow({
         <div className="flex items-center gap-2">
           <span className="text-xs truncate">{model.label}</span>
           <span className="text-[10px] text-muted-foreground shrink-0">{model.sizeLabel}</span>
-          {/* (правка 720) Пометка «опционально» — чтобы было видно, почему
-              эта модель не входит в счётчик и «Скачать все» её не качает. */}
+          {/* "optional" badge — clarifies why model is excluded from counter and "Download all". */}
           {model.optional && (
             <span className="shrink-0 px-1 py-px rounded text-[9px] border border-border/60 text-muted-foreground/80">
-              опционально
+              optional
             </span>
           )}
         </div>
@@ -451,7 +448,7 @@ function ModelRow({
           onClick={onDownload}
           disabled={starting}
         >
-          {starting ? <Loader2Icon className="w-3 h-3 animate-spin" /> : 'Скачать'}
+          {starting ? <Loader2Icon className="w-3 h-3 animate-spin" /> : 'Download'}
         </Button>
       )}
       {model.status === 'downloading' && onCancel && (
@@ -464,8 +461,8 @@ function ModelRow({
           <XIcon className="w-3.5 h-3.5" />
         </Button>
       )}
-      {/* (правка 139) Удаление скачанного/сломанного — освобождение места.
-          Активная модель ассистента блокируется на сервере (409 + тост). */}
+      {/* Delete downloaded/corrupted — free up disk space.
+          Active assistant model is blocked by server (409 + toast). */}
       {(model.status === 'ready' || model.status === 'error') && onDelete && (
         <Button
           variant="ghost"
@@ -473,7 +470,7 @@ function ModelRow({
           className="h-7 text-xs shrink-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
           onClick={onDelete}
           disabled={deleting}
-          title="Удалить файлы модели с диска"
+          title="Delete model files from disk"
         >
           {deleting ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <Trash2Icon className="w-3.5 h-3.5" />}
         </Button>

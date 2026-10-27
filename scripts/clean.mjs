@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * scripts/clean.mjs — очистка артефактов сборки и мусора.
+ * scripts/clean.mjs — cleanup of build artifacts and garbage.
  *
- * Что удаляет:
- *   .next/                — production build (собирается заново)
- *   .next/dev/            — dev-сервер
- *   tsconfig.tsbuildinfo  — инкрементальный кэш TypeScript
- *   __pycache__/          — байт-код Python (в upscale/, tools/)
- *   *.log                 — логи запуска (comfyui_startup.log, start_*.log)
- *   _nul                 — ловушка Git Bash: `2>nul` в bash создаёт файл
- *                          с зарезервированным именем Windows (см. .gitignore)
+ * What it removes:
+ *   .next/                — production build (rebuilt from scratch)
+ *   .next/dev/            — dev server
+ *   tsconfig.tsbuildinfo  — TypeScript incremental cache
+ *   __pycache__/          — Python bytecode (in upscale/, tools/)
+ *   *.log                 — startup logs (comfyui_startup.log, start_*.log)
+ *   _nul                 — Git Bash trap: `2>nul` in bash creates a file
+ *                          with a reserved Windows name (see .gitignore)
  *
- * Что НЕ трогает:
+ * What it does NOT touch:
  *   node_modules/, ComfyUI-Easy-Install/, data/, .env, config/config.ini
  *
- * Использование:
- *   node scripts/clean.mjs          — очистить
- *   node scripts/clean.mjs --dry    — только показать, что будет удалено
+ * Usage:
+ *   node scripts/clean.mjs          — clean
+ *   node scripts/clean.mjs --dry    — dry run, show what would be removed
  */
 import { readdirSync, statSync, existsSync, rmSync } from 'node:fs';
 import { join, relative, basename } from 'node:path';
@@ -24,7 +24,7 @@ import { join, relative, basename } from 'node:path';
 const ROOT = process.cwd();
 const DRY = process.argv.includes('--dry');
 
-/** Файлы/папки верхнего уровня, которые всегда удаляются. */
+/** Top-level files/directories that are always removed. */
 const TOP_LEVEL = [
   '.next',
   'tsconfig.tsbuildinfo',
@@ -35,16 +35,16 @@ const TOP_LEVEL = [
 ];
 
 /**
- * Папки с нашим собственным Python-кодом, где чистим кэш.
- * ВАЖНО: `upscale/bin/` — это вендорный embedded Python (site-packages);
- * его `__pycache__` трогать не нужно, он не наш код.
+ * Directories with our own Python code where we clean the cache.
+ * IMPORTANT: `upscale/bin/` is vendor embedded Python (site-packages);
+ * its `__pycache__` does not need to be touched as it is not our code.
  */
 const PYCACHE_ROOTS = ['upscale', 'tools'];
 
-/** Каталоги, которые не обходим рекурсивно (вендорные рантаймы). */
+/** Directories not traversed recursively (vendor runtimes). */
 const PYCACHE_SKIP = ['node_modules', '.next', 'bin', 'site-packages', 'Lib'];
 
-/** Расширения логов в корне. */
+/** Log file extension in root. */
 const LOG_EXT = '.log';
 
 const removed = [];
@@ -74,7 +74,7 @@ function drop(target, label) {
   }
 }
 
-/** Рекурсивно ищем __pycache__ в указанных корнях. */
+/** Recursively look for __pycache__ in the specified roots. */
 function findPycache(dir) {
   if (!existsSync(dir)) return;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -88,23 +88,23 @@ function findPycache(dir) {
   }
 }
 
-console.log(`[clean] корень: ${ROOT}${DRY ? '  (--dry: ничего не удаляем)' : ''}`);
+console.log(`[clean] root: ${ROOT}${DRY ? '  (--dry: removing nothing)' : ''}`);
 
-// 1. Точечные цели в корне.
+// 1. Specific targets in root.
 for (const name of TOP_LEVEL) drop(join(ROOT, name), name);
 
-// 2. Все *.log в корне (кроме тех, что уже удалены выше).
+// 2. All *.log in root (except those already dropped above).
 for (const entry of readdirSync(ROOT, { withFileTypes: true })) {
   if (entry.isFile() && entry.name.toLowerCase().endsWith(LOG_EXT)) {
     drop(join(ROOT, entry.name), entry.name);
   }
 }
 
-// 3. Кэш Python.
+// 3. Python cache.
 for (const r of PYCACHE_ROOTS) findPycache(join(ROOT, r));
 
-// 4. Рабочие артефакты DLSS-моста: отчёты о прошлых рендерах и файлы job'ов.
-//    Сами папки оставляем — bridge.py ждёт, что они существуют.
+// 4. DLSS bridge working artifacts: reports from past renders and job files.
+//    Keep the folders themselves — bridge.py expects them to exist.
 for (const dir of ['upscale/logs', 'upscale/jobs']) {
   const full = join(ROOT, dir);
   if (!existsSync(full)) continue;
@@ -114,12 +114,12 @@ for (const dir of ['upscale/logs', 'upscale/jobs']) {
 }
 
 if (removed.length === 0) {
-  console.log('[clean] чисто — удалять нечего.');
+  console.log('[clean] clean — nothing to remove.');
 } else {
   const total = freedBytes.reduce((a, b) => a + b, 0);
   for (const label of removed) console.log(`  - ${label}`);
   console.log(
-    `[clean] ${DRY ? 'будет удалено' : 'удалено'}: ${removed.length} объект(ов), ` +
-      `${(total / 1024 / 1024).toFixed(1)} МБ`,
+    `[clean] ${DRY ? 'will be removed' : 'removed'}: ${removed.length} object(s), ` +
+      `${(total / 1024 / 1024).toFixed(1)} MB`,
   );
 }

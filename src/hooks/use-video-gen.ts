@@ -6,18 +6,18 @@ import type { VideoGenerateParams } from '@/lib/comfy/video-config'
 import { useGenProgress, type GenPhase } from '@/lib/gen-progress-store'
 import { useGenQueue } from '@/lib/gen-queue-store'
 import { acquireComfyTurn, isComfyTurnActive } from '@/lib/comfy-turn'
-// (правка 259) глобальный сигнал перерисовки галерей после завершения джобов
+// (fix 259) global signal to refresh galleries after job completion
 import { useGalleryRefresh } from '@/lib/gallery-refresh-store'
 import { useGenDurations } from '@/lib/gen-duration-store'
 import { useGenStore } from '@/lib/gen-store'
 import { playNotificationSound } from '@/lib/sound'
 import { computeFinalDimensions, finalDimsFromMegapixels, framesForDuration, selectResolution, flfNominalDimensions } from '@/lib/comfy/minimax-h3-template'
 
-/** (правка 158) flf: вычисляем номинал из пресета + размеров кадра —
- *  ТОЖЕ формула, что и на сервере (body.targetDimensions в route.ts).
- *  Без этого «Повторить» (restore-from-meta) восстанавливает resolution
- *  из метаданных, но UI-бейдж/разрешение в форме не совпадает с реальным
- *  размером генерации (мета хранит итоговый outW×outH из computeOutputDimensions).
+/** (fix 158) flf: compute nominal from preset + frame dimensions —
+ *  SAME formula as on the server (body.targetDimensions in route.ts).
+ *  Without this, "Repeat" (restore-from-meta) restores resolution
+ *  from metadata, but the UI badge/form resolution does not match the actual
+ *  generation size (meta stores final outW×outH from computeOutputDimensions).
  */
 function flfFinalResolution(p: {
   mode?: 'ref' | 't2v' | 'flf' | 'extend'
@@ -41,30 +41,30 @@ function flfFinalResolution(p: {
 export type { GenPhase }
 
 const POLL_INTERVAL_MS = 1000
-// (правка 263) Ограничение 60 мин убрано: длинные генерации (высокое
-// разрешение, много кадров) могли не уложиться. Теперь поллинг идёт
-// пока ComfyUI не вернёт done/error — либо пользователь прервёт.
+// (fix 263) 60 min limit removed: long generations (high
+// resolution, many frames) could exceed it. Now polling continues
+// until ComfyUI returns done/error — or user cancels.
 
 /** Store of generation params for metadata (keyed by promptId). */
 const genParamsMap = new Map<string, Record<string, unknown>>()
 
-/* (fix H2) Эпоха прерываний: interrupt() во время 'submitting' (POST ещё в
- * полёте) раньше оставлял задачу-сироту в ComfyUI — cancel для неё послать
- * было нечем (prompt_id ещё нет), и после разрешения POST она тихо просилась
- * в GPU без UI-отслеживания. Теперь generate() замечает смену эпохи после
- * POST и сам отменяет вернувшийся prompt_id. */
+/* (fix H2) Interrupt epoch: interrupt() during 'submitting' (POST still in
+ * flight) previously left an orphan task in ComfyUI — could not send cancel
+ * for it (no prompt_id yet), and after POST resolved it quietly went to
+ * GPU without UI tracking. Now generate() detects an epoch change after
+ * POST and cancels the returned prompt_id itself. */
 let interruptEpoch = 0
 
-/* (правка 328) Межвкладочный lock пост-обработки. Две вкладки браузера
- * держат одну persisted-очередь (localStorage h3-gen-queue) и ОБЕ re-attach'ат
- * поллинг одного prompt_id → обе видят done и обе выполняют doSave(): двойной
- * saveMetadata и двойной extend-concat. Теперь doSave выполняет только
- * вкладка, захватившая lock в localStorage (id вкладки + timestamp, TTL
- * 10 мин — concat длинных видео может идти десятки секунд). Вторая вкладка
- * просто наблюдает статусы. Lock НЕ снимаем по завершении — пусть истекает:
- * повторного срабатывания done-ветки у другой вкладки не будет, а гонка
- * «снял → другая вкладка тоже успела» исключена. Одиночную вкладку это не
- * ломает: её собственный lock всегда её же. */
+/* (fix 328) Cross-tab post-processing lock. Two browser tabs
+ * maintain the same persisted queue (localStorage h3-gen-queue) and BOTH re-attach
+ * polling to the same prompt_id → both see done and both run doSave(): duplicate
+ * saveMetadata and duplicate extend-concat. Now doSave is only executed by the
+ * tab that acquired the lock in localStorage (tab ID + timestamp, TTL
+ * 10 min — concat for long videos can take dozens of seconds). The second tab
+ * merely monitors status. We DO NOT release the lock upon completion — let it expire:
+ * this prevents the other tab from triggering the done branch, and avoids the race
+ * "released → other tab also sneaked in". This does not break a single tab:
+ * its own lock always belongs to it. */
 const TAB_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 const POSTPROC_LOCK_TTL_MS = 10 * 60 * 1000
 
@@ -80,12 +80,12 @@ function tryAcquirePostProcLock(promptId: string): boolean {
         typeof parsed.ts === 'number' &&
         Date.now() - parsed.ts < POSTPROC_LOCK_TTL_MS
       ) {
-        return false // другая вкладка уже делает пост-обработку
+        return false // another tab is already doing post-processing
       }
     }
     window.localStorage.setItem(key, JSON.stringify({ tab: TAB_ID, ts: Date.now() }))
-    // localStorage-запись между вкладками не атомарна: если другая вкладка
-    // перезаписала нас в тот же миг — lock её.
+    // localStorage write across tabs is not atomic: if another tab
+    // overwrote us at the exact same moment — lock belongs to it.
     const verify = window.localStorage.getItem(key)
     if (verify) {
       const v = JSON.parse(verify) as { tab?: string }
@@ -93,7 +93,7 @@ function tryAcquirePostProcLock(promptId: string): boolean {
     }
     return true
   } catch {
-    return true // storage недоступен — поведение как раньше (одна вкладка)
+    return true // storage unavailable — behavior as before (single tab)
   }
 }
 
@@ -135,10 +135,10 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * (правка 124) Известные пресеты → строка соотношения сторон.
- * Ключи = ТОЧНЫЕ номиналы (финальные размеры): короткая сторона = «p»,
- * длинная = короткая × (A:B), чётные (yuv420p). Неизвестные значения
- * проходят эвристику соотношения ниже.
+ * (fix 124) Known presets → aspect ratio string.
+ * Keys = EXACT nominals (final dimensions): short side = "p",
+ * long side = short × (A:B), even (yuv420p). Unknown values
+ * fall through to the ratio heuristic below.
  */
 const RES_TO_ASPECT: Record<string, string> = {
   '854x480': '16:9 (Widescreen)',
@@ -160,11 +160,11 @@ const RES_TO_ASPECT: Record<string, string> = {
 }
 
 /**
- * (правки 121, 124) Итоговые размеры видео в режиме свободного разрешения
- * (MP) — ТО же формула, что в шаблоне (finalDimsFromMegapixels): генерация
- * кратная 32 (бинарные MP узла), итог — максимальный вписанный
- * прямоугольник с точным соотношением. lowResMP больше не влияет на итог:
- * апскейлер работает в режиме «target dimensions».
+ * (fixes 121, 124) Final video dimensions in custom resolution mode
+ * (MP) — SAME formula as in template (finalDimsFromMegapixels): generation
+ * multiple of 32 (node binary MP), result is maximum inscribed
+ * rectangle with exact aspect ratio. lowResMP no longer affects the result:
+ * the upscaler works in "target dimensions" mode.
  */
 export function computeOutputDimensions(aspectRatio: string, megapixels: number): { w: number; h: number } {
   const d = finalDimsFromMegapixels(aspectRatio, megapixels)
@@ -216,20 +216,20 @@ export function useVideoGen() {
     const params = genParamsMap.get(promptId)
     if (!params || !outputs.length) return
     try {
-      // (правка 260) Сайдкар на КАЖДОМ видеовыходе джоба (клипы extend,
-      // куски рефайна и т.п.), а не только на первом. Дедуп по имени.
+      // (fix 260) Sidecar on EVERY video output of the job (extend clips,
+      // refine chunks, etc.), not just the first. Deduplicate by name.
       const vids = outputs.filter((o) => o.filename?.match(/\.(mp4|webm|mov)$/i))
       const list = vids.length ? vids : [outputs[0]]
-      // (правка 375) Латент-пайплайн: путь сохранённого AV-латента (выход
-      // ноды '46:49') уходит в сайдкар как latent_file — серверная финализация
-      // (pending-meta) пишет то же поле, здесь симметрично для клиентского пути.
-      // (правка 383, актуализировано правкой 417) Только для джобов с ОДНИМ
-      // видео: у extend латент не пишется вовсе (латент-пайплайн extend
-      // откачен), а страж «одно видео» защищает мультивыходные джобы от
-      // несоответствия «один латент — много файлов».
-      // (правка 420) У extend латент ТОЛЬКО один (combined, пост-сборка), но
-      // он соответствует ИТОГУ склейки, а не extclip-файлам — сюда не идёт;
-      // клиент прикладывает его к метe combined в вызове /api/comfy/concat.
+      // (fix 375) Latent pipeline: path of saved AV-latent (output of
+      // node '46:49') goes to sidecar as latent_file — server finalization
+      // (pending-meta) writes the same field, here symmetric for client path.
+      // (fix 383, updated by fix 417) Only for jobs with ONE
+      // video: extend does not write latent at all (extend latent pipeline
+      // rolled back), and the "one video" guard protects multi-output jobs from
+      // mismatch "one latent — multiple files".
+      // (fix 420) For extend there is ONLY one latent (combined, post-assembly), but
+      // it corresponds to the FINAL concat result, not extclip files — does not go here;
+      // client attaches it to combined meta in /api/comfy/concat call.
       const isExtendJob = params.generation_mode === 'extend'
       const latentOut = vids.length === 1 && !isExtendJob
         ? outputs.find((o) => o.filename?.match(/\.latent$/i))
@@ -270,11 +270,11 @@ export function useVideoGen() {
     persistGenParams()
   }, [])
 
-  /* (правка 336) Очистка extclip-клипов при error/cancel extend-задачи.
-   * Раньше Minimax_Studio_extclip_* удалялись только после УСПЕШНОГО concat
-   * (правка 291): при ошибке/отмене клипы-мусор оставались в output/ и
-   * были видны в галерее. Фильтр mtime ≥ started_at − 10с и по своей
-   * подпапке — чужие клипы параллельной extend-задачи не трогаем. */
+  /* (fix 336) Cleanup extclip clips on error/cancel of extend task.
+   * Previously Minimax_Studio_extclip_* were deleted only after SUCCESSFUL concat
+   * (fix 291): on error/cancel leftover clips remained in output/ and
+   * were visible in the gallery. Filter mtime ≥ started_at − 10s and by own
+   * subfolder — avoid touching clips belonging to parallel extend tasks. */
   const cleanupExtendClips = useCallback(async (promptId: string) => {
     const params = genParamsMap.get(promptId)
     if (params?.generation_mode !== 'extend') return
@@ -297,20 +297,19 @@ export function useVideoGen() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: f.filename, subfolder: f.subfolder || '' }),
           })
-        } catch { /* файл просто останется в output/ — не критично */ }
+        } catch { /* file will just remain in output/ — non-critical */ }
       }
     } catch { /* non-critical */ }
   }, [])
 
-  // (фикс M4) pollUntilDone ОБЯЗАН быть стабильным (стабильные deps): его
-  // идентичность стоит в deps эффекта реанимации ниже. Раньше в deps был
-  // `queue` — объект состояния из useGenQueue(), который меняется при КАЖДОМ
-  // обновлении стора (progress-тики раз в секунду и т.д.) → pollUntilDone
-  // пересоздавался → эффект реанимации перезапускался на каждом тике и
-  // (фикс M3) убивал свежие 'submitting'-задачи, чей POST ещё был в полёте:
-  // «Отправка прервана перезагрузкой страницы» без всякой перезагрузки,
-  // видео генерировалось, а очередь показывала «Ошибка». Теперь все вызовы
-  // идут через useGenQueue.getState() — замыкание на живой стор, deps пустые.
+  // (fix M4) pollUntilDone MUST be stable (stable deps): its identity
+  // is in the deps of the resuscitation effect below. Previously deps contained
+  // `queue` — state object from useGenQueue(), which changes on EVERY store
+  // update (progress ticks every second, etc.) → pollUntilDone was recreated →
+  // resuscitation effect re-ran on every tick and (fix M3) killed fresh 'submitting'
+  // tasks whose POST was still in flight: "Submission aborted by page reload"
+  // without any reload, video generated fine while queue showed "Error". Now all calls
+  // go through useGenQueue.getState() — closure over live store, deps empty.
   const pollUntilDone = useCallback(
     (promptId: string, queueId: string, startedAt: number) => {
       if (timersRef.current.has(promptId)) return
@@ -321,11 +320,11 @@ export function useVideoGen() {
       // video counts from its actual execution start; a job that went
       // straight to execution counts from the button press (startedAt).
       let sawQueued = false
-      // Счётчик подряд идущих ответов 'unknown' (ComfyUI недоступен)
+      // Counter of consecutive 'unknown' responses (ComfyUI unavailable)
       let unknownCount = 0
-      // Guard от наложения тиков: если fetch статуса/прогресса длится дольше
-      // интервала, два тика concurrently увидят 'done' и ветка завершения
-      // сработает дважды (двойные метаданные, звук, запись длительности).
+      // Guard against overlapping ticks: if status/progress fetch takes longer
+      // than the interval, two ticks concurrently see 'done' and completion branch
+      // fires twice (duplicate metadata, sound, duration record).
       let tickInFlight = false
 
       const timer = setInterval(async () => {
@@ -348,13 +347,13 @@ export function useVideoGen() {
         // The queue item was cancelled (or removed) elsewhere — stop tracking.
         // Without this, a cancelled prompt keeps polling forever: ComfyUI no
         // longer knows it, so getStatus falls back to 'queued' forever.
-        // (фикс) Также останавливаем если элемент в terminal-статусе (error/done):
-        // rehydration effect мог пометить его ошибкой, но поллинг всё ещё активен
-        // и без этого guard вызовал setStatus('running') — resurrection error → running.
+        // (fix) Also stop if item is in terminal status (error/done):
+        // rehydration effect could mark it with error, but polling remained active
+        // and without this guard called setStatus('running') — resurrection error → running.
         const qItem = useGenQueue.getState().items.find((i) => i.promptId === promptId)
         if (!qItem || qItem.status === 'cancelled' || qItem.status === 'error' || qItem.status === 'done') {
-          // (правка 336) Отмена пришла извне (QueueIndicator): extclip-мусор
-          // extend-задачи тоже чистим — успешного concat уже не будет.
+          // (fix 336) Cancellation came externally (QueueIndicator): clean up extclip
+          // junk of extend task as well — successful concat will not happen.
           if (qItem?.status === 'cancelled') void cleanupExtendClips(promptId)
           clearTimer(promptId)
           return
@@ -364,13 +363,13 @@ export function useVideoGen() {
         try {
           const res = await fetch(`/api/comfy/status?prompt_id=${encodeURIComponent(promptId)}`)
           if (!res.ok) {
-            // (правка 491) Не-OK (502 — ComfyUI лёг/перезапускается) раньше
-            // просто пропускал тик: unknownCount не рос, и при мёртвом ComfyUI
-            // карточка крутилась бесконечно. Считаем как 'unknown'-тик.
+            // (fix 491) Non-OK (502 — ComfyUI down/restarting) previously
+            // just skipped the tick: unknownCount didn't increment, and with dead ComfyUI
+            // the card spun indefinitely. Count as an 'unknown' tick.
             unknownCount++
             if (unknownCount >= 20) {
               clearTimer(promptId)
-              const errMsg = 'ComfyUI не отвечает (сервер выключен или перезапускается)'
+              const errMsg = 'ComfyUI is not responding (server is down or restarting)'
               useGenQueue.getState().setStatus(queueId, 'error', errMsg)
               useGenProgress.getState().setVideoError(errMsg)
               useGenProgress.getState().setVideoPhase('error')
@@ -392,25 +391,25 @@ export function useVideoGen() {
             return
           }
 
-          // ComfyUI недоступен (перезапуск/крах): не считаем это «queued» —
-          // после N подряд неответов честно падаем в ошибку, иначе карточка
-          // крутилась бы «В очереди…» весь часовой таймаут.
+          // ComfyUI unavailable (restart/crash): do not treat as "queued" —
+          // after N consecutive missing responses fail honestly with error, otherwise
+          // card would spin "In queue…" for the entire timeout.
           if (s.status === 'unknown') {
             unknownCount++
-            // (фикс) Порог 20 вместо 10: во время активной генерации
-            // ComfyUI event-loop заблокирован GPU-операциями, и отдельные
-            // /history запросы могут не уложиться в 30с → ложный 'unknown'.
-            // 20 × 1с = 20с непрерывного недоступа — это уже реальный сбой.
+            // (fix) Threshold 20 instead of 10: during active generation
+            // ComfyUI event loop is blocked by GPU operations, and individual
+            // /history requests might not complete within 30s → false 'unknown'.
+            // 20 × 1s = 20s of continuous unreachability — that is an actual failure.
             if (unknownCount >= 20) {
               clearTimer(promptId)
-              // Честная диагностика: 'unknown' бывает в двух случаях:
-              //  1) ComfyUI не отвечает (сервер выключен/перезапускается)
-              //  2) ComfyUI отвечает, но prompt_id отсутствует в history
-              //     и queue — задача отклонена или потеряна
-              const isNotFound = s.detail?.includes('не найдена') || s.detail?.includes('отклонена')
+              // Honest diagnosis: 'unknown' occurs in two cases:
+              //  1) ComfyUI is not responding (server is down/restarting)
+              //  2) ComfyUI responds, but prompt_id is missing from history
+              //     and queue — task was rejected or lost
+              const isNotFound = s.detail?.includes('not found') || s.detail?.includes('rejected')
               const errMsg = isNotFound
-                ? 'Задача не найдена в ComfyUI — возможно, была отклонена при отправке или ComfyUI был перезапущен'
-                : 'ComfyUI не отвечает (сервер выключен или перезапускается)'
+                ? 'Task not found in ComfyUI — may have been rejected on submission or ComfyUI restarted'
+                : 'ComfyUI is not responding (server is down or restarting)'
               useGenQueue.getState().setStatus(queueId, 'error', errMsg)
               useGenProgress.getState().setVideoError(errMsg)
               useGenProgress.getState().setVideoPhase('error')
@@ -441,8 +440,8 @@ export function useVideoGen() {
             // Update phase and queue status
             if (s.status === 'running') {
               if (runningSince === null) runningSince = Date.now()
-              // (фикс) Terminal-status guard: элемент мог стать error/done/cancelled
-              // между guard в начале tick() и этим вызовом (race с rehydration).
+              // (fix) Terminal-status guard: item may have become error/done/cancelled
+              // between guard at start of tick() and this call (race with rehydration).
               const guardItem = useGenQueue.getState().items.find((i) => i.id === queueId)
               if (guardItem && ['done', 'error', 'cancelled'].includes(guardItem.status)) {
                 clearTimer(promptId)
@@ -469,7 +468,7 @@ export function useVideoGen() {
               // This prompt is waiting behind other jobs — its duration
               // timer must start only when its turn comes.
               sawQueued = true
-              // (фикс) Terminal-status guard для queued-ветки
+              // (fix) Terminal-status guard for queued branch
               const guardItem = useGenQueue.getState().items.find((i) => i.id === queueId)
               if (guardItem && ['done', 'error', 'cancelled'].includes(guardItem.status)) {
                 clearTimer(promptId)
@@ -482,10 +481,10 @@ export function useVideoGen() {
               useGenQueue.getState().setStatus(queueId, 'queued')
               const cur = useGenProgress.getState().video
               if (!anyRunning && cur.phase !== 'running') {
-                // Карточка может следить за ЗАВЕРШЁННОЙ/отменённой задачей
-                // (напр., прошлой генерацией) — забираем её на эту queued,
-                // иначе карточка опрашивает мёртвый prompt и осциллирует
-                // «Готово»/«В очереди».
+                // The card might be tracking a COMPLETED/cancelled task
+                // (e.g. previous generation) — transfer it to this queued one,
+                // otherwise the card polls a dead prompt and oscillates
+                // "Done"/"In queue".
                 const tracked = cur.promptId
                   ? useGenQueue.getState().items.find((i) => i.promptId === cur.promptId)
                   : null
@@ -501,11 +500,11 @@ export function useVideoGen() {
             }
           } else if (s.status === 'error') {
             clearTimer(promptId)
-            const label = s.detail || 'Ошибка генерации'
+            const label = s.detail || 'Generation error'
             useGenQueue.getState().setStatus(queueId, 'error', label)
             useGenProgress.getState().setVideoError(label)
             useGenProgress.getState().setVideoPhase('error')
-            void cleanupExtendClips(promptId) // (правка 336) extclip-мусор при error
+            void cleanupExtendClips(promptId) // (fix 336) extclip junk on error
           } else if (s.status === 'done') {
             clearTimer(promptId)
             // REAL generation time from ComfyUI WS execution events
@@ -519,12 +518,12 @@ export function useVideoGen() {
             const execMs = typeof s.execution_ms === 'number' && s.execution_ms > 0
               ? s.execution_ms
               : null
-            // Fallback-цепочка (серверные WS-события потеряны):
-            //  1) runningSince — момент, когда тик впервые увидел 'running'
-            //     (чистое время исполнения, без ожидания в очереди);
-            //  2) Date.now() - startedAt — только если задача НИ РАЗУ не была
-            //     в очереди за чужими работами (иначе в бейдж уезжали бы
-            //     минуты ожидания — противоречило «better nothing than wrong»).
+            // Fallback chain (server WS events lost):
+            //  1) runningSince — moment when tick first saw 'running'
+            //     (pure execution time, without queue wait);
+            //  2) Date.now() - startedAt — only if task was NEVER
+            //     queued behind other jobs (otherwise minutes of waiting
+            //     would leak into badge — violating "better nothing than wrong").
             let durationMs: number | null = execMs
             if (durationMs === null) {
               if (runningSince !== null) durationMs = Date.now() - runningSince
@@ -533,9 +532,9 @@ export function useVideoGen() {
             useGenQueue.getState().setStatus(queueId, 'done')
             useGenProgress.getState().setVideoPhase('done')
             useGenProgress.getState().setVideoProgress(100, 100)
-            // (правка 259) Явный сигнал всем галереям (не только фазовый
-            // staggered-reload): гарантирует перерисовку в ЛЮБОЙ смонтиро-
-            // ванной вкладке сразу по завершении джоба.
+            // (fix 259) Explicit signal to all galleries (not just phase
+            // staggered-reload): guarantees repainting in ANY mounted
+            // tab immediately upon job completion.
             useGalleryRefresh.getState().bump()
             // Notification sound (if enabled)
             if (typeof window !== 'undefined') {
@@ -549,10 +548,10 @@ export function useVideoGen() {
               let outputs = s.outputs
               const _genParamsEarly = genParamsMap.get(promptId)
               const _isExtend = (_genParamsEarly?.generation_mode === 'extend')
-              // (правка 194) extend: каждый клип пишет СВОЯ VHS_VideoCombine
-              // (после pass 2) — файлы Minimax_Studio_extclip_<i>_*; сортируем
-              // по индексу клипа. include_hot=1: задача уже done — файлы
-              // финальные, а 4-секундный HOT_SKIP иначе мог скрыть свежие.
+              // (fix 194) extend: each clip is written by ITS OWN VHS_VideoCombine
+              // (after pass 2) — files Minimax_Studio_extclip_<i>_*; sort
+              // by clip index. include_hot=1: task is already done — files are
+              // final, whereas the 4-second HOT_SKIP could otherwise hide fresh files.
               if (_isExtend) {
                 outputs = []
                 try {
@@ -581,7 +580,7 @@ export function useVideoGen() {
                   }
                 } catch { /* ignore */ }
                 if (outputs.length === 0) {
-                  console.warn('[concat] extend: файлы клипов Minimax_Studio_extclip_<i> не найдены в output/')
+                  console.warn('[concat] extend: clip files Minimax_Studio_extclip_<i> not found in output/')
                 }
               } else if (!outputs || outputs.length === 0) {
                 try {
@@ -616,24 +615,24 @@ export function useVideoGen() {
                 useGenDurations.getState().record(durationMs, 'video', badgeFilename)
               }
               if (outputs?.length) {
-                // (правка 180) CRITICAL: saveMetadata удаляет params из genParamsMap.
-                // Нужно сохранить params ДО вызова, иначе concat не увидит
-                // extend_source_video и пропустит склейку.
+                // (fix 180) CRITICAL: saveMetadata deletes params from genParamsMap.
+                // Must preserve params BEFORE call, otherwise concat won't see
+                // extend_source_video and will skip splicing.
                 const storedParams = genParamsMap.get(promptId)
                 const srcVideo = storedParams?.extend_source_video as string | null | undefined
                 await saveMetadata(promptId, outputs, durationMs)
-                // (правка 194) extend: N-way склейка — исходное видео + все
-                // клипы (клипы уже отсортированы по индексу; между собой их
-                // сгенерировала цепочка motion-context, швы бесшовные).
+                // (fix 194) extend: N-way splice — source video + all
+                // clips (clips are already sorted by index; mutually generated
+                // by motion-context chain, seams are seamless).
                 if (srcVideo && _isExtend) {
-                  // (правка 384, ОТКАЧЕНА правкой 417) Ветка metaOnly для
-                  // собранного воркфлоу combined-файла удалена вместе с
-                  // латент-комбайном extend. Склейка снова ВСЕГДА ffmpeg:
-                  // исходник + extclip_<i> → /api/comfy/concat.
+                  // (fix 384, ROLLED BACK by fix 417) The metaOnly branch for
+                  // assembled workflow combined file was removed along with
+                  // extend latent combine. Splicing is again ALWAYS ffmpeg:
+                  // source + extclip_<i> → /api/comfy/concat.
                   const inputs = [
                     { name: srcVideo, kind: 'source' as const, subfolder: '' },
-                    // (правка 420) .latent (combined, пост-сборка) в склейку
-                    // не идёт — только видеофайлы клипов.
+                    // (fix 420) .latent (combined, post-assembly) does not go
+                    // into splicing — only video files of clips.
                     ...outputs
                       .filter((o: { filename?: string }) => !o.filename?.match(/\.latent$/i))
                       .map((o: { filename: string; subfolder?: string }) => ({
@@ -646,75 +645,73 @@ export function useVideoGen() {
                     const concatRes = await fetch('/api/comfy/concat', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      // (правка 193) 0.5-секундный crossfade на стыке «оригинал →
-                      // первый клип» был заметен как «фэйд»; 3 кадра (0.125 с)
-                      // сглаживают скачок между съёмкой и рендером, но не читаются
-                      // как растворение. Между клипами переходы не нужны — там
-                      // единая цепочка генерации (xfade с малым fade только на
-                      // стыке source|clip0, дальше running-формула уменьшает
-                      // перекрытие каждого следующего стыка до тех же 3 кадров).
-                      // (правка 210/213) Клип 0 начинается с 17-кадрового
-                      // перекрытия хвоста исходника (узел сохраняет их при срезе
-                      // seed-префикса) — режем те же 0.708 с с КОНЦА исходника,
-                      // чтобы шов лёг на перекрытие, а не на стык двух декодов.
-                      // (правка 229) Стык «исходник → клип 0»: 16 кадров
-                      // пере-декодированного конца исходника, кроссфейд
-                      // 8 кадров (0.33с, «подлиннее» по просьбе) смешивает
-                      // ОДНИ И ТЕ ЖЕ моменты — без двоения.
-                      // (правка 210/213) Клип 0 начинается с 17-кадрового
-                      // перекрытия хвоста исходника (узел сохраняет их при срезе
-                      // seed-префикса) — режем те же 0.708 с с КОНЦА исходника,
-                      // чтобы шов лёг на перекрытие, а не на стык двух декодов.
-                      // (правка 249) fade = 3/24 c (3 кадра) — короткое сглаживание
-                      // скачка (VAE-раундтрип, микроконтраст) на стыке двух
-                      // независимых декодов. НЕ смешиваем 22 кадра warmup клипа i>0
-                      // с хвостом клипа i-1: warmup — регенерация под conditioning,
-                      // не копия, и xfade 22 кадра перемешивает близкие, но не
-                      // идентичные изображения → двоение/наложение (правка 244 дала
-                      // именно это). 3 кадра — достаточно для сглаживания скачка,
-                      // но не читаются как "растворение" и не двоит.
-                      // (правки 210/213, 229) Стык "исходник → клип 0": seed-латент
-                      // (идеальная копия хвоста), перекрытие 17 кадров, xfade 8 кадров
-                      // смешивает копию с оригиналом — без двоения, не трогаем.
-                      // (правка 250) Гармонизация 248+249: context_length = 22
-                      // (шаблон) даёт warmup-префикс из 22 ДУБЛИРОВАННЫХ моментов
-                      // хвоста клипа i-1 (замер SSIM: 0.93+ в зоне якоря, 0.58-0.72
-                      // за ней). fade 3 кадра смешивает только ближайшие кадры;
-                      // ОСТАЛЬНЫЕ 19 кадров warmup срезаются головной подрезкой —
-                      // иначе таймлайн отыграл бы повтор ~0.8 с на каждом стыке.
-                      // [исходник, клип0 (без подрезки), клип1..N (19/24 с головы)]
-                      // (правка 251) Выравнивание стыка «исходник → клип 0»:
-                      // клип содержит ровно seamOverlapFrames=17 дублированных
-                      // кадров хвоста. Бесшовный xfade требует Trim+Fade ≤ 17
-                      // (пары моментов совпадают). Было 16+8=24 — фейд на 7 кадров
-                      // уходил за пределы дублирования: исходник и клип показывали
-                      // РАЗНЫЕ моменты → двоение на движении (стало заметно на
-                      // нативном разрешении однопроходной схемы). 9+8=17 — фейд
-                      // смешивает попарно совпадающие кадры.
-                      // (правка 252) Латент-маскирующая цепочка: файлы клипов
-                      // уже без дублированных голов (preserved-голова срезана в
-                      // воркфлоу) — межклиповые стыки жёсткие (fade 1 кадр =
-                      // технический xfade, повтора контента нет). Стык «исходник →
-                      // клип 0» прежний: 17 дублированных кадров, Trim 9 + Fade 8
-                      // = 17 (правка 251).
+                      // (fix 193) 0.5-second crossfade at "source → first clip"
+                      // seam was noticeable as a "fade"; 3 frames (0.125s)
+                      // smooth the jump between footage and render without reading
+                      // as a dissolve. Between clips transitions are unnecessary —
+                      // there is a single generation chain (xfade with small fade only at
+                      // source|clip0 seam, further running formula reduces
+                      // overlap of each subsequent seam to the same 3 frames).
+                      // (fixes 210/213) Clip 0 begins with 17-frame overlap
+                      // of source tail (node preserves them when trimming
+                      // seed-prefix) — trim same 0.708s from END of source
+                      // so the seam falls on the overlap, not boundary of two decodes.
+                      // (fix 229) "Source → clip 0" seam: 16 frames of
+                      // re-decoded tail of source, crossfade of
+                      // 8 frames (0.33s, "longer" by request) blends
+                      // IDENTICAL moments — without ghosting.
+                      // (fixes 210/213) Clip 0 begins with 17-frame overlap
+                      // of source tail (node preserves them when trimming
+                      // seed-prefix) — trim same 0.708s from END of source
+                      // so the seam falls on the overlap, not boundary of two decodes.
+                      // (fix 249) fade = 3/24s (3 frames) — brief smoothing of
+                      // the jump (VAE-roundtrip, microcontrast) at seam of two
+                      // independent decodes. Do NOT blend 22 warmup frames of clip i>0
+                      // with tail of clip i-1: warmup is regeneration under conditioning,
+                      // not a copy, and 22-frame xfade blends similar but non-identical
+                      // frames → ghosting/double image (fix 244 did exactly that).
+                      // 3 frames is enough to smooth the jump without reading as dissolve or ghosting.
+                      // (fixes 210/213, 229) "Source → clip 0" seam: seed-latent
+                      // (perfect copy of tail), 17-frame overlap, 8-frame xfade
+                      // blends copy with original — no ghosting, keep as is.
+                      // (fix 250) Harmonizing 248+249: context_length = 22
+                      // (template) provides warmup prefix of 22 DUPLICATED moments of
+                      // tail of clip i-1 (measured SSIM: 0.93+ in anchor zone, 0.58-0.72
+                      // beyond). 3-frame fade blends only nearest frames;
+                      // REMAINING 19 warmup frames are trimmed by head cut —
+                      // otherwise timeline would replay ~0.8s repeat at each seam.
+                      // [source, clip0 (no head trim), clip1..N (19/24 from head)]
+                      // (fix 251) Aligning "source → clip 0" seam:
+                      // clip contains exactly seamOverlapFrames=17 duplicated
+                      // tail frames. Seamless xfade requires Trim+Fade ≤ 17
+                      // (moment pairs match). Previously 16+8=24 — 7 frames of fade
+                      // extended beyond duplication: source and clip showed
+                      // DIFFERENT moments → ghosting on motion (visible at
+                      // native resolution of single-pass pipeline). 9+8=17 — fade
+                      // blends pairwise matching frames.
+                      // (fix 252) Latent-masking chain: clip files are already
+                      // free of duplicate heads (preserved-head cut in workflow) —
+                      // inter-clip seams are hard cuts (fade 1 frame =
+                      // technical xfade, no duplicate content). "Source → clip 0" seam
+                      // as before: 17 duplicate frames, Trim 9 + Fade 8 = 17 (fix 251).
                       body: JSON.stringify({
                         inputs,
-                        // (правка 292) fade=0: между клипами i>0 — HARD CUT (без xfade).
-                        // xfade на 1 кадр создавал «замедление/задвоение» на стыках
-                        // (первый кадр клипа i после среза 22 кадров визуально близок
-                        // к последнему кадру клипа i-1 → смешивание = дубль).
-                        // Seam-фейд на стыке «исходник → клип 0» остаётся (8/24 с).
+                        // (fix 292) fade=0: between clips i>0 — HARD CUT (no xfade).
+                        // 1-frame xfade created "slowdown/ghosting" at seams
+                        // (first frame of clip i after cutting 22 frames visually close
+                        // to last frame of clip i-1 → blending = double frame).
+                        // Seam fade at "source → clip 0" boundary remains (8/24 s).
                         fade: 0,
                         seamFadeSeconds: 8 / 24,
                         outName: 'Minimax_Studio_combined',
-                        // (правка 364) Итоговый склеенный файл — в ту же
-                        // подпапку output, куда писались клипы задачи (папка
-                        // оригинала при галерея-источнике, правка 363).
+                        // (fix 364) Final spliced file goes to the same
+                        // output subfolder where task clips were written (original
+                        // folder for gallery source, fix 363).
                         outSubfolder: (_genParamsEarly?.output_subfolder || '') as string,
                         sourceTrimSeconds: 9 / 24,
-                        // (правка 260) Метаданные ИТОГОВОГО файла продления:
-                        // параметры джоба + исходник, из которого сделано
-                        // продолжение. Список кликов добавит concat-роут.
+                        // (fix 260) Metadata of the FINAL extension file:
+                        // job parameters + source from which extension was made.
+                        // Clip list will be added by concat route.
                         meta: {
                           ..._genParamsEarly,
                           generation_mode: 'extend',
@@ -722,35 +719,34 @@ export function useVideoGen() {
                           source_video: _genParamsEarly.extend_source_video
                             ? { name: _genParamsEarly.extend_source_video }
                             : null,
-                          // (правка 420) latent_file у combined-меты extend —
-                          // ВЕРНУЛСЯ в новом качестве: воркфлоу пост-сборкой
-                          // (после сэмплеров, модель не участвует) сохраняет
-                          // combined-латент того же таймлайна, что ffmpeg-склейка
-                          // (перекрытие шва 17 кадров съедается Trim 9 + xfade 8).
-                          // Рефайн/тайловый апскейл итога стартуют lossless.
+                          // (fix 420) latent_file for extend combined meta —
+                          // RETURNED in a new role: workflow post-assembly
+                          // (after samplers, model is not involved) saves
+                          // combined latent with the same timeline as ffmpeg splice
+                          // (17-frame seam overlap consumed by Trim 9 + xfade 8).
+                          // Refine/tile upscale of result starts lossless.
                           ...(() => {
-                            // (правка 553) Ищем в s.outputs — ИСХОДНОМ ответе
-                            // ComfyUI. Для extend переменная outputs выше была
-                            // полностью перезаписана списком видеоклипов
-                            // (extclip_*.mp4 из /api/comfy/files?type=video),
-                            // куда .latent-файл combined не попадает — find
-                            // всегда возвращал undefined, latent_file никогда
-                            // не записывался в мету итога, и lossless-рефайн
-                            // продлённого видео шёл по mp4-пути с повторным
-                            // VAEEncode — ровно то, что правка 420 исключала.
+                            // (fix 553) Look in s.outputs — ComfyUI's ORIGINAL response.
+                            // For extend, outputs variable above was completely overwritten
+                            // by list of video clips (extclip_*.mp4 from /api/comfy/files?type=video),
+                            // which doesn't include the combined .latent file — find
+                            // always returned undefined, latent_file was never written
+                            // to result meta, and lossless refine of extended video
+                            // went through mp4 path with repeated VAEEncode — exactly
+                            // what fix 420 was designed to avoid.
                             const lo = (s.outputs ?? []).find((o: { filename?: string }) => o.filename?.match(/\.latent$/i))
                             return lo
                               ? {
                                 latent_file: `${lo.subfolder ? lo.subfolder + '/' : ''}${lo.filename}`,
-                                // кадры/разрешение для резолвера — фактические итога:
-                                // probe-поля допишет concat-роут (ffprobe combined).
+                                // frames/resolution for resolver — actual final dimensions:
+                                // probe fields are appended by concat route (ffprobe combined).
                               }
                               : {}
                           })(),
-                          // (правка 264) Время генерации ИТОГОВОГО файла продления:
-                          // серверное execution_ms ComfyUI (то же значение, что
-                          // уходит в .meta.json отдельных клипов) — бейдж превью
-                          // и «Время генерации» в MetaDialog берут generation_time.
+                          // (fix 264) Generation time of the FINAL extension file:
+                          // server-side execution_ms from ComfyUI (same value that
+                          // goes to .meta.json of individual clips) — preview badge
+                          // and "Generation time" in MetaDialog use generation_time.
                           ...(durationMs !== null
                             ? { generation_time: Math.round(durationMs / 1000) }
                             : {}),
@@ -759,18 +755,18 @@ export function useVideoGen() {
                     })
                     if (concatRes.ok) {
                       const concatData = await concatRes.json()
-                      toast.success(`Склеено: ${concatData.filename}`, { duration: 5000 })
-                      // (правка 259) Склейка завершается ПОСЛЕ фазы 'done' —
-                      // её фазовые перезагрузки к этому моменту давно отработали,
-                      // и итоговое видео не появлялось в галереях до ручного
-                      // обновления. Сигналим явно.
+                      toast.success(`Spliced: ${concatData.filename}`, { duration: 5000 })
+                      // (fix 259) Concat finishes AFTER 'done' phase —
+                      // its phase reloads had already run by then,
+                      // and the resulting video wouldn't show in galleries until manual
+                      // refresh. Signal explicitly.
                       useGalleryRefresh.getState().bump()
-                      // (правка 291) Удаляем промежуточные клипы Minimax_Studio_extclip_<i>
-                      // из output/ — пользователь видит только ИТОГОВЫЙ склеенный
-                      // файл. Если пользователь захочет повторить генерацию, он
-                      // может пере-запустить — клипы пересоздадутся. Удаляем
-                      // тихим фоном (ошибка удаления не критична: файл просто
-                      // останется в output/ и будет виден в галерее).
+                      // (fix 291) Remove intermediate Minimax_Studio_extclip_<i> clips
+                      // from output/ — user sees only the FINAL spliced
+                      // file. If user wants to re-generate, they can restart —
+                      // clips will be re-created. Delete quietly in the background
+                      // (deletion failure is non-critical: file simply remains in output/
+                      // and will be visible in gallery).
                       for (const o of outputs) {
                         if (!o.filename?.match(/^Minimax_Studio_extclip_\d+/i)) continue
                         try {
@@ -789,11 +785,11 @@ export function useVideoGen() {
                     } else {
                       const errData = await concatRes.json().catch(() => ({}))
                       console.warn(`[concat] FAILED:`, errData.error || concatRes.status)
-                      toast.error('Автосклейка не удалась', { description: errData.error, duration: 6000 })
+                      toast.error('Auto-splice failed', { description: errData.error, duration: 6000 })
                     }
                   } catch (ce) {
                     console.warn('[concat] request error:', ce)
-                    toast.error('Автосклейка: ошибка сети', { duration: 5000 })
+                    toast.error('Auto-splice: network error', { duration: 5000 })
                   }
                 }
               } else {
@@ -801,9 +797,9 @@ export function useVideoGen() {
                 persistGenParams()
               }
             }
-            // (правка 328) Пост-обработку (saveMetadata + extend-concat +
-            // удаление клипов) выполняет только ОДНА вкладка — держатель
-            // lock'а. Остальные вкладки просто наблюдают статусы.
+            // (fix 328) Post-processing (saveMetadata + extend-concat +
+            // clip deletion) is executed by ONLY ONE tab — the lock
+            // holder. Other tabs merely observe statuses.
             if (tryAcquirePostProcLock(promptId)) {
               void doSave()
             }
@@ -821,30 +817,30 @@ export function useVideoGen() {
   // Re-hydrate on mount: re-attach polling for every ACTIVE queue item that
   // survived a page reload (the queue store is persisted). Also point the
   // shared progress card at an active item when it came back idle.
-  // (фикс M4) Эффект выполняется ТОЛЬКО на монтировании: pollUntilDone теперь
-  // стабилен (см. комментарий выше). Раньше из-за нестабильного pollUntilDone
-  // эффект перезапускался на каждом обновлении стора.
-  // (fix M3, M4) 'submitting' без prompt_id ≠ сразу «ошибка»: POST /generate
-  // летит до 120 с (AbortSignal.timeout(120_000)). Мгновенная пометка ошибки
-  // убивала свежие задачи (POST завершался, видео генерировалось, а очередь
-  // показывала «Ошибка» и бросала отслеживание). Даём отправке полный таймаут
-  // POST + запас; если prompt_id так и не пришёл — только тогда ошибка.
+  // (fix M4) Effect runs ONLY on mount: pollUntilDone is now
+  // stable (see comment above). Previously due to unstable pollUntilDone
+  // the effect re-ran on every store update.
+  // (fix M3, M4) 'submitting' without prompt_id ≠ instant "error": POST /generate
+  // takes up to 120s (AbortSignal.timeout(120_000)). Instant error marking
+  // killed fresh tasks (POST succeeded, video generated, while queue
+  // showed "Error" and stopped tracking). We grant the full POST timeout
+  // + grace margin; only if prompt_id never arrives is it marked as error.
   useEffect(() => {
     const items = useGenQueue.getState().items
-    const SUBMIT_GRACE_MS = 150_000 // POST timeout (120 с) + запас
+    const SUBMIT_GRACE_MS = 150_000 // POST timeout (120s) + grace margin
     const graceTimers: ReturnType<typeof setTimeout>[] = []
     for (const it of items) {
       if (it.status !== 'submitting' || it.promptId) continue
       const giveUp = () => {
         const cur = useGenQueue.getState().items.find((x) => x.id === it.id)
         if (cur && cur.status === 'submitting' && !cur.promptId) {
-          useGenQueue.getState().setStatus(it.id, 'error', 'Отправка прервана перезагрузкой страницы')
+          useGenQueue.getState().setStatus(it.id, 'error', 'Submission interrupted by page reload')
         }
       }
-      // (правка 331) Сначала пробуем восстановить prompt_id по clientToken:
-      // сервер мог уже поставить задачу в ComfyUI, пока страница
-      // перезагружалась. Ретраи до конца grace-окна (POST на сервере мог
-      // ещё идти — запись в журнале появится только после постановки).
+      // (fix 331) First try to recover prompt_id by clientToken:
+      // the server might have already queued the task in ComfyUI while page
+      // was reloading. Retries continue until grace window expires (server POST
+      // might still be running — journal entry appears only after submission).
       if (it.clientToken) {
         const token = it.clientToken
         const tryRecover = async (): Promise<boolean> => {
@@ -886,11 +882,11 @@ export function useVideoGen() {
     }
     for (const it of items) {
       if (!it.promptId) continue
-      // (правка 716) Только ВИДЕО-задачи. Раньше фильтра по типу не было, и
-      // видео-поллер цеплялся к refine-элементам (у них тоже есть promptId):
-      // по 'done' он ставил им 'done' ДО собственной финализации refine-очереди
-      // и записывал фиктивную видео-длительность. Глобальный поллер в
-      // queue-indicator.tsx этот случай исключает — здесь тоже исключаем.
+      // (fix 716) ONLY VIDEO tasks. Previously there was no type filter, and
+      // the video poller attached to refine items (which also have a promptId):
+      // on 'done' it set them to 'done' BEFORE the refine queue's own finalization
+      // and recorded a bogus video duration. The global poller in
+      // queue-indicator.tsx excludes this case — exclude it here as well.
       if (it.type !== 'video') continue
       if (!['submitting', 'queued', 'running'].includes(it.status)) continue
       if (timersRef.current.has(it.promptId)) continue
@@ -918,28 +914,28 @@ export function useVideoGen() {
    */
   const generate = useCallback(
     async (params: VideoGenerateParams) => {
-      const queueId = queue.enqueue('video', params.prompt?.slice(0, 50) || 'Видео')
+      const queueId = queue.enqueue('video', params.prompt?.slice(0, 50) || 'Video')
 
-      // (правка 331) clientToken для inflight-восстановления: если страницу
-      // перезагрузят, пока POST /generate в полёте, сервер всё равно поставит
-      // задачу и журналирует token → prompt_id; rehydrate-эффект найдёт его
-      // через GET /api/comfy/inflight вместо «Отправка прервана».
+      // (fix 331) clientToken for inflight recovery: if page is
+      // reloaded while POST /generate is in flight, the server still submits
+      // the task and journals token → prompt_id; rehydrate effect will find it
+      // via GET /api/comfy/inflight instead of "Submission interrupted".
       const clientToken =
         typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
           ? crypto.randomUUID()
           : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
       queue.setClientToken(queueId, clientToken)
 
-      // (единая очередь) Ждём свой ход ДО отправки в ComfyUI. Пока ждём,
-      // элемент висит «В очереди»; после хода шлюз сам ставит 'submitting'.
-      // Если элемент отменили/удалили в ожидании — просто выходим.
+      // (unified queue) Wait for our turn BEFORE submitting to ComfyUI. While waiting,
+      // the item stays "Queued"; after grant the gateway itself sets 'submitting'.
+      // If the item was cancelled/removed while waiting — simply return.
       const granted = await acquireComfyTurn(queueId)
       if (!granted || !isComfyTurnActive(queueId)) return
 
-      // Немедленно показываем «Отправка…» на чистой карточке — БЕЗ данных
-      // прошлой задачи. Шлюз уже гарантирует, что другая видео-генерация
-      // сейчас не выполняется; более поздние видео в статусе 'queued' не
-      // должны блокировать сброс карточки для только что получившей ход.
+      // Immediately show "Submitting..." on a clean card — WITHOUT data from
+      // previous task. The gateway already guarantees no other video generation
+      // is currently executing; later videos in 'queued' status must not
+      // block card reset for the task that just got its turn.
       const hasActiveInQueue = useGenQueue.getState().items.some(
         (i) => i.type === 'video' && i.status === 'running' && i.id !== queueId
       )
@@ -950,19 +946,19 @@ export function useVideoGen() {
       try {
         // Build MiniMaxH3Params from VideoGenerateParams
         // Extract ref image filenames (ComfyUI input/ filenames)
-        // (правка 146) режим генерации: в t2v/flf картинки/видео-рефы не идут
-        // (кадры — отдельными полями firstFrame/lastFrame)
+        // (fix 146) generation mode: in t2v/flf image/video refs are not passed
+        // (frames are separate fields firstFrame/lastFrame)
         const genMode = params.mode ?? 'ref'
         const refImages: string[] = []
         const refVideos: Array<{ path: string; includeAudio: boolean; compress?: boolean }> = []
         const refAudios: string[] = []
-        // (правка 304) Параллельный массив обрезок аудио-рефов (AudioTrim).
+        // (fix 304) Parallel array of audio ref trims (AudioTrim).
         const refAudioTrims: Array<{ start: number; end: number | null } | undefined> = []
-        // (правка 694) Параллельный массив громкостей аудио-рефов (AudioGain).
+        // (fix 694) Parallel array of audio ref gains (AudioGain).
         const refAudioVolumes: Array<number | undefined> = []
-        // (правка 161) extend: картинки-рефы идут через extendRefs, не refImages
+        // (fix 161) extend: image refs go via extendRefs, not refImages
         if (genMode === 'extend') {
-          // extend-режим: рефы из params.extendRefs или из references
+          // extend mode: refs from params.extendRefs or from references
           if (params.extendRefs?.length) {
             for (const path of params.extendRefs) {
               if (path && !/^[A-Za-z]:[\\/]/.test(path) && !path.startsWith('/')) {
@@ -983,7 +979,7 @@ export function useVideoGen() {
             if (!ref.path) continue
             if (/^[A-Za-z]:[\\/]/.test(ref.path) || ref.path.startsWith('/')) {
               throw new Error(
-                `Файл «${ref.path}» загружен в старую систему. Удалите его и загрузите заново.`,
+                `File "${ref.path}" was uploaded to the old system. Please remove and re-upload it.`,
               )
             }
             if (ref.kind === 'image') {
@@ -992,13 +988,13 @@ export function useVideoGen() {
               if (genMode === 'ref') refVideos.push({ path: ref.path, includeAudio: ref.includeAudio !== false, compress: ref.compress === true })
             } else if (ref.kind === 'audio') {
               refAudios.push(ref.path)
-              // (правка 304) Обрезка: добавляем только если реально задана —
-              // иначе undefined (нода AudioTrim не вставляется).
+              // (fix 304) Trim: add only if actually configured —
+              // otherwise undefined (AudioTrim node not inserted).
               const s = ref.trimStart ?? 0
               const e = ref.trimEnd ?? null
               refAudioTrims.push(s > 0 || (e != null && e > 0) ? { start: s, end: e } : undefined)
-              // (правка 694) Громкость: задана и ≠ 1.0 → ноды AudioGain; иначе
-              // undefined (нода не вставляется). Default в UI = 0.5.
+              // (fix 694) Volume: configured and ≠ 1.0 → AudioGain node; otherwise
+              // undefined (node not inserted). Default in UI = 0.5.
               const v = ref.audioVolume
               refAudioVolumes.push(v != null && Math.abs(v - 1.0) > 1e-6 ? v : undefined)
             }
@@ -1006,17 +1002,17 @@ export function useVideoGen() {
         }
         // No references required — the hybrid model supports prompt-only generation
 
-        // (правка 124) Два режима:
-        //  • пресет (известные WxH) — это ТОЧНЫЙ номинал: сервер делает
-        //    gen = ceil32(nominal), апскейлер «target dimensions», кроп →
-        //    ровно номинал (16:9 1080p: 1920×1088 → 1920×1080);
-        //  • свободное разрешение (finalResolution > 0) / неизвестные WxH —
-        //    MP-путь (finalDimsFromMegapixels: бинарные MP узла + вписанный кроп).
+        // (fix 124) Two modes:
+        //  • preset (known WxH) — EXACT nominal: server does
+        //    gen = ceil32(nominal), upscaler "target dimensions", crop →
+        //    exactly nominal (16:9 1080p: 1920×1088 → 1920×1080);
+        //  • custom resolution (finalResolution > 0) / unknown WxH —
+        //    MP path (finalDimsFromMegapixels: node binary MP + inscribed crop).
         let aspectRatio = '16:9 (Widescreen)'
         let qualityFinalRes: number | null = null
         let presetDims: { w: number; h: number } | null = null
 
-        // (правка 152) В режиме flf соотношение сторон берётся из первого кадра
+        // (fix 152) In flf mode aspect ratio is taken from first frame
         if (genMode === 'flf' && params.firstFrameWidth && params.firstFrameHeight) {
           const ratio = params.firstFrameWidth / params.firstFrameHeight
           if (Math.abs(ratio - 21/9) < 0.2) aspectRatio = '21:9 (Ultrawide)'
@@ -1028,13 +1024,13 @@ export function useVideoGen() {
           else if (Math.abs(ratio - 3/2) < 0.15) aspectRatio = '3:2 (Photo)'
           else if (Math.abs(ratio - 2/3) < 0.15) aspectRatio = '2:3 (Portrait Photo)'
           else aspectRatio = '16:9 (Widescreen)'
-          // (правка 155) В flf используем номинальные размеры из пресета (480p/720p/1080p),
-          // а не фиксированные 0.7 MP. Это позволяет выбрать 480p или 720p и получать
-          // соответствующее разрешение (480×854 vs 720×1280 для 9:16), а не одинаковое.
-          // (правка 157) Ориентация берётся из КАДРА, не из пресета UI: короткая
-          // сторона = заданное качество (min(w,h)), длинная = короткая × (fw/fh) —
-          // точная пропорция первого кадра. Горизонтальный кадр + любой пресет
-          // (480p/720p/1080p) → всегда горизонтальное видео.
+          // (fix 155) In flf use nominal dimensions from preset (480p/720p/1080p),
+          // rather than fixed 0.7 MP. This allows choosing 480p or 720p and getting
+          // the matching resolution (480×854 vs 720×1280 for 9:16), instead of identical.
+          // (fix 157) Orientation is taken from FRAME, not from UI preset: short
+          // side = target quality (min(w,h)), long = short × (fw/fh) —
+          // exact proportion of the first frame. Horizontal frame + any preset
+          // (480p/720p/1080p) → always horizontal video.
           if (params.resolution) {
             const match = params.resolution.match(/(\d+)\s*x\s*(\d+)/i)
             if (match) {
@@ -1043,7 +1039,7 @@ export function useVideoGen() {
               const shortSide = Math.min(pw, ph)
               const dims = flfNominalDimensions(shortSide, params.firstFrameWidth, params.firstFrameHeight)
               presetDims = { w: dims.w, h: dims.h }
-              // MP для метаданных (не используется в расчёте, только для информации)
+              // MP for metadata (not used in calculation, informational only)
               qualityFinalRes = Math.round((dims.w * dims.h / 1_000_000) * 100) / 100
             } else {
               qualityFinalRes = 0.7
@@ -1059,7 +1055,7 @@ export function useVideoGen() {
             const w = parseInt(match[1], 10)
             const h = parseInt(match[2], 10)
             if (RES_TO_ASPECT[params.resolution]) {
-              // (правка 124) Известный пресет: WxH — и есть точный номинал
+              // (fix 124) Known preset: WxH is the exact nominal
               presetDims = { w, h }
             } else {
               const ratio = w / h
@@ -1074,7 +1070,7 @@ export function useVideoGen() {
               else aspectRatio = '16:9 (Widescreen)'
             }
             // Derive final resolution (MP) directly from pixel count
-            // (метаданные + MP-путь для неизвестных WxH)
+            // (metadata + MP path for unknown WxH)
             const totalPx = w * h
             qualityFinalRes = Math.round((totalPx / 1_000_000) * 100) / 100
           }
@@ -1082,9 +1078,9 @@ export function useVideoGen() {
 
         // Duration: videoLength is frame count, convert to seconds at 24fps.
         // Keep duration as an exact float (NO integer rounding) so the server's
-        // frames formula round-trips on the 17n+5 grid (правка 55).
+        // frames formula round-trips on the 17n+5 grid (fix 55).
         const fps = 24
-        // (правка 138) дефолт 48 → 60: минимум 2.5 с (60 кадров при 24 fps)
+        // (fix 138) default 48 → 60: minimum 2.5s (60 frames at 24 fps)
         const duration = Math.max(2.5, (params.videoLength ?? 60) / fps)
         // Actual frame count the server will produce (node 46:19) — for metadata.
         const videoLengthFrames = framesForDuration(duration, fps)
@@ -1093,13 +1089,13 @@ export function useVideoGen() {
         const finalResolution = (params.finalResolution && params.finalResolution > 0)
           ? params.finalResolution
           : qualityFinalRes ?? 0.7
-        // (правка 124) Точные размеры — только для известного пресета и без
-        // свободного режима. Шаблон (сервер) из них делает gen = ceil32 и
-        // финальный кроп; метаданные — тот же расчёт ниже.
-        // (правка 153) В режиме flf single-pass: если есть presetDims — используем их,
-        // иначе шаблон рассчитывает из lowRes (finalRes MP).
-        // (правка 155) В flf с пресетом (480p/720p/1080p) targetDimensions = номинал,
-        // чтобы 480p и 720p давали разные разрешения (480×854 vs 720×1280 для 9:16).
+        // (fix 124) Exact dimensions — only for known preset and not in
+        // custom mode. Template (server) uses them for gen = ceil32 and
+        // final crop; metadata uses the same calculation below.
+        // (fix 153) In flf single-pass mode: if presetDims exists — use them,
+        // otherwise template computes from lowRes (finalRes MP).
+        // (fix 155) In flf with preset (480p/720p/1080p) targetDimensions = nominal,
+        // so 480p and 720p produce different resolutions (480×854 vs 720×1280 for 9:16).
         const freeMode = (params.finalResolution ?? 0) > 0
         const targetDimensions = presetDims && !freeMode
           ? { width: presetDims.w, height: presetDims.h }
@@ -1110,8 +1106,8 @@ export function useVideoGen() {
 
         const body = {
           prompt: params.prompt,
-          clientToken, // (правка 331) inflight-восстановление prompt_id
-          mode: genMode, // (правка 146) ref | t2v | flf | extend
+          clientToken, // (fix 331) inflight recovery of prompt_id
+          mode: genMode, // (fix 146) ref | t2v | flf | extend
           pipeline: genMode === 'extend' ? 'full' : (params.pipeline || 'full'), // draft | full
           draftSteps: genMode === 'extend' ? undefined : params.draftSteps,
           firstFrame: genMode === 'flf' ? params.firstFrame : undefined,
@@ -1121,10 +1117,10 @@ export function useVideoGen() {
           refImages,
           refVideos: refVideos.length > 0 ? refVideos : undefined,
           refAudios: refAudios.length > 0 ? refAudios : undefined,
-          refAudioTrims: refAudioTrims.some(Boolean) ? refAudioTrims : undefined, // (правка 304)
-          refAudioVolumes: refAudioVolumes.some((v) => v != null) ? refAudioVolumes : undefined, // (правка 694)
-          // ref + аудио-реф: Audio Guide вместо ref_audio + сохранение
-          // оригинальной дорожки. В t2v/flf не нужно: там гайд уже штатный.
+          refAudioTrims: refAudioTrims.some(Boolean) ? refAudioTrims : undefined, // (fix 304)
+          refAudioVolumes: refAudioVolumes.some((v) => v != null) ? refAudioVolumes : undefined, // (fix 694)
+          // ref + audio ref: Audio Guide instead of ref_audio + preserving
+          // original track. In t2v/flf unnecessary: guide is standard there.
           audioGuide: genMode === 'ref' && params.audioGuide === true && refAudios.length > 0
             ? true
             : undefined,
@@ -1134,58 +1130,58 @@ export function useVideoGen() {
           aspectRatio,
           duration,
           seed: actualSeed,
-          targetDimensions, // (правка 124) точный номинал — приоритет над MP
+          targetDimensions, // (fix 124) exact nominal — priority over MP
           finalResolution,
           lowResMP: params.lowResMP ?? 0.2,
           firstSamplerSteps: params.firstSamplerSteps ?? 6,
-          // Всего шагов расписания pass 1. Раньше поле не доходило до
-          // сервера — шаблон всегда брал 2× сплита («6 из 12»), и слайдер
-          // «Всего шагов» в UI ни на что не влиял. Дефолт — 6/6.
+          // Total schedule steps for pass 1. Previously field did not reach
+          // server — template always took 2× split ("6 of 12"), and the
+          // "Total Steps" slider in UI had no effect. Default is 6/6.
           firstSamplerTotalSteps: params.firstSamplerTotalSteps ?? params.firstSamplerSteps ?? 6,
           sigmaVariant: params.sigmaVariant || '3step',
-          pass2Sampler: params.pass2Sampler || 'euler', // (правка 69)
-          pass1Sampler: params.pass1Sampler || 'euler', // (правка 70)
-          pass1Scheduler: params.pass1Scheduler || 'simple', // (правка 70)
-          refImageSize: params.referenceDetail || 'match', // (правка 58)
-          sparseAttention: params.sparseAttention === true, // (правка 387) Sol-Attn default OFF
-          sparseTau: params.sparseTau, // (правка 466)
-          sparseStartPercent: params.sparseStartPercent, // (правка 466)
-          sparseEndPercent: params.sparseEndPercent, // (правка 466)
-          sparseMinTokens: params.sparseMinTokens, // (правка 466)
-          sparseExtraTokens: params.sparseExtraTokens, // (правка 466)
-          vedaAttention: params.vedaAttention === true, // (правка 301)
-          vedaGeneratedSparsity: params.vedaGeneratedSparsity, // (правка 403)
-          vedaReferenceSparsity: params.vedaReferenceSparsity, // (правка 403)
-          vedaFullAttentionLayers: params.vedaFullAttentionLayers, // (правка 403)
-          vedaFullAttentionSteps: params.vedaFullAttentionSteps, // (правка 403)
-          vedaVerbose: params.vedaVerbose === true, // (правка 403)
+          pass2Sampler: params.pass2Sampler || 'euler', // (fix 69)
+          pass1Sampler: params.pass1Sampler || 'euler', // (fix 70)
+          pass1Scheduler: params.pass1Scheduler || 'simple', // (fix 70)
+          refImageSize: params.referenceDetail || 'match', // (fix 58)
+          sparseAttention: params.sparseAttention === true, // (fix 387) Sol-Attn default OFF
+          sparseTau: params.sparseTau, // (fix 466)
+          sparseStartPercent: params.sparseStartPercent, // (fix 466)
+          sparseEndPercent: params.sparseEndPercent, // (fix 466)
+          sparseMinTokens: params.sparseMinTokens, // (fix 466)
+          sparseExtraTokens: params.sparseExtraTokens, // (fix 466)
+          vedaAttention: params.vedaAttention === true, // (fix 301)
+          vedaGeneratedSparsity: params.vedaGeneratedSparsity, // (fix 403)
+          vedaReferenceSparsity: params.vedaReferenceSparsity, // (fix 403)
+          vedaFullAttentionLayers: params.vedaFullAttentionLayers, // (fix 403)
+          vedaFullAttentionSteps: params.vedaFullAttentionSteps, // (fix 403)
+          vedaVerbose: params.vedaVerbose === true, // (fix 403)
           lowVramAttention: params.lowVramAttention !== false,
           chunkFeedForward: params.chunkFeedForward !== false,
           chunkFFChunks: params.chunkFFChunks ?? 2,
           chunkFFThreshold: params.chunkFFThreshold ?? 4096,
-          outputSubfolder: params.outputSubfolder || '', // (правка 91)
-          // (правка 161) extend-режим: клипы + рефы (refImages → extendRefs)
+          outputSubfolder: params.outputSubfolder || '', // (fix 91)
+          // (fix 161) extend mode: clips + refs (refImages → extendRefs)
           extendClips: genMode === 'extend' ? (params.extendClips || []) : undefined,
           extendRefs: genMode === 'extend' ? refImages : undefined,
-          // (правка 164) extend: исходное видео для продления
+          // (fix 164) extend: source video for extension
           extendSourceVideo: genMode === 'extend' ? params.extendSourceVideo : undefined,
-          extendSourceName: genMode === 'extend' ? params.extendSourceName : undefined, // (правка 385)
-          extendSourceSubfolder: genMode === 'extend' ? params.extendSourceSubfolder : undefined, // (правка 385)
-          // (правка 423) extend: двухпроходный режим (low-res → апскейл → рефайн)
+          extendSourceName: genMode === 'extend' ? params.extendSourceName : undefined, // (fix 385)
+          extendSourceSubfolder: genMode === 'extend' ? params.extendSourceSubfolder : undefined, // (fix 385)
+          // (fix 423) extend: two-pass mode (low-res → upscale → refine)
           extendTwoPass: genMode === 'extend' ? params.extendTwoPass === true : undefined,
-          // Шаги клипа продления: undefined = «авто» (фолбэк шаблона —
-          // firstSamplerSteps, а клиент при наличии меты исходника подставляет
-          // его pass1_steps сам). Раньше поле терялось здесь — значение из UI
-          // молча игнорировалось и клипы всегда шли с firstSamplerSteps.
+          // Extension clip steps: undefined = "auto" (template fallback —
+          // firstSamplerSteps, while client substitutes source's pass1_steps
+          // when metadata is present). Previously field was lost here — UI value
+          // was silently ignored and clips always ran with firstSamplerSteps.
           extendClipSteps: genMode === 'extend' ? params.extendClipSteps : undefined,
         }
 
         const myEpoch = interruptEpoch
-        // (правка 141, фикс Phase 4) Таймаут 120 с: сервер может ждать
-        // освобождения mutex (фоновая выгрузка, выгрузка LLM) + upload
-        // референсов + submit. 60 с было мало: AbortSignal убивал запрос,
-        // а сервер продолжал работу → «двойная» задача в ComfyUI.
-        // 120 с достаточно для всех нормальных сценариев.
+        // (fix 141, Phase 4 fix) 120s timeout: server may be waiting
+        // for mutex release (background unload, LLM unload) + upload
+        // of references + submit. 60s was too short: AbortSignal killed the request,
+        // while server kept working → duplicate task in ComfyUI.
+        // 120s is sufficient for all normal scenarios.
         const res = await fetch('/api/comfy/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1195,20 +1191,20 @@ export function useVideoGen() {
 
         const data = await res.json()
         if (!res.ok || !data.prompt_id) {
-          // (правка 141) Логируем статус и тело ответа — для диагностики
-          // «третье видео не добавляется».
+          // (fix 141) Log status and response body — for diagnosing
+          // "third video cannot be added".
           console.error(`[gen] generate() failed: HTTP ${res.status}`, data)
-          throw new Error(data.error || `Не удалось отправить задачу в ComfyUI (HTTP ${res.status}).`)
+          throw new Error(data.error || `Failed to submit task to ComfyUI (HTTP ${res.status}).`)
         }
 
         const promptId = data.prompt_id as string
 
-        // (fix H2) Пользователь нажал «Отмена», пока POST был в полёте:
-        // задача уже в ComfyUI, но UI её не отслеживает. Отменяем её на
-        // сервере сразу и НЕ запускаем поллинг/карточку.
+        // (fix H2) User pressed "Cancel" while POST was in flight:
+        // task is already in ComfyUI, but UI is not tracking it. Cancel it
+        // on server immediately and DO NOT launch polling/card.
         if (interruptEpoch !== myEpoch || !isComfyTurnActive(queueId)) {
-          // Остановить уже принятую ComfyUI-задачу. Не оставляем её
-          // «сиротой», если очередь отменили, пока POST был в полёте.
+          // Stop already accepted ComfyUI task. Do not leave it
+          // as an orphan if queue was cancelled while POST was in flight.
           await fetch('/api/comfy/cancel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1237,12 +1233,12 @@ export function useVideoGen() {
           }
         }
 
-        // (правки 121, 124) ACTUAL финальные размеры — ТО же, что шаблон:
-        // пресет → номинал (computeFinalDimensions), свободное → finalDimsFromMegapixels
-        // (правка 153) В режиме flf — single-pass: lowRes = targetDimensions (ceil32)
-        // или selectResolution(aspect, finalRes).
-        // (правка 155) В flf с пресетом targetDimensions = номинал (480p/720p/1080p).
-        // (правка 156) В flf final = lowRes (ceil32) — апскейлер early-return.
+        // (fixes 121, 124) ACTUAL final dimensions — SAME as template:
+        // preset → nominal (computeFinalDimensions), custom → finalDimsFromMegapixels
+        // (fix 153) In flf mode — single-pass: lowRes = targetDimensions (ceil32)
+        // or selectResolution(aspect, finalRes).
+        // (fix 155) In flf with preset targetDimensions = nominal (480p/720p/1080p).
+        // (fix 156) In flf final = lowRes (ceil32) — upscaler early-return.
         const finalDims = genMode === 'flf'
           ? (() => {
               const lowRes = targetDimensions
@@ -1258,9 +1254,9 @@ export function useVideoGen() {
             : finalDimsFromMegapixels(aspectRatio, finalResolution)
         const { outW, outH } = finalDims
 
-        // Пайплайн «Драфт»: канва = ОСНОВНОЕ разрешение (как во flf):
-        // пресет → ceil32(targetDimensions), свободное → finalRes MP.
-        // Метаданные честно пишут фактический размер черновика + label.
+        // "Draft" pipeline: canvas = BASE resolution (as in flf):
+        // preset → ceil32(targetDimensions), custom → finalRes MP.
+        // Metadata honestly records the draft's actual size + label.
         const draft = genMode !== 'extend' && params.pipeline === 'draft'
         const draftDims = draft && genMode !== 'flf'
           ? (targetDimensions
@@ -1276,10 +1272,10 @@ export function useVideoGen() {
         // Store params for metadata saving.
         // Reference paths go through staged_transfers so the sidecar records
         // the real ComfyUI input/ names, not the local staged ones.
-        // (правка 302) extend: рефы идут через params.extendRefs (refImages),
-        // а params.references пуст — без этой ветки у extend-джобов сайдкары
-        // (и клипов, и combined) записывали references: [] и рефайн/апскейл
-        // теряли якоря идентичности.
+        // (fix 302) extend: refs go through params.extendRefs (refImages),
+        // while params.references is empty — without this branch extend job sidecars
+        // (both clips and combined) recorded references: [] and refine/upscale
+        // lost identity anchors.
         const metaReferences = genMode === 'extend'
           ? refImages.map((p) => ({
               type: 'image',
@@ -1291,9 +1287,9 @@ export function useVideoGen() {
               path: transfers[r.path] ?? r.path,
               role: r.imageIntent || '',
             }))
-        // (правка 470) flf: первый кадр — в references сайдкара (якорь
-        // идентичности для рефайна; раньше references у flf-видео были пусты
-        // и цепочка якорей обрывалась на первом же рефайне). Дедуп по path.
+        // (fix 470) flf: first frame goes to sidecar references (identity
+        // anchor for refine; previously references for flf videos were empty
+        // and anchor chain broke on first refine). Deduplicate by path.
         if (genMode === 'flf' && params.firstFrame) {
           const ffPath = transfers[params.firstFrame] ?? params.firstFrame
           if (ffPath && !metaReferences.some((r) => r.path === ffPath)) {
@@ -1302,7 +1298,7 @@ export function useVideoGen() {
         }
         genParamsMap.set(promptId, {
           prompt: params.prompt,
-          generation_mode: genMode, // (правка 146) ref | t2v | flf
+          generation_mode: genMode, // (fix 146) ref | t2v | flf
           ...(genMode === 'ref' && params.audioGuide === true && refAudios.length > 0 && {
             audio_guide: true,
             keep_original_audio: true,
@@ -1310,16 +1306,16 @@ export function useVideoGen() {
           ...(genMode === 'flf' && {
             first_frame: transfers[params.firstFrame ?? ''] ?? params.firstFrame ?? null,
             last_frame: transfers[params.lastFrame ?? ''] ?? params.lastFrame ?? null,
-            // (правка 157) Размеры первого кадра — для «Повторить»: без них
-            // ориентация из кадра не восстановится и flf снова сломается.
+            // (fix 157) First frame dimensions — for "Repeat": without them
+            // orientation from frame will not be restored and flf breaks again.
             first_frame_width: params.firstFrameWidth ?? null,
             first_frame_height: params.firstFrameHeight ?? null,
-            // (правка 158) Итоговый номинал flf (WxH из flfNominalDimensions) —
-            // «Повторить» восстанавливает ТОЧНО эти размеры, а не UI-пресет.
+            // (fix 158) Final flf nominal (WxH from flfNominalDimensions) —
+            // "Repeat" restores EXACTLY these dimensions, not the UI preset.
             flf_resolution: flfFinalResolution(params) ?? null,
           }),
-          // Папка вывода этой задачи — для fallback-поиска выходного файла
-          // (фильтр по своей подпапке, чтобы не украсть чужой файл)
+          // Output subfolder of this task — for fallback output file search
+          // (filter by own subfolder to avoid taking someone else's file)
           output_subfolder: params.outputSubfolder || '',
           model_type: 'minimax_h3_ref2va',
           workflow: draft ? 'draft-single-pass' : 'two-pass-latent-upscaler',
@@ -1332,8 +1328,8 @@ export function useVideoGen() {
           video_length: videoLengthFrames,
           duration_seconds: videoLengthFrames / fps,
           fps,
-          // Extend: фактические шаги КЛИПА (override > шаги исходника/first) —
-          // мету результата читает следующее продление как «авто».
+          // Extend: actual steps of the CLIP (override > source steps/first) —
+          // result metadata is read by next extension as "auto".
           pass1_steps: genMode === 'extend'
             ? (params.extendClipSteps ?? params.firstSamplerSteps ?? 6)
             : (params.firstSamplerSteps ?? 6),
@@ -1341,14 +1337,14 @@ export function useVideoGen() {
           ...(draft && { draft_steps: params.draftSteps ?? 4 }),
           pass2_steps: { '3step': 3, '4step': 4, '5step': 5, '6step': 6, '7step': 7 }[params.sigmaVariant || '3step'] ?? 3,
           sigma_variant: params.sigmaVariant || '3step',
-          pass2_sampler: params.pass2Sampler || 'euler', // (правка 69)
-          pass1_sampler: params.pass1Sampler || 'euler', // (правка 70)
-          pass1_scheduler: params.pass1Scheduler || 'simple', // (правка 70)
-          // Сила турбо-лоры хранится в loras.json (обычная запись), отдельное
-          // поле в мете не дублируем — применённые LoRA перечислены в `lora`.
-          minimax_h3_reference_detail: params.referenceDetail || 'match', // (правка 58) — meta-dialog уже умеет показывать это поле
-          sparse_attention: params.sparseAttention === true, // (правки 168→387) Sol-Attn default OFF
-          // (правка 466) настройки Sol-Attn в сайдкар — «Повторить» восстанавливает
+          pass2_sampler: params.pass2Sampler || 'euler', // (fix 69)
+          pass1_sampler: params.pass1Sampler || 'euler', // (fix 70)
+          pass1_scheduler: params.pass1Scheduler || 'simple', // (fix 70)
+          // Turbo LoRA strength is stored in loras.json (regular entry),
+          // do not duplicate separate field in meta — applied LoRAs are listed in `lora`.
+          minimax_h3_reference_detail: params.referenceDetail || 'match', // (fix 58) — meta-dialog already displays this field
+          sparse_attention: params.sparseAttention === true, // (fixes 168→387) Sol-Attn default OFF
+          // (fix 466) Sol-Attn settings into sidecar — "Repeat" restores them
           ...(params.sparseAttention === true && {
             sparse_tau: params.sparseTau ?? 1.3,
             sparse_start_percent: params.sparseStartPercent ?? 0.2,
@@ -1356,8 +1352,8 @@ export function useVideoGen() {
             sparse_min_tokens: params.sparseMinTokens ?? 12288,
             sparse_extra_tokens: params.sparseExtraTokens ?? 256,
           }),
-          veda_attention: params.vedaAttention === true, // (правка 301)
-          // (правка 403) veda-настройки в сайдкар — «Повторить» восстанавливает
+          veda_attention: params.vedaAttention === true, // (fix 301)
+          // (fix 403) veda settings into sidecar — "Repeat" restores them
           ...(params.vedaAttention === true && {
             veda_generated_sparsity: params.vedaGeneratedSparsity ?? '90%',
             veda_reference_sparsity: params.vedaReferenceSparsity ?? '90%',
@@ -1373,12 +1369,12 @@ export function useVideoGen() {
                 chunk_ff_threshold: params.chunkFFThreshold ?? 4096,
               }
             : {}),
-          // Поле `lora` не дублируем: сервер сам пишет фактически применённые
-          // LoRA (customLoras, включая турбо-лору) в pending-meta.
+          // Field `lora` is not duplicated: server itself records actually applied
+          // LoRAs (customLoras, including turbo lora) into pending-meta.
           references: metaReferences,
-          // extend-режим: имя исходного видео (для авто-конкатенации после генерации)
-          // (правка 174) Safeguard: если params.extendSourceVideo пустой, пробуем
-          // восстановить из store (пользователь мог загрузить видео, но path потерялся)
+          // extend mode: source video name (for auto-concatenation after generation)
+          // (fix 174) Safeguard: if params.extendSourceVideo is empty, try
+          // restoring from store (user could have uploaded video, but path was lost)
           extend_source_video: (() => {
             if (genMode !== 'extend') return null
             if (params.extendSourceVideo) return params.extendSourceVideo
@@ -1388,18 +1384,18 @@ export function useVideoGen() {
             }
             return null
           })(),
-          // (правка 176) Сколько клипов в этой задаче — для N-way склейки.
+          // (fix 176) How many clips in this task — for N-way concatenation.
           extend_clips_count: genMode === 'extend' ? (params.extendClips?.length || 0) : 0,
-          // (правка 423) extend: двухпроходный режим — в сайдкар
+          // (fix 423) extend: two-pass mode — to sidecar
           ...(genMode === 'extend' && { extend_two_pass: params.extendTwoPass === true }),
-          // (правка 303) extend: ВСЯ цепочка промптов клипов (осмысленные,
-          // trim; «.» тестовых клипов отбрасываем) — в сайдкары клипов и
-          // combined-файла. concat-роут дописывает перед ними цепочку
-          // исходника → полный путь «исходник → клип 1 → … → клип N».
+          // (fix 303) extend: FULL chain of clip prompts (meaningful,
+          // trimmed; discard "." test clip prompts) — to clip and
+          // combined file sidecars. concat route prepends source's chain
+          // before them → full path "source → clip 1 → ... → clip N".
           ...(genMode === 'extend' && (() => {
             const chain = (params.extendClips ?? [])
               .map((c) => (c.prompt || '').trim())
-              .filter((p) => /[a-zA-Zа-яА-ЯёЁ\u00c0-\u024f\u0400-\u04ff]{2,}/.test(p))
+              .filter((p) => /\p{L}{2,}/u.test(p))
             return chain.length > 0 ? { extend_prompts: chain } : {}
           })()),
           started_at: Date.now(),
@@ -1409,28 +1405,28 @@ export function useVideoGen() {
         pollUntilDone(promptId, queueId, Date.now())
         useGenProgress.getState().startVideoGen(promptId)
       } catch (err) {
-        // (фикс Phase 4) Детальная диагностика: логируем ТОЧНУЮ ошибку,
-        // включая HTTP-статус и тело ответа. Это видно в DevTools console.
+        // (fix Phase 4) Detailed diagnostics: log the EXACT error,
+        // including HTTP status and response body. Visible in DevTools console.
         const isTimeout = err instanceof DOMException && err.name === 'AbortError'
         const isNetwork = err instanceof TypeError && /fetch|network/i.test(err.message)
         let errMsg: string
         if (isTimeout) {
-          errMsg = 'Таймаут запроса (120 с). Сервер, вероятно, ждёт освобождения GPU. Попробуйте ещё раз.'
+          errMsg = 'Request timeout (120s). The server is likely waiting for GPU to be freed. Please try again.'
         } else if (isNetwork) {
-          errMsg = 'Веб-сервер недоступен (ERR_CONNECTION_REFUSED). Убедитесь, что start.bat запущен.'
+          errMsg = 'Web server unavailable (ERR_CONNECTION_REFUSED). Make sure start.bat is running.'
         } else {
           errMsg = err instanceof Error ? err.message : String(err)
         }
-        // (правка 141) Если ComfyUI не запущен — показываем понятное сообщение
-        const isComfyDown = /ComfyUI не отвечает|Failed to load resource|502|Bad Gateway|ERR_CONNECTION_REFUSED/i.test(errMsg)
+        // (fix 141) If ComfyUI is not running — show clear message
+        const isComfyDown = /ComfyUI|Failed to load resource|502|Bad Gateway|ERR_CONNECTION_REFUSED/i.test(errMsg)
         const displayMsg = isComfyDown
-          ? 'ComfyUI не запущен или не отвечает. Запустите start.bat и подождите, пока ComfyUI запустится (30-90 секунд).'
+          ? 'ComfyUI is not running or not responding. Run start.bat and wait for ComfyUI to start (30-90 seconds).'
           : errMsg
         console.error(`[gen] generate() CAUGHT: type=${isTimeout ? 'timeout' : isNetwork ? 'network' : 'other'}`, err, `| displayMsg: ${displayMsg}`)
         queue.setStatus(queueId, 'error', displayMsg)
-        // Явный тост: 409 от vram-arbiter (ассистент занят VRAM) и другие
-        // ошибки отправки должны быть видны сразу, а не только в очереди задач
-        toast.error('Генерация не отправлена', { description: displayMsg, duration: 8000 })
+        // Explicit toast: 409 from vram-arbiter (assistant occupying VRAM) and other
+        // submission errors should be visible immediately, not just in task queue
+        toast.error('Generation not submitted', { description: displayMsg, duration: 8000 })
         const cur = useGenProgress.getState().video
         if (cur.phase === 'idle' || cur.phase === 'done' || cur.phase === 'error' || cur.phase === 'submitting') {
           useGenProgress.getState().setVideoPhase('error')
@@ -1442,8 +1438,8 @@ export function useVideoGen() {
   )
 
   const interrupt = useCallback(async () => {
-    // (fix H2) Ломаем эпоху: если сейчас в полёте POST /generate, его
-    // продолжение увидит смену и отменит уже принятую задачу.
+    // (fix H2) Bump epoch: if POST /generate is currently in flight, its
+    // continuation will notice the change and cancel the already accepted task.
     interruptEpoch++
     const activeJobIds = useGenQueue
       .getState()
@@ -1464,7 +1460,7 @@ export function useVideoGen() {
       .filter((i) => i.type === 'video' && ['submitting', 'queued', 'running'].includes(i.status))
       .forEach((i) => useGenQueue.getState().setStatus(i.id, 'cancelled'))
 
-    // (правка 141) Send cancel requests in PARALLEL (not sequential) to
+    // (fix 141) Send cancel requests in PARALLEL (not sequential) to
     // reduce total cancel time. Also add a small delay between sends to
     // avoid overwhelming ComfyUI with concurrent /interrupt + /queue POSTs.
     const cancelPromises = activeJobIds.map(async (promptId) => {
@@ -1475,7 +1471,7 @@ export function useVideoGen() {
           body: JSON.stringify({ prompt_id: promptId }),
         })
       } catch { /* ignore */ }
-      // (правка 336) extclip-мусор при cancel — до удаления params из Map.
+      // (fix 336) extclip junk on cancel — before deleting params from Map.
       await cleanupExtendClips(promptId)
       genParamsMap.delete(promptId)
     })
@@ -1491,7 +1487,7 @@ export function useVideoGen() {
       .filter((i) => i.type === 'video' && i.status === 'cancelled')
       .forEach((i) => useGenQueue.getState().remove(i.id))
 
-    toast.info('Генерация отменена')
+    toast.info('Generation cancelled')
   }, [clearAllTimers, cleanupExtendClips])
 
   const reset = useCallback(() => {

@@ -29,20 +29,20 @@ function analyze(prompt: string, refsCount: number): Item[] {
   const tags = [...trimmed.matchAll(/<(Picture|Video|Audio) (\d+)>/g)]
   if (tags.length === 0) {
     if (refsCount > 0) {
-      items.push({ kind: 'warn', text: `Референсы не привязаны — введите @ в промпте (${refsCount} загружено)` })
+      items.push({ kind: 'warn', text: `References not tagged — type @ in prompt (${refsCount} loaded)` })
     }
   } else {
-    // Уникальные теги: повторное использование того же референса
-    // (например, два раза <Picture 1>) — это ОДИН тег.
+    // Unique tags: reusing the same reference
+    // (e.g. twice <Picture 1>) is ONE tag.
     const unique = new Set(tags.map((t) => t[0]))
     const maxNum = Math.max(...tags.map((t) => parseInt(t[2], 10)))
     if (maxNum > refsCount) {
-      items.push({ kind: 'warn', text: `Тег №${maxNum} указывает на несуществующий референс (загружено ${refsCount})` })
+      items.push({ kind: 'warn', text: `Tag #${maxNum} points to nonexistent reference (${refsCount} loaded)` })
     } else {
       const repeated = tags.length - unique.size
       items.push({
         kind: 'ok',
-        text: `Референсы: ${unique.size} тег(ов)${repeated > 0 ? ` · повторов: ${repeated}` : ''}`,
+        text: `References: ${unique.size} tag(s)${repeated > 0 ? ` · repeated: ${repeated}` : ''}`,
       })
     }
   }
@@ -51,20 +51,20 @@ function analyze(prompt: string, refsCount: number): Item[] {
   const dOpen = (trimmed.match(/<d>/g) || []).length
   const dClose = (trimmed.match(/<\/d>/g) || []).length
   if (dOpen !== dClose) {
-    items.push({ kind: 'warn', text: `Незакрытый <d> — открывающих ${dOpen}, закрывающих ${dClose}` })
+    items.push({ kind: 'warn', text: `Unclosed <d> — opening: ${dOpen}, closing: ${dClose}` })
   }
   const longLine = [...trimmed.matchAll(/<d>(.*?)<\/d>/g)].find((m) => m[1].trim().split(/\s+/).length > 12)
   if (longLine) {
-    items.push({ kind: 'warn', text: 'Длинная реплика (>12 слов) — озвучка любит короткие фразы' })
+    items.push({ kind: 'warn', text: 'Long dialogue line (>12 words) — voiceover works best with short phrases' })
   }
 
   // ── Size ──
   const words = trimmed.split(/\s+/).filter(Boolean).length
   const sentences = Math.max(1, (trimmed.match(/[.!?]+(\s|$)/g) || []).length)
   if (sentences < 3 || sentences > 6) {
-    items.push({ kind: 'muted', text: `${words} слов · ${sentences} предл. — оптимально 3–6 предложений` })
+    items.push({ kind: 'muted', text: `${words} words · ${sentences} sent. — optimal 3–6 sentences` })
   } else {
-    items.push({ kind: 'muted', text: `${words} слов · ${sentences} предл.` })
+    items.push({ kind: 'muted', text: `${words} words · ${sentences} sent.` })
   }
 
   return items

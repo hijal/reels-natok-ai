@@ -39,9 +39,9 @@ export async function prepVideoForLlm(
   audioOut: string,
   width = 512,
   fps = 8,
-  // Ограничение длительности: 10-минутный реф на 8 fps = ~4800 кадров,
-  // каждый стоит vision-токенов — токенизация шла бы часами и переполняла
-  // контекст. 60 сек достаточно, чтобы понять содержание/динамику видео.
+  // Duration limit: a 10-minute ref at 8 fps = ~4800 frames,
+  // each costs vision tokens — tokenization would take hours and overflow
+  // the context. 60 sec is enough to understand video content/dynamics.
   maxDurationSec = 60,
 ): Promise<LlmVideoMedia | null> {
   const bin = await resolveFfmpeg()
@@ -65,7 +65,7 @@ export async function prepVideoForLlm(
 
   // Optional audio track (`-map 0:a:0?` never fails on silent videos);
   // a header-only WAV (< ~100 bytes) means there was no audio.
-  // Длительность ограничиваем той же границей, что и видео.
+  // Cap duration by the same limit as video.
   let audioPath: string | null = null
   try {
     await execFileAsync(bin, [
@@ -86,17 +86,17 @@ export async function prepVideoForLlm(
 }
 
 /**
- * (правка 162) Извлечь кадры из видео для Bonsai (OpenAI-бэкенд не принимает
- * целые видео — только картинки). Возвращает массив путей к JPEG-кадрам.
- * (правка 163) 8 fps, 256px, до 48 кадров — модель видит движение и сцену,
- * а не только первый кадр.
+ * (fix 162) Extract frames from video for Bonsai (OpenAI backend does not accept
+ * full videos — only images). Returns an array of paths to JPEG frames.
+ * (fix 163) 8 fps, 256px, up to 48 frames — model sees motion and scene,
+ * not just the first frame.
  */
 export async function extractVideoFrames(
   source: string,
   outDir: string,
-  maxFrames = 48,   // 8 fps × 6 сек = 48 кадров — разумный лимит для LLM-контекста
-  width = 256,      // небольшое разрешение — экономия памяти и токенов
-  fps = 8,          // 8 кадров в секунду — модель понимает динамику
+  maxFrames = 48,   // 8 fps × 6 sec = 48 frames — reasonable limit for LLM context
+  width = 256,      // small resolution — saves memory and tokens
+  fps = 8,          // 8 frames per second — model understands dynamics
   maxDurationSec = 60,
 ): Promise<string[] | null> {
   const bin = await resolveFfmpeg()
@@ -114,7 +114,7 @@ export async function extractVideoFrames(
       '-q:v', '4',
       pattern,
     ], FFMPEG_OPTS)
-    // Собираем созданные кадры
+    // Collect generated frames
     const files = await fs.readdir(outDir)
     const frames = files
       .filter((f) => /^frame_\d+\.jpg$/.test(f))
@@ -126,6 +126,6 @@ export async function extractVideoFrames(
   }
 }
 
-/* Транскодирование аудио-референса в 16 кГц моно WAV выполняется внутри
- * prepVideoForLlm — отдельного экспорта для этого не требуется. */
+/* Audio reference transcoding to 16 kHz mono WAV is handled inside
+ * prepVideoForLlm — no separate export is required. */
 

@@ -21,8 +21,8 @@ def load_extra_path_config(yaml_path):
         if "is_default" in conf:
             is_default = conf.pop("is_default")
         for x in conf:
-            # Значение категории может быть строкой (в т.ч. многострочной,
-            # пути через \n) или списком путей — как в стандартном ComfyUI.
+            # Category value can be a string (including multiline,
+            # paths separated by \n) or a list of paths — as in standard ComfyUI.
             val = conf[x]
             if val is None:
                 continue

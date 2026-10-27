@@ -41,8 +41,8 @@ export function safeOutputPath(filename: string): string | null {
 
 const inflight = new Map<string, Promise<Buffer>>()
 
-/** Cached ffmpeg path: null = unchecked, else binary. «Не найден» не
- *  кэшируется — повторяем поиск при следующем обращении (правка 355). */
+/** Cached ffmpeg path: null = unchecked, else binary. "Not found" is not
+ *  cached — retry search on next invocation (fix 355). */
 let ffmpegBin: string | null = null
 
 /**
@@ -96,9 +96,9 @@ async function resolveFfmpeg(): Promise<string> {
       /* try next */
     }
   }
-  // (правка 355) «Не найден» НЕ кэшируем навсегда: ffmpeg могли доустановить
-  // (или подложить в runtime/) после первой проверки — повторяем поиск при
-  // каждом обращении. Кэшируется только УСПЕШНЫЙ путь.
+  // (fix 355) "Not found" is NOT cached permanently: ffmpeg might be installed
+  // (or placed in runtime/) after the first check — retry search on
+  // each call. Only a SUCCESSFUL path is cached.
   return ''
 }
 
@@ -110,9 +110,9 @@ function cachePath(width: number, key: string): string {
 }
 
 /**
- * (правка 355) Удалить кэшированные превью файла из .thumbs по его cacheKey
- * (как строит /api/comfy/file: `output_[<sub>_]<basename>` или `input_<name>`).
- * Хэш зависит и от ширины, поэтому сканируем все <width>-подпапки.
+ * (fix 355) Delete cached file previews from .thumbs by its cacheKey
+ * (as constructed by /api/comfy/file: `output_[<sub>_]<basename>` or `input_<name>`).
+ * Hash depends on width as well, so scan all <width>-subfolders.
  */
 export async function deleteThumbsFor(cacheKey: string): Promise<void> {
   try {
@@ -125,7 +125,7 @@ export async function deleteThumbsFor(cacheKey: string): Promise<void> {
       const target = cachePath(width, `${cacheKey}|${width}`)
       await fs.unlink(target).catch(() => {})
     }))
-  } catch { /* нет кэша — не критично */ }
+  } catch { /* no cache — non-critical */ }
 }
 
 /** Extract a poster frame from a video with ffmpeg, scaled to `width`. */

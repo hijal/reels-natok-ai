@@ -1,10 +1,10 @@
 'use client'
 
 /**
- * FaceRefineTargetStore — мост «галерея → вкладка Face Refine» + её UI-состояние.
+ * FaceRefineTargetStore — bridge "gallery → Face Refine tab" + its UI state.
  *
- * Аналогичен TileUpscaleTargetStore: кнопка в галерее кладёт цель сюда и шлёт
- * событие 'h3:goto-face-refine'; FaceRefineView забирает цель.
+ * Analogous to TileUpscaleTargetStore: the button in gallery puts the target here
+ * and emits the 'h3:goto-face-refine' event; FaceRefineView picks up the target.
  */
 import { create } from 'zustand'
 import type {
@@ -23,25 +23,25 @@ export interface FaceRefineSource {
   url: string
   filename: string
   subfolder: string
-  /** Файл с диска, уже загруженный в ComfyUI input/. */
+  /** Disk file already uploaded to ComfyUI input/. */
   inputSource?: string
 }
 
-/** Референс лица «этого конкретного человека» — файл в ComfyUI input/. */
+/** Face reference of "this specific person" — file in ComfyUI input/. */
 export interface FaceIdentityRef {
-  /** Имя файла в ComfyUI input/ — его и подаём в ноду. */
+  /** File name in ComfyUI input/ — passed to the node. */
   name: string
-  /** Превью в интерфейсе (data-URL или URL из input/). */
+  /** Preview in interface (data-URL or URL from input/). */
   previewUrl: string
 }
 
 /**
- * (правка 723) Точка на лице, указанная кликом по кадру исходника.
+ * (edit 723) Point on the face specified by clicking on a source frame.
  *
- * Координаты — в пикселях САМОГО ВИДЕО (не элемента в браузере), как их ждёт
- * нода в X/Y. `frame` — номер кадра, на котором сделан клик: нода меряет
- * расстояние до центров лиц именно на нём, а дальше ведёт это лицо
- * непрерывностью.
+ * Coordinates are in pixels of the VIDEO ITSELF (not the browser element),
+ * as expected by the node in X/Y. `frame` is the frame index where the click
+ * was made: the node measures distance to face centers on this exact frame,
+ * and tracks this face forward via continuity.
  */
 export interface FaceRefinePoint {
   x: number
@@ -50,43 +50,43 @@ export interface FaceRefinePoint {
 }
 
 export interface FaceRefineUiParams {
-  /** Канва H3, px (пресеты 384–1280; движок клампит к 1344, кратность 32).
-   *  512 дешевле 768 в 2.25× по latent-токенам; выше 768 — дороже по VRAM. */
+  /** H3 canvas, px (presets 384–1280; engine clamps to 1344, multiple of 32).
+   *  512 is 2.25× cheaper than 768 in latent tokens; above 768 is heavier on VRAM. */
   canvas: number
-  /** Базовый denoise. H3 — flow matching со сдвигом 12: 0.25 → sigma 0.800. */
+  /** Base denoise. H3 is flow matching with shift 12: 0.25 → sigma 0.800. */
   denoise: number
-  /** Шаги сэмплирования (должны совпадать с турбо-лорой). */
+  /** Sampling steps (must match turbo LoRA). */
   steps: number
-  /** Правило выбора субъекта. */
+  /** Subject selection rule. */
   select: FaceSelectMode
-  /** Номер лица в рейтинге правила (0-based). */
+  /** Face rank index in selection rule (0-based). */
   selectIndex: number
-  /** Чем сравнивать лица при выборе по референсу. */
+  /** Metric for comparing faces when selecting by reference. */
   identityModel: FaceIdentityModel
-  /** Держать одного субъекта через толпу. */
+  /** Keep track of single subject across a crowd. */
   identityTrack: boolean
-  /** Сторона кропа как кратное высоты лица. */
+  /** Crop side as a multiple of face height. */
   cropFactor: number
-  /** Порог детектора лиц. */
+  /** Face detector threshold. */
   confidence: number
-  /** Что вклеивать обратно. */
+  /** What region to paste back. */
   pasteRegion: FacePasteRegion
-  /** Размытие края вклейки, px исходника. */
+  /** Edge feathering of pasted region, source px. */
   feather: number
-  /** Колор-матч вклейки. */
+  /** Paste color match. */
   colourMatch: number
-  /** Общая непрозрачность вклейки. */
+  /** Overall paste opacity. */
   blend: number
-  /** Что делать с кадрами без найденного лица. */
+  /** Action for frames without a detected face. */
   undetectedFrames: FaceUndetected
   /**
-   * (правка 722) «Далёкие планы»: на кадрах без лица искать человека и брать
-   * голову от его бокса (fallback_detector). Нужна модель person_yolov8m-seg.
+   * (edit 722) "Wide shots": search for person and take head from their box
+   * on frames without a detected face (fallback_detector). Requires person_yolov8m-seg model.
    */
   fallback: boolean
-  /** Множитель denoise для самых мелких лиц. */
+  /** Denoise multiplier for the smallest faces. */
   denoiseSmall: number
-  /** Множитель denoise для крупных лиц. */
+  /** Denoise multiplier for large faces. */
   denoiseLarge: number
 }
 
@@ -118,7 +118,7 @@ interface FaceRefineState {
   setSource: (s: FaceRefineSource | null) => void
   identityRef: FaceIdentityRef | null
   setIdentityRef: (r: FaceIdentityRef | null) => void
-  /** (правка 723) Клик по лицу в превью исходника. */
+  /** (edit 723) Click on face in source preview. */
   facePoint: FaceRefinePoint | null
   setFacePoint: (p: FaceRefinePoint | null) => void
   params: FaceRefineUiParams

@@ -1,17 +1,15 @@
 'use client'
 
 /**
- * (правка 112) WelcomeDialog — всплывающее окно при первом запуске.
- * (правка 113) Галочка «Больше не показывать»: флаг пишется ТОЛЬКО если
- * галочка стоит; без галочки окно показывается при каждом запуске.
- * Окно сделано крупнее и красивее: градиентная шапка (aurora-bg),
- * карточки шагов, акцент приложения (gradient-creative).
+ * WelcomeDialog — popup dialog on first launch.
+ * "Don't show again" checkbox: flag is set only if the checkbox is checked;
+ * otherwise the dialog appears on each launch.
  *
- * Краткая инструкция, как начать работать с программой:
- *   1. Настройки → «Общие» → скачать модели (единоразово);
- *   2. «Генерация» → промпт → «Сгенерировать видео»;
- *   3. Результат попадает в «Галерею», апскейл — в «Upscale».
- * Более детальная информация — на вкладке «Обучение» (кнопка-ссылка).
+ * Brief quick start guide:
+ *   1. Settings → "General" → download models (one-time);
+ *   2. "Generation" → prompt → "Generate Video";
+ *   3. Results go to "Gallery", upscale in "Upscale".
+ * More detailed information is available on the "Learning" tab.
  */
 import { useState } from 'react'
 import { motion } from 'framer-motion'
@@ -20,14 +18,13 @@ import { Button } from '@/components/ui/button'
 
 interface WelcomeDialogProps {
   /**
-   * Закрыть окно. dontShowAgain=true — пометить как «не показывать»
-   * (флаг делает родитель); false — закрыть, но при следующем запуске
-   * показать снова (правка 113).
+   * Close dialog. dontShowAgain=true — mark as do not show again;
+   * false — close, but show again on next launch.
    */
   onClose: (dontShowAgain: boolean) => void
-  /** Закрыть окно и открыть диалог настроек (скачать модели). */
+  /** Close dialog and open settings (download models). */
   onOpenSettings: (dontShowAgain: boolean) => void
-  /** Закрыть окно и перейти на вкладку «Обучение». */
+  /** Close dialog and switch to "Learning" tab. */
   onGoLearn: (dontShowAgain: boolean) => void
 }
 
@@ -51,8 +48,6 @@ function Step({ n, title, text }: { n: number } & StepDef) {
 }
 
 export function WelcomeDialog({ onClose, onOpenSettings, onGoLearn }: WelcomeDialogProps) {
-  // (правка 113) «Больше не показывать» — по умолчанию снята:
-  // без галочки окно будет появляться при каждом запуске.
   const [hideForever, setHideForever] = useState(false)
 
   return (
@@ -70,94 +65,94 @@ export function WelcomeDialog({ onClose, onOpenSettings, onGoLearn }: WelcomeDia
         className="w-full max-w-lg max-h-[85vh] rounded-2xl border border-border bg-[var(--surface-3)] shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Градиентная планка-акцент (идентичность H3 Studio) */}
+        {/* Accent gradient bar */}
         <div className="h-1.5 gradient-creative shrink-0" />
 
-        {/* Header (правка 113 — крупнее, aurora-bg как в шапках вкладок) */}
+        {/* Header */}
         <div className="aurora-bg overflow-hidden flex items-center gap-3.5 px-5 pt-4 pb-3.5 border-b border-border shrink-0">
           <span className="w-12 h-12 rounded-2xl gradient-creative flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/25">
             <SparklesIcon className="w-6 h-6 text-white" />
           </span>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-foreground leading-tight">
-              Добро пожаловать в <span className="gradient-creative-text">MiniMax H3 Studio 7</span>
+              Welcome to <span className="gradient-creative-text">MiniMax H3 Studio 7</span>
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Генерация видео со звуком — прямо на вашей видеокарте
+              Video generation with sound — directly on your GPU
             </p>
           </div>
           <button
             type="button"
             onClick={() => onClose(hideForever)}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-[var(--surface-2)] transition-colors shrink-0"
-            title="Закрыть"
+            title="Close"
           >
             <XIcon className="w-4.5 h-4.5" />
           </button>
         </div>
 
-        {/* Steps (краткая инструкция, правка 113 — карточки) */}
+        {/* Steps */}
         <div className="px-5 py-4 space-y-2.5 overflow-y-auto">
           <p className="text-xs uppercase tracking-wider text-muted-foreground/70 font-medium">
-            Чтобы начать — три шага
+            Get started in three steps
           </p>
           <Step
             n={1}
-            title="Скачайте модели"
-            text="Настройки (шестерёнка внизу сайдбара) → «Общие» → «Скачать все». Это единоразово — после этого интернет больше не нужен."
+            title="Download models"
+            text="Settings (gear icon at sidebar bottom) → 'General' → 'Download All'. This is a one-time setup — no internet connection required afterwards."
           />
           <Step
             n={2}
-            title="Сгенерируйте первое видео"
-            text="Вкладка «Генерация»: выберите режим (Текст / Кадры / Референсы), опишите сцену (или попросите Ассистента), выберите разрешение и длительность — «Сгенерировать видео»."
+            title="Generate your first video"
+            text="On the 'Generation' tab: choose a mode (Text / Frames / References), describe the scene (or ask Assistant), set resolution and duration — click 'Generate Video'."
           />
           <Step
             n={3}
-            title="Смотрите результат"
-            text="Готовые видео сохраняются в «Галерею», сделать их чётче можно на вкладке «Upscale»."
+            title="View results"
+            text="Completed videos are saved in 'Gallery'. You can increase clarity on the 'Upscale' tab."
           />
 
-          {/* (правка 132) Предупреждение про файл подкачки — частая причина ошибок */}
+          {/* Virtual memory warning */}
           <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-3 space-y-2">
             <div className="flex items-center gap-2">
               <span className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
                 <AlertTriangleIcon className="w-4 h-4 text-amber-400" />
               </span>
-              <p className="text-sm font-semibold text-amber-300">Важно: увеличьте файл подкачки</p>
+              <p className="text-sm font-semibold text-amber-300">Important: Increase virtual memory (paging file)</p>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Для работы программы нужен большой файл подкачки (virtual memory). Если он небольшой — программа может выдавать ошибку «не хватает памяти».
+              The application requires a large virtual memory paging file. If it is too small, out of memory errors may occur.
             </p>
             <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-xs text-foreground/80 leading-relaxed space-y-1">
-              <p className="font-medium text-foreground">Как увеличить:</p>
+              <p className="font-medium text-foreground">How to increase:</p>
               <p>1. Win + R → <code className="font-mono bg-[var(--surface-3)] px-1 rounded">sysdm.cpl</code> → Enter</p>
-              <p>2. Вкладка «Дополнительно» → «Быстродействие» → «Параметры» → «Виртуальная память» → «Изменить»</p>
-              <p>3. Снять галочку «Автоматически определять»</p>
-              <p>4. Выбрать диск, поле «Максимальный размер (МБ)» = 32768 (или больше)</p>
-              <p>5. «Установить» → «ОК» → <b>перезагрузить ПК</b></p>
+              <p>2. 'Advanced' tab → 'Performance' → 'Settings' → 'Advanced' → 'Virtual memory' → 'Change'</p>
+              <p>3. Uncheck 'Automatically manage paging file size for all drives'</p>
+              <p>4. Select drive, set 'Maximum size (MB)' = 32768 (or higher)</p>
+              <p>5. Click 'Set' → 'OK' → <b>restart your PC</b></p>
             </div>
           </div>
 
-          {/* Ссылка на подробный тур (правка 113 — ярче) */}
+          {/* Learning link */}
           <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3.5 py-2.5 flex items-center gap-3">
             <span className="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0">
               <GraduationCapIcon className="w-4 h-4 text-cyan-300" />
             </span>
             <p className="text-xs text-cyan-100/90 flex-1 min-w-0 leading-relaxed">
-              Подробный пошаговый тур с картинками — на вкладке <span className="font-semibold text-cyan-100">«Обучение»</span>
+              Detailed step-by-step tour with visual guides — on the <span className="font-semibold text-cyan-100">'Learning'</span> tab
             </p>
             <button
               type="button"
               onClick={() => onGoLearn(hideForever)}
               className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-cyan-100 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/30 transition-colors"
             >
-              Открыть
+              Open
               <ArrowRightIcon className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Footer (правка 113 — галочка «больше не показывать» + кнопки) */}
+        {/* Footer */}
         <div className="border-t border-border bg-[var(--surface-2)]/40 px-5 py-3.5 space-y-3 shrink-0">
           <label className="flex items-center gap-2.5 cursor-pointer select-none group">
             <input
@@ -167,7 +162,7 @@ export function WelcomeDialog({ onClose, onOpenSettings, onGoLearn }: WelcomeDia
               className="w-4 h-4 rounded accent-cyan-500 cursor-pointer shrink-0"
             />
             <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-              Больше не показывать это окно
+              Don't show this window again
             </span>
           </label>
           <div className="flex items-center gap-2.5">
@@ -178,10 +173,10 @@ export function WelcomeDialog({ onClose, onOpenSettings, onGoLearn }: WelcomeDia
               onClick={() => onOpenSettings(hideForever)}
             >
               <SettingsIcon className="w-3.5 h-3.5" />
-              Открыть настройки
+              Open Settings
             </Button>
             <Button size="sm" className="flex-1" onClick={() => onClose(hideForever)}>
-              Понятно
+              Got it
             </Button>
           </div>
         </div>

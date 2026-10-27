@@ -31,12 +31,12 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // (правка 204) Превью показывается на ОБОИХ проходах без цензуры —
-  // пользователь сам оценивает процесс. Скрываем только «нулевой» кадр
-  // (boundary-0): это затравка из чистого шума до начала денойза, картинки
-  // там ещё нет. Стандартные preview-события (latent_preview в
-  // MMH3UltimateUpscale) приходят с step=0 но реальной картинкой — их
-  // показываем. KJ-превью с step=0 — нулевой кадр, скрываем.
+  // (fix 204) Preview is shown on BOTH passes without censoring —
+  // the user evaluates the process themselves. We hide only the "zero" frame
+  // (boundary-0): this is pure noise seed before denoise starts, no image
+  // is there yet. Standard preview events (latent_preview in
+  // MMH3UltimateUpscale) arrive with step=0 but a real image — we
+  // show them. KJ-preview with step=0 is a zero frame, hide it.
   const hasImage = preview.image && preview.image.length > 0
   if (!hasImage || ((preview.step || 0) === 0 && preview.total > 0)) {
     return new NextResponse(JSON.stringify({ preview: null, stage }), {

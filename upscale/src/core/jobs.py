@@ -98,7 +98,7 @@ def cancel_active_job() -> str:
 
 
 def is_active_job(controller: "JobController") -> bool:
-    """True, если именно этот контроллер сейчас держит GPU-слот."""
+    """True if this specific controller currently holds the GPU slot."""
     with _ACTIVE_LOCK:
         return _ACTIVE is controller
 
@@ -149,8 +149,8 @@ class BoundedLogBuffer:
         seen: set[str] = set()
         return [line for line in [*important, *tail] if not (line in seen or seen.add(line))]
 
-    # (правка 716) Совместимость с list: код пайплайнов делает
-    # encoder_logs[-40:] (последние строки) и кладёт лог в JSON-отчёт.
+    # (fix 716) Compatibility with list: pipeline code does
+    # encoder_logs[-40:] (latest lines) and saves the log into the JSON report.
     def __getitem__(self, index):  # type: ignore[no-untyped-def]
         return self.snapshot()[index]
 

@@ -1,6 +1,6 @@
 /**
- * Sound notification — короткий "ding" через Web Audio API.
- * Без внешних файлов, работает офлайн.
+ * Sound notification — short "ding" via Web Audio API.
+ * No external files, works offline.
  */
 let audioCtx: AudioContext | null = null
 

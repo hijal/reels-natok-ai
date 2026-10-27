@@ -45,9 +45,9 @@ export async function stagedPath(filename: string): Promise<string | null> {
 }
 
 /**
- * (правка 347) Move an already-on-disk file into the staging directory
- * (rename, fallback — copy+unlink across volumes). Без буферизации в heap,
- * в отличие от stageFile(buf).
+ * (fix 347) Move an already-on-disk file into the staging directory
+ * (rename, fallback — copy+unlink across volumes). No heap buffering,
+ * unlike stageFile(buf).
  */
 export async function stageFileFromPath(srcPath: string, filename: string): Promise<string> {
   await fs.mkdir(STAGE_DIR, { recursive: true })

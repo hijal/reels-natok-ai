@@ -5,34 +5,34 @@ import path from 'path'
 import { submitWorkflowJson } from '@/lib/comfy/minimax-h3-client'
 import { setActivePrompt } from '@/lib/comfy/progress-tracker'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { runGeneration, assertGenerationAllowed } from '@/lib/vram-arbiter'
 import { buildTileUpscaleWorkflow, computeTileGeometry, DEFAULT_TILE_UPSCALE_PROMPT } from '@/lib/comfy/tile-upscale-template'
 import { recordPendingMetaRaw } from '@/lib/pending-meta'
 import { readPromptChain, readMetaImageRefs, resolveSourceLatent } from '@/lib/refine-meta'
 import { probeVideoFile } from '@/lib/video-probe'
-import { getVideoFormatSettings } from '@/lib/video-format-server' // (правка 386)
-import { enabledCustomLoras, loraTriggerSuffix } from '@/lib/loras-config' // (правка 483)
+import { getVideoFormatSettings } from '@/lib/video-format-server' // (fix 386)
+import { enabledCustomLoras, loraTriggerSuffix } from '@/lib/loras-config' // (fix 483)
 
 /**
  * POST /api/comfy/tile-upscale — tiled latent upscale (MMH3UltimateUpscale).
  *
  * Body:
- *   sourceFilename  — имя файла в папке output ComfyUI (или inputSource)
- *   sourceSubfolder — подпапка output
- *   prompt?         — caption (default: enhance-промпт)
+ *   sourceFilename  — file name in ComfyUI output folder (or inputSource)
+ *   sourceSubfolder — output subfolder
+ *   prompt?         — caption (default: enhance prompt)
  *   seed?           — (-1/undefined = random)
- *   tileSize?       — размер тайла, px (multiple of 32). Default 768.
- *                     Количество тайлов считается автоматически (specific_size).
- *   overlap?        — пространственное перекрытие, px. Default 128.
- *   fade?           — ширина фейда, px. Default 64.
- *   chunkFrames?    — длина временного куска, кадры (multiple of 17). Default 136.
- *   temporalOverlap?— временное перекрытие, кадры. Default 17.
+ *   tileSize?       — tile size, px (multiple of 32). Default 768.
+ *                     Number of tiles is computed automatically (specific_size).
+ *   overlap?        — spatial overlap, px. Default 128.
+ *   fade?           — fade width, px. Default 64.
+ *   chunkFrames?    — temporal chunk length, frames (multiple of 17). Default 136.
+ *   temporalOverlap?— temporal overlap, frames. Default 17.
  *   anchorStrength?— 0–1. Default 0.999.
- *   inputSource?    — имя файла уже в ComfyUI input/ (файл с диска).
+ *   inputSource?    — file name already in ComfyUI input/ (file from disk).
  *
- * Pipeline: копия output → input (или реюз), ffprobe, сборка workflow
- * (buildTileUpscaleWorkflow) и отправка через общий VRAM-арбитр.
+ * Pipeline: copy output → input (or reuse), ffprobe, assemble workflow
+ * (buildTileUpscaleWorkflow) and submit via shared VRAM arbiter.
  */
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!body?.sourceFilename && !body?.inputSource) {
-      return NextResponse.json({ error: 'sourceFilename (или inputSource) обязателен' }, { status: 400 })
+      return NextResponse.json({ error: 'sourceFilename (or inputSource) is required' }, { status: 400 })
     }
 
     const quickBlock = assertGenerationAllowed()
@@ -67,34 +67,34 @@ export async function POST(req: NextRequest) {
 
     const cfg = getAppConfig()
 
-    // (правка 483) LoRA из настроек — как в /api/comfy/generate: модель
-    // получает их цепочкой customLoras (турбо-лора — обычная запись, ON по
-    // умолчанию), триггерные слова дописываются в conditioning-промпт.
-    // В мету промпт пишется БЕЗ триггеров — «Повторить» добавит их заново по актуальному
-    // списку, иначе бы они накапливались (правка 89).
+    // (fix 483) LoRA from settings — same as in /api/comfy/generate: model
+    // receives them via customLoras chain (turbo lora is normal entry, ON by
+    // default), trigger words are appended to conditioning prompt.
+    // In meta the prompt is written WITHOUT triggers — "Retry" will add them again based on
+    // current list, otherwise they would accumulate (fix 89).
     const customLoraEntries = enabledCustomLoras()
     const customLoras = customLoraEntries.length > 0
       ? customLoraEntries.map((e) => ({ name: e.name, strength: e.strength }))
       : undefined
     const loraSuffix = loraTriggerSuffix(customLoraEntries)
-    // Промпт для генерации: чистый промпт + триггеры; если промпта нет
-    // вовсе, а триггеры есть — базой служит дефолтный enhance-промпт.
+    // Generation prompt: clean prompt + triggers; if there is no prompt
+    // at all, but there are triggers — default enhance prompt serves as base.
     const promptWithTriggers = (p: string | undefined): string | undefined => {
       if (!loraSuffix) return p
       const base = (p ?? '').trim() || DEFAULT_TILE_UPSCALE_PROMPT
       return `${base} ${loraSuffix}`
     }
 
-    // ─── Копия output → input ───
-    // (правка 495) Вложенные папки: subfolder — многоуровневый относительный
-    // путь ('a/b'); сегменты '.'/'..' отбрасываются (правка 317).
+    // ─── Copy output → input ───
+    // (fix 495) Nested folders: subfolder — multi-level relative
+    // path ('a/b'); '.'/'..' segments are dropped (fix 317).
     const sub = sanitizeFolderPath(body.sourceSubfolder || '')
     const safeName = path.basename(body.sourceFilename ?? '')
 
-    // (правка 722) Параметры тайлового апскейла — в сайдкар. Раньше в
-    // метаданных не было НИ ОДНОГО из них (ни размера тайла, ни перекрытий,
-    // ни denoise/steps): по сайдкару результата нельзя было понять, как он
-    // собран. Значения — дефолты из tile-upscale-template.ts.
+    // (fix 722) Tile upscale parameters — into sidecar. Previously
+    // metadata had NOT A SINGLE one of them (no tile size, no overlaps,
+    // no denoise/steps): from result sidecar one could not understand how it was
+    // constructed. Values are defaults from tile-upscale-template.ts.
     const tileCommonMeta = {
       pipeline: 'full',
       tile_size: body.tileSize ?? 768,
@@ -105,20 +105,20 @@ export async function POST(req: NextRequest) {
       anchor_strength: body.anchorStrength ?? 0.999,
       target_resolution: body.targetResolution ?? 1080,
       denoise: body.denoise ?? 0.1,
-      // pass1_steps — единый контракт для строки «Шаги» MetaDialog (как у
-      // refine/face-refine). Поле steps оставлено: его пишут старые сайдкары.
+      // pass1_steps — unified contract for "Steps" row of MetaDialog (same as
+      // refine/face-refine). steps field is retained: written by older sidecars.
       pass1_steps: body.steps ?? 2,
       steps: body.steps ?? 2,
       ...(body.syncTiles === true && { sync_tiles: true }),
       ...(customLoras ? { lora: customLoras.map((l) => l.name).join(', ') } : {}),
     }
 
-    // ─── Файл с диска (inputSource) ───
+    // ─── File from disk (inputSource) ───
     if (body.inputSource) {
       const inName = path.basename(body.inputSource)
       const inPath = path.join(cfg.inputDir, inName)
       if (!existsSync(inPath)) {
-        return NextResponse.json({ error: `Файл не найден в input: ${inName}` }, { status: 404 })
+        return NextResponse.json({ error: `File not found in input: ${inName}` }, { status: 404 })
       }
       const userPrompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
       let probe: { width: number; height: number; frames: number }
@@ -126,12 +126,12 @@ export async function POST(req: NextRequest) {
         probe = await probeVideoFile(inPath)
       } catch (e) {
         return NextResponse.json(
-          { error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}` },
+          { error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}` },
           { status: 400 },
         )
       }
 
-      // (правка 479) tile-геометрия для монотонного прогресса
+      // (fix 479) tile geometry for monotonic progress
       const tuGeom = computeTileGeometry({
         sourceWidth: probe.width,
         sourceHeight: probe.height,
@@ -148,10 +148,10 @@ export async function POST(req: NextRequest) {
           buildTileUpscaleWorkflow({
             sourceVideo: inName,
             diffusionModel: cfg.diffusionModel || undefined,
-            sourceAudioPath: inPath, // (правка 488) аудио для latent-ветки
+            sourceAudioPath: inPath, // (fix 488) audio for latent branch
             sourceWidth: probe.width,
             sourceHeight: probe.height,
-            prompt: promptWithTriggers(userPrompt), // (правка 483) триггеры LoRA
+            prompt: promptWithTriggers(userPrompt), // (fix 483) LoRA triggers
             seed: body.seed,
             tileSize: body.tileSize,
             overlap: body.overlap,
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
             denoise: body.denoise,
             steps: body.steps,
             syncTiles: body.syncTiles,
-            ...(customLoras ? { customLoras } : {}), // (правка 483)
+            ...(customLoras ? { customLoras } : {}), // (fix 483)
           }),
           [['tu_upscale']],
           tuGeom,
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
           seed: body.seed ?? -1,
           prompt_source: 'user',
           input_source: true,
-          ...tileCommonMeta, // (правка 722) параметры тайлов + LoRA
+          ...tileCommonMeta, // (fix 722) tile params + LoRA
         })
       }
       return NextResponse.json({
@@ -193,19 +193,19 @@ export async function POST(req: NextRequest) {
         inputName: inName,
         inputSource: true,
         source: { width: probe.width, height: probe.height, frames: probe.frames },
-        tileInfo: tuGeom ?? undefined, // (правка 479)
+        tileInfo: tuGeom ?? undefined, // (fix 479)
       })
     }
 
-    // ─── Файл из галереи (output) ───
+    // ─── File from gallery (output) ───
     const sourcePath = path.join(cfg.outputDir, sub, safeName)
-    // (правка 318) Страховка: итоговый путь обязан остаться внутри outputDir.
+    // (fix 318) Safeguard: target path must remain inside outputDir.
     const outputRoot = path.resolve(cfg.outputDir)
     if (!path.resolve(sourcePath).startsWith(outputRoot + path.sep)) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
     }
     if (!existsSync(sourcePath)) {
-      return NextResponse.json({ error: `Файл не найден: ${safeName}` }, { status: 404 })
+      return NextResponse.json({ error: `File not found: ${safeName}` }, { status: 404 })
     }
 
     await fs.mkdir(cfg.inputDir, { recursive: true })
@@ -214,15 +214,15 @@ export async function POST(req: NextRequest) {
     let n = 1
     while (true) {
       try {
-        // (правка 346) COPYFILE_EXCL — атомарно, без unlink-окна;
-        // ловим ТОЛЬКО EEXIST, остальные ошибки пробрасываем.
+        // (fix 346) COPYFILE_EXCL — atomically, without unlink window;
+        // catch ONLY EEXIST, rethrow other errors.
         await fs.copyFile(sourcePath, destPath, fs.constants.COPYFILE_EXCL)
         break
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
         const ext = path.extname(safeName)
         const stem = safeName.slice(0, safeName.length - ext.length)
-        // (правка 362) Старый паттерн пропускал _tileup1.
+        // (fix 362) Old pattern skipped _tileup1.
         destName = `${stem}_tileup${n++}${ext}`
         destPath = path.join(cfg.inputDir, destName)
         if (n > 100) return NextResponse.json({ error: 'Too many duplicates' }, { status: 500 })
@@ -235,34 +235,34 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       await fs.unlink(destPath).catch(() => {})
       return NextResponse.json(
-        { error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}` },
+        { error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}` },
         { status: 400 },
       )
     }
 
-    // Промпт: пользовательский > цепочка из меты > дефолт
-    // (правка 319) readPromptChain вместо readDraftPrompt: для extend-combined
-    // наследуем ВСЮ цепочку «исходник → клипы».
+    // Prompt: user > chain from meta > default
+    // (fix 319) readPromptChain instead of readDraftPrompt: for extend-combined
+    // inherit ENTIRE chain "source → clips".
     const userPrompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     const draftPrompt = userPrompt ? null : readPromptChain(sub, safeName)
     const resolvedPrompt = userPrompt || draftPrompt || undefined
     const promptSource = userPrompt ? 'user' : draftPrompt ? 'draft-meta' : 'default'
-    // (правка 319) Image-референсы исходника — в мету результата (как у
-    // генерации: [{ type: 'image', path, role }]); пустые не пишем.
+    // (fix 319) Image references of source — into result meta (same as
+    // generation: [{ type: 'image', path, role }]); empty omitted.
     const tuMetaRefs = readMetaImageRefs(sub, safeName)
 
-    // ─── (правка 381) Lossless-ветка: латент исходника из меты ───
-    // Геометрия цели считается от КАКНВЫ ЛАТЕНТА (она ≥ mp4 из-за кропа
-    // генерации): цель «короткая сторона = targetResolution» должна быть
-    // не меньше канвы, иначе внутренний латент-апскейлер получил бы
-    // уменьшение (запрещено) → fallback на mp4-путь.
+    // ─── (fix 381) Lossless branch: source latent from meta ───
+    // Target geometry is computed from LATENT CANVAS (it is >= mp4 due to crop
+    // in generation): target "short side = targetResolution" must be
+    // no smaller than canvas, otherwise internal latent upscaler would get
+    // downscaling (prohibited) → fallback to mp4 path.
     const tileTarget = Number(body.targetResolution) || 1080
     let sourceLatent: string | undefined
     let latentW = probe.width
     let latentH = probe.height
     if (tileTarget >= Math.min(latentW, latentH)) {
       const resolved = resolveSourceLatent(sub, safeName, probe, (reason) =>
-        console.warn(`[tile-upscale] lossless-ветка отключена (${safeName}): ${reason}`),
+        console.warn(`[tile-upscale] lossless branch disabled (${safeName}): ${reason}`),
       )
       if (resolved && tileTarget >= Math.min(resolved.width, resolved.height)) {
         sourceLatent = resolved.file
@@ -271,8 +271,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // (правка 479) tile-геометрия для монотонного прогресса
-    // Размеры: в latent-ветке — канва латента, иначе — пиксели mp4
+    // (fix 479) tile geometry for monotonic progress
+    // Dimensions: in latent branch — latent canvas, otherwise — mp4 pixels
     const tuSrcW = sourceLatent ? latentW : probe.width
     const tuSrcH = sourceLatent ? latentH : probe.height
     const tuGeom = computeTileGeometry({
@@ -291,14 +291,14 @@ export async function POST(req: NextRequest) {
         buildTileUpscaleWorkflow({
           sourceVideo: destName,
           diffusionModel: cfg.diffusionModel || undefined,
-          sourceAudioPath: destPath, // (правка 488) аудио для latent-ветки
-          videoFormat: getVideoFormatSettings(), // (правка 386)
-          // (правка 381) lossless-ветка: размеры = канва латента, mp4 грузится
-          // только первым кадром + аудио; иначе — как раньше (пиксельный путь)
+          sourceAudioPath: destPath, // (fix 488) audio for latent branch
+          videoFormat: getVideoFormatSettings(), // (fix 386)
+          // (fix 381) lossless branch: dimensions = latent canvas, mp4 loaded
+          // only first frame + audio; otherwise — as before (pixel path)
           ...(sourceLatent && { sourceLatent, sourceFrames: probe.frames }),
           sourceWidth: tuSrcW,
           sourceHeight: tuSrcH,
-          prompt: promptWithTriggers(resolvedPrompt), // (правка 483) триггеры LoRA
+          prompt: promptWithTriggers(resolvedPrompt), // (fix 483) LoRA triggers
           seed: body.seed,
           tileSize: body.tileSize,
           overlap: body.overlap,
@@ -311,14 +311,14 @@ export async function POST(req: NextRequest) {
           denoise: body.denoise,
           steps: body.steps,
           syncTiles: body.syncTiles,
-          ...(customLoras ? { customLoras } : {}), // (правка 483)
+          ...(customLoras ? { customLoras } : {}), // (fix 483)
         }),
         [['tu_upscale']],
-        tuGeom, // (правка 479)
+        tuGeom, // (fix 479)
       ),
     )
     if (!run.ok) {
-      // (правка 344) Откат копии в input/ — иначе осиротевший файл.
+      // (fix 344) Rollback copy in input/ — otherwise orphaned file.
       await fs.unlink(destPath).catch(() => {})
       return NextResponse.json({ error: run.error }, { status: run.status })
     }
@@ -333,10 +333,10 @@ export async function POST(req: NextRequest) {
         source: { width: probe.width, height: probe.height, frames: probe.frames },
         seed: body.seed ?? -1,
         prompt_source: promptSource,
-        ...tileCommonMeta, // (правка 722) параметры тайлов + LoRA
-        // (правка 381) lossless-режим: апскейл стартовал с латента генерации
+        ...tileCommonMeta, // (fix 722) tile params + LoRA
+        // (fix 381) lossless mode: upscale started from generation latent
         ...(sourceLatent && { latent_source: sourceLatent }),
-        // (правка 319) наследуем референсы исходника
+        // (fix 319) inherit source references
         ...(tuMetaRefs.length > 0 && {
           references: tuMetaRefs.map((r) => ({ type: 'image', path: r.path, role: r.role })),
         }),
@@ -349,8 +349,8 @@ export async function POST(req: NextRequest) {
       source: { width: probe.width, height: probe.height, frames: probe.frames },
       promptSource,
       promptUsed: resolvedPrompt ?? '',
-      lossless: !!sourceLatent, // (правка 381)
-      tileInfo: tuGeom ?? undefined, // (правка 479)
+      lossless: !!sourceLatent, // (fix 381)
+      tileInfo: tuGeom ?? undefined, // (fix 479)
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

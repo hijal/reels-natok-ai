@@ -1,362 +1,142 @@
-# История изменений
+# Changelog
 
-Все значимые правки в коде помечены комментарием `(правка NNN)` — по номеру
-можно найти контекст в исходниках. Документ ниже описывает **релизные**
-изменения, а не каждую правку.
+All significant code modifications are tagged with the comment `(fix NNN)` — corresponding
+numbers can be used to locate context in source code. This document outlines **release-level**
+changes rather than individual micro-edits.
 
-Формат: [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
-версии — [SemVer](https://semver.org/lang/ru/).
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+Versioning: [SemVer](https://semver.org/).
 
 ---
 
-## [7.0.0] — не выпущен
+## [7.0.0] — Unreleased
 
-### Основное
+### Highlights
 
-- **Имя процесса в диспетчере задач.** Окно студии отображалось как
-  «electron» — неотличимо от любого другого Electron-приложения, и
-  пользователю было нечем понять, какой процесс прибивать, если студия
-  зависла. Теперь процесс называется **MinimaxH3Studio**: `electron.exe`
-  копируется в `MinimaxH3Studio.exe` (в той же папке `dist`, поэтому Electron
-  находит свои ресурсы как обычно), а в копию вписывается ресурс версии —
-  «Свойства файла» и колонка «Имя продукта» показывают «Minimax H3 Studio»
-  вместо `Electron / GitHub, Inc.`. Штатный `electron.exe` не тронут:
-  `npm install` и `npm run desktop` работают как раньше, а если копии нет —
-  приложение запускается обычным путём. Копия создаётся автоматически при
-  `start.bat` и при `npm run release`.
-- **Полный сброс.** Настройки → Сброс → «Полный сброс (всё)» удаляет все
-  пользовательские данные: сгенерированные видео и кэш ComfyUI, файлы
-  апскейла и его журналы, вложения и историю чатов, промпты, журнал задач и
-  логи, а также очищает `localStorage`/`sessionStorage`. Настройки, LoRA и
-  `config.ini` возвращаются к заводским. Модели и `custom_nodes` не
-  трогаются. После сброса программа перезапускается — её можно передавать
-  другому человеку.
-- **Генерация видео + аудио** — двухпроходный пайплайн MiniMax H3
+- **Process name in Task Manager.** Studio window previously displayed as
+  generic "electron", indistinguishable from other Electron apps.
+  Now the process is named **MinimaxH3Studio**: `electron.exe` is copied
+  to `MinimaxH3Studio.exe` (within the same `dist` folder), with embedded Win32
+  version resources — "File Properties" and "Product Name" column display "Minimax H3 Studio"
+  instead of `Electron / GitHub, Inc.`. Standard `electron.exe` remains intact:
+  `npm install` and `npm run desktop` work as usual. The renamed binary is created automatically
+  during `start.bat` and `npm run release`.
+- **Full Reset.** Settings → Reset → "Full Reset (All)" wipes all user data:
+  generated videos, ComfyUI cache, upscale files and job logs, attachments, chat history,
+  prompts, and journal files, while clearing `localStorage`/`sessionStorage`. Settings, LoRA, and
+  `config.ini` revert to factory defaults. Models and `custom_nodes` remain untouched.
+- **Video + Audio Generation** — two-pass pipeline for MiniMax H3
   (low-res → latent upscale → high-res), H.264 / 24 fps.
-- **Референсы** — до 9 изображений, до 3 видео, до 3 аудио (с обрезкой по
-  секундам). Режим Draft — быстрая однопроходная генерация.
-- **Продление** — продолжение готового видео на N секунд. Схема зафиксирована
-  в `docs/Extend_Video_Workflow.md` §0 (окно контекста 2 с, перекрытие
-  сегментов 56 кадров) — менять только после живого теста.
-- **Refine** — повторная генерация с теми же референсами в большем
-  разрешении (720p–2160p).
-- **Tile Upscale** — чанковый апскейл (экономия VRAM, защита от выбора
-  разрешения меньше исходника).
-- **FPS** — RIFE VFI и FILM VFI (×2–×4).
-- **Upscale (DLSS 5 Visual Enhancer)** — встроенная нативная вкладка:
-  Neural Rendering (шум/тон/структура) и RTX VSR (1–4×, опционально HDR).
-- **LLM-ассистент** — бэкенды `standard` (GGUF в `ComfyUI/models/llm/`),
-  `bonsai` (Ternary Bonsai 2 27B) и `custom` (свой .gguf). Зрение кадров
-  видео-референсов, помощь с промптами.
-- **Голосовой ввод** — встроенный whisper STT (CPU): поле промпта, чат
-  ассистента, редактор промптов.
-- **Очередь генераций** — параллельные задачи, восстановление состояния
-  после перезапуска, авто-очистка.
-- **Кастомные LoRAs** — добавление, удаление, триггер-ворды.
-- **Окно приложения (Electron)** — собственная иконка, скрытый нативный
-  заголовок, встроенная панель консоли, корректное завершение всех
-  дочерних процессов при закрытии окна.
-- **Заставка** — видео-стена из 8 карточек 9:16 (`public/splash-videos/`),
-  ждёт готовности ComfyUI и заходит в приложение сама.
+- **References** — up to 9 images, up to 3 videos, up to 3 audio tracks (with millisecond
+  trimming). Draft mode for fast single-pass generation.
+- **Extension** — chain-extending completed videos by N seconds (2s context window,
+  56-frame segment overlap).
+- **Refine** — re-rendering with identical references at higher resolution (720p–2160p).
+- **Tile Upscale** — chunked tiled upscaling (VRAM-saving, prevents downscaling).
+- **FPS** — frame interpolation with RIFE VFI and FILM VFI (×2–×4).
+- **Upscale (DLSS 5 Visual Enhancer)** — native UI tab:
+  Neural Rendering (noise/tone/structure) and RTX VSR (1–4×, optional HDR).
+- **LLM Assistant** — backends `standard` (GGUF in `ComfyUI/models/llm/`),
+  `bonsai` (Ternary Bonsai 2 27B), and `custom` (custom .gguf). Frame vision
+  for video references and prompt generation.
+- **Voice Input** — integrated whisper STT (CPU): prompt textarea, assistant chat,
+  and prompt editor.
+- **Generation Queue** — parallel tasks, state recovery upon restart, auto-cleanup.
+- **Custom LoRAs** — addition, deletion, and trigger word management.
+- **Desktop Application Shell (Electron)** — custom icons, frameless titlebar,
+  built-in console dialog, clean termination of all child processes on window exit.
+- **Splash Screen** — animated video wall of 8 tiles (`public/splash-videos/`),
+  polls ComfyUI backend readiness before entering studio.
 
-### Инструменты сборки
+### Build Tooling
 
-- `scripts/build.mjs` — production-сборка с хипом Node 8 ГБ
-  (`JavaScript heap out of memory` без него).
-- `scripts/prune-build.mjs` — ужатие собранного бандла: удаляет
-  `.next/cache/` (кэш webpack, ~300 МБ) и обрезает манифесты `.nft.json`
-  (~530 МБ), в которых перечислены ~87 000 файлов деревьев ComfyUI /
-  embedded-Python. Итог: **`.next` 841 МБ → 8 МБ.**
-- `scripts/prepare-electron.mjs` — копия `electron.exe` под именем
-  `MinimaxH3Studio.exe` + вписывание ресурса версии (ProductName,
-  FileDescription, CompanyName, OriginalFilename, InternalName) через
-  Win32 API. Ресурс собирается вручную (`scripts/pe-version.mjs`): в
-  VS_VERSIONINFO выравнивание считается по абсолютному смещению, ключ
-  таблицы строк — шестнадцатеричный, а DWORD в `VarFileInfo\Translation`
-  устроен как MAKELANGUAGE (кодовая страница в младшем слове). Без
-  `VarFileInfo` Windows не читает ресурс вовсе — в свойствах файла пусто.
-- `scripts/launch-electron.mjs` — запуск окна студии через переименованную
-  копию. Прямой запуск exe из `.bat` не годится: бинарник собран как
-  GUI-приложение (PE subsystem 2), и stdout не попадёт в консоль — поэтому
-  скрипт, как и прежний `electron/cli.js`, запускает Electron с
-  `stdio: 'inherit'`.
-- `scripts/clean.mjs` — очистка `.next/`, кэша TypeScript, `__pycache__/`,
-  логов и мусорных файлов в корне.
-- `scripts/release.mjs` — полный цикл релиза
-  (clean → typecheck → build → prune → verify) с проверкой комплектности сборки.
-- `scripts/make-icons.mjs` — перегенерация иконок из `public/logo.svg`.
+- `scripts/build.mjs` — production build allocating 8 GB Node heap
+  (prevents `JavaScript heap out of memory`).
+- `scripts/prune-build.mjs` — compresses compiled bundle: removes `.next/cache/`
+  (webpack cache, ~300 MB) and trims `.nft.json` manifests (~530 MB) tracking
+  ~87,000 ComfyUI / embedded-Python files. Result: **`.next` shrinks from 841 MB → 8 MB.**
+- `scripts/prepare-electron.mjs` — duplicates `electron.exe` to `MinimaxH3Studio.exe`
+  and embeds Win32 version resources (ProductName, FileDescription, CompanyName, OriginalFilename).
+- `scripts/launch-electron.mjs` — runs studio window via renamed binary with `stdio: 'inherit'`.
+- `scripts/clean.mjs` — cleans `.next/`, TypeScript cache, `__pycache__/`, logs, and temporary files.
+- `scripts/release.mjs` — full release cycle (clean → typecheck → build → prune → prepare → verify).
+- `scripts/make-icons.mjs` — regenerates app icons from `public/logo.svg`.
 
-### Хостебельность
+### Codebase Health
 
-- `tsconfig.json` — включены `noUnusedLocals` и `noUnusedParameters`:
-  неиспользуемые импорты и локальные переменные ломают `npm run typecheck`.
-- `package.json` — добавлены метаданные релиза (`description`, `engines`,
-  `license`) и скрипты `check`, `clean`, `release`.
+- `tsconfig.json` — enabled `noUnusedLocals` and `noUnusedParameters`.
+- `package.json` — added release metadata (`description`, `engines`, `license`) and scripts (`check`, `clean`, `release`).
 
-### Исправлено
+### Fixed
 
-- **Размеры моделей в реестре были завышены на ~7%.** В `models-config.ts`
-  ожидаемый размер считался как `gb(N)` = N × 2³⁰ (двоичные ГБ), а сами
-  значения были переписаны из интерфейса HuggingFace, где ГБ **десятичные**
-  (10⁹). Из-за этого `sizeOk()` (файл считается скачанным при отклонении
-  ≤10%) и проверка `completion < 0.9` в `doDownload` едва проходили: у
-  `llm_assistant_q5` запас до порога был 1,1 п.п., и полностью скачанный
-  файл мог быть объявлен недокачанным. Все размеры переписаны **точным числом
-  байт** (= `content-length` на сервере) — теперь совпадение 100.00%.
-- **Устаревшая сборка в релизной папке.** В `.next/` лежал бандл, собранный
-  на другой машине (`D:\Minimax_Studio_V5.5\`) из более ранней версии
-  исходников, плюс каталог `.next/dev/` от dev-сервера. `start.bat` проверяет
-  только наличие `.next\BUILD_ID` и потому запускал **старый** код, пропуская
-  пересборку. Каталог удалён, сборка выполняется из текущих исходников.
-- **Дублирующиеся файлы в `public/`.** Восемь mp4-заставок (~13,8 МБ) лежали
-  одновременно в `public/` и в `public/splash-videos/`; копии в корне удалены.
-- **Резервная копия проекта в релизной папке.** Каталог `.backup-before-fixes/`
-  (полный снимок предыдущей версии, ~3 МБ) исключён из поставки.
-- **Мёртвые API-маршруты.** Удалены 5 маршрутов без единого вызова:
+- **Model sizes in registry were inflated by ~7%.** In `models-config.ts`
+  expected size was calculated as binary gigabytes (`gb(N)` = N × 2³⁰), while
+  HuggingFace reported decimal gigabytes (10⁹). Fixed by using exact byte counts
+  matching `content-length` from servers.
+- **Outdated build in release directory.** Removed stale `.next/` bundle
+  compiled on another workstation. Builds now execute against current source.
+- **Duplicate video files in `public/`.** Removed duplicate splash video copies in root `public/`.
+- **Project backup directory in release folder.** Excluded `.backup-before-fixes/` from repository.
+- **Dead API routes.** Removed 5 unused routes:
   `/api/comfy/refine/plan`, `/api/comfy/copy-to-input`, `/api/config/check`,
-  `/api/loras/reset-patches`, `/api/stt/ensure` — вместе с осиротевшим
-  планировщиком кусков `planChunks` в `src/lib/video-probe.ts`.
-- **Отладочный вывод в консоль браузера.** Убраны 11 `console.log` из
-  клиентского кода, в том числе периодический (раз в 15 с) дамп статуса
-  моделей и выгрузка полного содержимого выходной папки ComfyUI при
-  каждой завершённой генерации. Серверные операционные логи сохранены.
-- **Мёртвый код.** Удалены неиспользуемые экспорты (`extractVideoFrames`,
-  `prepAudioForLlm`, `upscaleLogTail`, `__resetReconcileGuard`,
-  `alignDownGrid`, `MockAdvanced`, `MockStatusCard`, `MentionPreviewProps`,
-  `isUpscaleVideo`), неиспользуемые импорты и локальные переменные, а также
-  целиком мёртвый блок «Resolution helpers» во вкладке «Продление».
-- **Legacy-слой Gradio в Upscale.** В `upscale/` остался старый Gradio-интерфейс
-  DLSS-инструмента, не связанный с нативной вкладкой студии. Удалены
-  `upscale/app.py`, `upscale/start.bat`, 31 модуль из `upscale/src/`
-  (Gradio-вкладки, `src/live/` — Live-режим, `src/settings/`,
-  `src/core/terminal.py`) и пакеты `gradio` + `gradio_client` из встроенного
-  Python (66 МБ). Проверено: мост `bridge.py` поднимается, регистрирует все
-  5 функций (fi-video, nr-image, nr-video, vsr-image, vsr-video) и видит GPU.
-- **Раздутая сборка.** `.next` занимал 841 МБ, из которых 301 МБ — кэш
-  webpack для пересборок, а 532 МБ — манифесты output-file-tracing, в которых
-  перечислены ~87 000 файлов деревьев ComfyUI и встроенного Python (4,4 млн
-  записей суммарно). Ни то, ни другое в рантайме не требуется: `server.js`
-  запускает `next()` из `node_modules`. Добавлен `scripts/prune-build.mjs`,
-  ужимающий сборку до **8 МБ**.
-- **Своя LLM: принимался любой файл.** Путь к своей модели проверялся только
-  на существование — можно было указать `README.md` или картинку, конфиг это
-  принимал, а ошибка всплывала уже при запуске LLM невнятным текстом от
-  llama.cpp. Теперь проверяется расширение (`.gguf` / `.mmproj`), mmproj-файл
-  нельзя выдать за модель, а в сообщении об ошибке пишется, что именно не так.
-- **Своя LLM: модель в подпапке не находилась.** При выборе ПАПКИ поиск .gguf
-  шёл только по её корню, а студия сама раскладывает модели в подпапки
-  (`llm/qwen3.5-9b/…`) — папка с моделью отвергалась с ошибкой «В папке нет
-  .gguf-модели». Теперь поиск идёт на 2 уровня вглубь.
-- **Своя LLM: относительный путь сохранялся как есть.** Он разрешался от
-  текущего каталога процесса и тихо ломался при переносе папки. Теперь путь
-  приводится к абсолютному при сохранении.
-- **Причина ошибки настройки терялась.** API `/api/config` отдаёт конкретную
-  причину («Файл модели не найден: …»), но UI показывал безликое «Ошибка
-  сохранения». Теперь причина доходит до пользователя — в настройках LLM,
-  оптимизации, формате видео, «Голос» и «Свои папки моделей».
-- **Папка голосового ввода не проверялась.** В отличие от папок ComfyUI и
-  Bonsai, `stt.dir` сохранялся как есть — опечатка выяснялась только при
-  запуске дикта. Теперь непустое значение проверяется на существование папки.
-- **«Перенос моделей из старой версии» мог увести живые модели.** Поиск
-  папок `models` идёт на 3 уровня вниз от указанной папки, поэтому при
-  указании корня проекта (или его родителя) в перенос попадала НАСТОЯЩАЯ
-  папка моделей текущей версии. Прежняя проверка ловила только сам
-  target и его подпапки, но не предков. Теперь предок живой папки моделей
-  отклоняется с внятным текстом.
-- **Внешние папки моделей: терялся подпуть.** Поиск модели во внешней папке
-  шёл только по имени файла, без подпапки категории — для моделей вроде
-  `llm/qwen3.5-9b/…` файл не находился. Теперь проверяется и полный подпуть,
-  и голое имя файла.
-- **Документация.** README приведён в соответствие с фактической структурой
-  проекта: исправлены пути к LLM-моделям, список файлов `docs/`, добавлены
-  разделы «Сборка релиза» и «Что копировать получателю».
-- **Подписи размеров в интерфейсе.** Селектор LLM-ассистента дублировал
-  размеры моделей строкой рядом с реестром, и они разошлись с фактическими
-  файлами («~8.6 GB» для Gemma Q5,whose файл весит 8.41 ГБ; «~7.8 GB» для
-  Bonsai PQ2_0,whose файл весит 7.21 ГБ). Теперь подписи берутся из
-  `models-config.ts` — рассинхрона больше не будет.
-- **Справка вкладки «Обучение».** Устаревшие утверждения: LLM-ассистент
-  «по умолчанию Bonsai» (на самом деле Qwen3.5 9B — так в `config.ini` и в
-  `DEFAULT_LLM_MODEL_ID`); размеры Turbo LoRA и Bonsai; вкладка ControlNet
-  «требует H3 Fun ControlNet, базу H3 fl2va и ускоряющую LoRA» и указывала на
-  «категорию ControlNet» в настройках — такой категории нет, а сам режим
-  работает на обычной модели MiniMax H3 и требует только препроцессор
-  глубины Depth Anything V2 Small из категории «Препроцессоры».
+  `/api/loras/reset-patches`, `/api/stt/ensure` alongside orphaned `planChunks`.
+- **Browser console spam.** Removed 11 extraneous `console.log` statements in client components.
+- **Dead code removal.** Cleared unused helper exports, dead imports, and obsolete resolution helpers in Extend tab.
+- **Legacy Gradio layer in Upscale.** Cleaned out old Gradio files (`upscale/app.py`, `upscale/start.bat`, and 31 legacy modules).
+- **Bloated build.** Added `prune-build.mjs` reducing `.next` output from 841 MB to 8 MB.
+- **Custom LLM file validation.** Validates `.gguf` / `.mmproj` file extensions and rejects invalid paths upfront.
+- **Custom LLM subfolder discovery.** Scans 2 levels deep when selecting model directory.
+- **Error messaging.** Surfaced backend error messages clearly in settings UI.
+- **STT folder validation.** Checks that non-empty `stt.dir` exists.
+- **Model migration safeguards.** Prevents active models directory from being selected as migration source.
+- **External model paths.** Validates full subpaths for models located in external directories.
+- **Documentation.** Synced README to actual directory layout and configurations.
+- **Model size labels.** Dynamically derives size labels from `models-config.ts`.
+- **Tutorial & guide copy.** Updated outdated references in Learn view.
 
-### Сравнение двух видео в галерее (правки 728–729)
+### Video Comparison in Gallery (fixes 728–729)
 
-- **Ctrl+клик по двум карточкам** (⌘ на Mac) — выбор для сравнения: рамка и
-  метка **A** / **B** по центру (порядок выбора задаёт сторону: A — «до» слева,
-  B — «после» справа). Третий Ctrl+клик вытесняет первый — больше двух не
-  держим. В тулбаре появляется кнопка **«Сравнить»** и сброс выбора (×).
-- **Полноэкранное окно со шторкой** (`video-compare-dialog.tsx`, портал в
-  `body`, `z-[400]`): два ролика наложены друг на друга, левая часть (A)
-  обрезается по позиции шторки. Шторку тянут мышью, пальцем или кликом по
-  кадру; шапка показывает имена обоих файлов.
-- **Два режима просмотра**: «Видео» — оба ролика играют синхронно (A —
-  ведущий, B догоняет его по времени; A зациклен), «Кадр» — пауза, таймлайн и
-  покадровое листание ←/→ (24 fps), как на стоп-кадре. Пробел — пауза/играть,
-  Esc — закрыть. Звук по умолчанию выключен (звучит только A после включения).
-- Работает во **всех вкладках с галереей**: правка в общем
-  `video-gallery-grid.tsx` (generate, gallery, refine, fps, tile-upscale,
-  face-refine, controlnet, upscale, extend).
+- **Ctrl+click two video cards** (⌘ on Mac) to select for comparison: displays **A** / **B** badges.
+  Toolbar shows **"Compare"** button and clear action (×).
+- **Fullscreen slider dialog** (`video-compare-dialog.tsx`, modal portal):
+  two overlapping videos with draggable split curtain. Supports keyboard and touch dragging.
+- **Two playback modes**: "Video" (synchronized playback) and "Frame" (step-by-step scrubbing).
+- Supported across **all tabs containing the gallery**.
 
-### Папки галереи при переиспользовании (правка 727)
+### Gallery Folders on Re-use (fix 727)
 
-- **Refine, FPS, Tile Upscale, Face Refine и «Продление» уже кладут результат
-  в папку источника** — проверено, поведение сохранено.
-- **Upscale (DLSS 5) теперь тоже.** Импорт из галереи запоминает подпапку, а
-  готовый файл (вместе с `.meta.json`) после рендера переносится в неё из корня
-  output (`/api/upscale/place`). Раньше все апскейлы попадали в общую папку,
-  даже если ролик взят из проекта. Заодно в сайдкар пишется настоящий исходник
-  (`source_video: { filename, subfolder }`) и наследуется его промпт.
-- **ControlNet: выбор папки результата** — как на вкладке «Генерация». По
-  умолчанию берётся папка контрольного видео, можно выбрать любую или общую.
-  Папка исходника при этом по-прежнему используется для чтения промпт-цепочки
-  и меты — смена папки вывода её не ломает.
-- Файл с диска (загруженный в `input/`) папки не имеет: результат идёт в
-  общую, если не выбрать другую.
+- **Refine, FPS, Tile Upscale, Face Refine, and Extend place results into the source video's folder.**
+- **Upscale (DLSS 5) now preserves subfolders too.** Imported gallery videos remember their folder,
+  and rendered outputs move to that folder alongside `.meta.json`.
+- **ControlNet output folder selection** matching the Generate tab.
 
-### Object Refine удалён: вкладка снова Face Refine (правка 726)
+### Face Refine (fix 722)
 
-- **Режимы «Область», «Объект» и «Плоскость» убраны** — на практике они давали
-  заметно худший результат, чем перерисовка лиц. Вкладка вернулась к прежнему
-  виду и называется **«Face Refine»** (id `face-refine` не менялся).
-- Удалены `region-pick-dialog.tsx`, `region-refine-template.ts` и узлы
-  `H3RegionTrackCrop` / `H3RegionStitch` (`region_nodes.py`); регистрация в
-  `__init__.py` тоже убрана. Face-путь не тронут.
-- В галерее и обучении вернулись прежние подписи «Face Refine». Уже
-  сгенерированные файлы `Minimax_Studio_objrefine_*` остаются в галерее, но
-  метки Face Refine больше не получают.
+- **Face Refine tab** — local re-rendering of small faces in completed videos.
+  Extracts face crops, re-generates at 512 canvas with low denoise, and blends back
+  with feathered color matching.
+- **Subject selection methods**:
+  * Rule-based (Largest, Closest to center, Leftmost/Rightmost, Smallest);
+  * **Interactive click on face in source frame** (with frame scrubber);
+  * **Reference photo matching** via insightface embedding.
+- **Live generation preview** via `ModelPreviewOverrideKJ`.
+- **Distant shots human detector** (`person_yolov8m-seg` fallback).
+- Result saves to gallery with "Face Refine" badge and full metadata.
 
-### Refine: пресет Pass 2 (правка 723)
+### Metadata (fix 722)
 
-- **Кнопка «Pass 2» под ползунком «Влияние Refine»** — одним нажатием ставит
-  3 шага и старт σ 0.9035, то есть ровно ту лестницу
-  `0.9035 → 0.6316 → 0.3158 → 0`, которую получает второй проход
-  двухпроходной генерации (`ManualSigmas`). Раньше ползунок упирался в 90 %
-  (σ 0.8998) — совпадение почти точное, но не побайтовое, и проверить это было
-  нечем.
-- **Под слайдером видна фактическая лестница сигм**, которую получит сэмплер
-  (с учётом шагов и «силы»). Ползунок двигает всю лестницу коэффициентом
-  `σ_start / 0.9035`, так что раньше приходилось считать её в голове.
-- Поведение по умолчанию не изменилось: как и было — 90 % для целиком и 80 %
-  для чанков; пресет только подсвечивается, когда активен.
-- `SIGMA_LADDERS` и `refineSigmaLadder` вынесены в `src/lib/comfy/refine-sigmas.ts`
-  без импортов — вкладка Refine показывает лестницу, не затягивая в клиентский
-  бандл 95 КБ шаблона воркфлоу.
+- **Sidecar merging.** Merges pending and client metadata safely without overwriting fields.
+- **Reference array preservation.** Preserves roles and trimming properties per item.
+- **Complete parameter logging.** Captures pipeline, sampler, Veda, Sol-Attn, and effective geometries.
+- **Accurate trim metadata.** Probed resolution and durations for trimmed videos.
+- **Rerun fidelity.** Restores draft mode pipelines accurately from metadata.
 
-### Face Refine (правка 722)
+### Card Badges
 
-- **Новая вкладка «Face Refine»** — перерисовка мелких лиц в готовом ролике.
-  H3 плохо рисует лицо, когда голова занимает малую долю кадра, и это свойство
-  кадра, а не разрешения (на 720p и выше проблема остаётся). Нода находит лицо
-  покадрово, кропит его так, чтобы оно занимало ~40 % холста, перегенерирует
-  крупно с низким denoise и вклеивает обратно **только область лица**
-  (feather + колор-матч). Остальной кадр остаётся исходным.
-  Используется набор нод `ComfyUI-H3-FaceRefine` (Carasibana, MIT) — он уже
-  стоял в `custom_nodes/`, но был нерабочим: не было детектора и
-  python-пакетов. Установлены `ultralytics`, `scenedetect`, `insightface`
-  (torch не тронут) и скачаны `face_yolov8m.pt` + `person_yolov8m-seg.pt`.
-- **Кого именно перерисовывать** — три способа:
-  * правило + номер в рейтинге (`Самое крупное лицо`, `Ближе к центру кадра`,
-    `Самое левое/правое/верхнее/нижнее`, `Самое мелкое`, `Самое уверенное`);
-  * **клик по лицу в кадре исходника** (правка 723) — окно с превью ролика,
-    прокруткой по кадрам и точкой на нужном лице: трекер берёт ближайшее к
-    точке лицо и ведёт этого человека через весь ролик. Правила видят только
-    геометрию кадра, поэтому в толпе и на общих планах выбор «залипал» на одном
-    и том же лице, а точка задаёт цель напрямую. Координаты считаются в
-    пикселях самого видео, номер кадра — по fps из `ffprobe` (элемент `<video>`
-    кадров не отдаёт), так что клик попадает в тот кадр, на котором сделан.
-    **Точка главнее референс-фото:** при подключённом `identity_reference` нода
-    вообще не смотрит на X/Y (в отчёте — «ignored - identity_reference
-    decides») и ведёт того, кто совпал с фото, — поэтому, пока лицо выбрано
-    кликом, фото в воркфлоу не подаётся, а в метаданных остаётся пометка
-    `identity_reference_ignored`;
-  * **референс-фото конкретного человека** — трекер сопоставляет лица по
-    эмбеддингу (insightface, `buffalo_l` скачивается сам при первом запуске) и
-    ведёт этого человека через весь ролик, даже если нумерация лиц сбилась.
-- **Промпт и референсы берутся из сайдкара исходника** — Face Refine должен
-  перерисовывать лицо в той же сцене, поэтому сцена и персонажи те же.
-  Свой промпт можно задать вручную.
-- Параметры под наше железо: канва 512 (дешевле 768 в 2.25× по latent-токенам),
-  4 шага (наша модель 4-шаговая), базовый denoise 0.35. Денойз из SDXL-семейства
-  не переносится: H3 — flow matching со сдвигом 12, denoise 0.25 → эффективная
-  sigma 0.800 (кадр переписывается целиком).
-- **Денойз масштабируется по размеру лица** в кадре: мелкие лица получают
-  полную силу, крупные — множитель 0.35 (у них уже есть детали).
-- **Живое превью генерации** — как на вкладках «Генерация», «Refine» и
-  «Tile Upscale»: KJ-нода `ModelPreviewOverrideKJ` в model-цепочке шлёт кадр на
-  каждом шаге сэмплинга, статус внизу показывает его через
-  `/api/comfy/preview`. Стандартные превью в этой сборке отключены
-  (`--preview-method NoPreviews`), без KJ-ноды окно оставалось пустым.
-- **«Далёкие планы» — детектор человека** (`fallback_detector`). На кадрах, где
-  лица не видно (человек спиной, в капюшоне), трекер берёт бокс
-  `person_yolov8m-seg` и считает головой его верх — это точнее, чем
-  интерполировать между соседними найденными лицами. Папку детекторов студия
-  теперь регистрирует сама (`extra_model_paths.yaml` → категория `ultralytics`
-  → `models/ultralytics`), иначе нода видела только дефолтный
-  `face_yolov8m.pt`; значения комбо резолвятся по `/object_info`, чтобы имена с
-  подпапкой (`bbox/face_yolov8m.pt`) совпадали со списком бэкенда.
-- Результат — обычное видео в общей галерее, с бейджем «Face Refine»
-  (салатовая метка; сама вкладка — жёлтая) и полными метаданными
-  (canvas/denoise/steps/правило выбора/сид/источник/время).
+- Distinct hierarchy for card badges: Edit → DLSS 5 → Upscale → Extend → Tile → ControlNet → Refine → FPS → Draft.
 
-### Метаданные (правка 722)
+### Known Limitations
 
-- **Сайдкар перезаписывался целиком — часть данных терялась.** Один и тот же
-  файл описывали ДВА независимых писателя: серверный (`pending-meta`:
-  `recordPendingMeta` → `finalizePendingMeta`) и клиентский быстрый путь
-  (`POST /api/comfy/metadata`). Наборы полей у них различались, а запись
-  перетирала файл целиком — «кто отработал последним, тот и вычеркнул» поля
-  другого. Реально применяемые кастомные LoRA (`lora`) писал только сервер, а
-  клиент их не знал и затирал. Теперь запись **сливает** сайдкар: пришедшие
-  поля перетирают старые, незнакомые старые — сохраняются. Слияние
-  ограничено одной задачей (`job_id`): после рестарта ComfyUI счётчик имён
-  сбрасывается, и старый файл с тем же именем не смешивается с новым.
-- **`references` сливались «по-человечески».** Клиент знает роль референса
-  (`imageIntent`: персонаж/сцена/стиль/композиция), сервер — обрезку
-  аудио-референсов (`trim_start`/`trim_end`) и признак сжатого видео-рефa
-  (`compress`). Обычная перезапись теряла то или другое. Теперь массив
-  сливается по элементам (ключ — `path`): состав от пришедших, недостающие
-  поля сохраняются, `role` берётся непустой.
-- **Серверная запись не знала части полей клиентской.** Добавлены
-  `output_subfolder`, `draft_steps` (и исправлен `pass1_steps` драфта),
-  `flf_resolution`, а для продления — `extend_source_video`,
-  `extend_clips_count`, `extend_prompts` (раньше писались только
-  `source_video`/`extend_clips` — имена и формы расходились, и потребитель
-  зависел от того, кто записал последним).
-- **В метаданных режимов Refine / FPS / Tile Upscale / ControlNet / Upscale
-  (DLSS 5) не было половины параметров.** Не записывались пайплайн, шаги,
-  сэмплеры, настройки Sol-Attn и Veda, фактически применённые LoRA, а для
-  FPS / Tile Upscale / ControlNet — ещё и геометрия ИТОГОВОГО файла (писались
-  параметры входа: у FPS кадров в `×multiplier` больше, чем в исходнике).
-  Теперь всё это пишется, а итоговая геометрия добирается пробой самого
-  файла (`finalizePendingMeta`).
-- **Обрезанное видео врало о себе.** Сайдкар обрезки наследовал
-  `video_length`/`duration_seconds`/`resolution` исходника и ссылку на его
-  латент. Теперь геометрия — фактическая (проба файла), латент убран,
-  добавлена метка `edited: true`.
-- **«Повторить» терял режим.** Сайдкар хранил `pipeline` (`draft`/`full`) и
-  `draft_steps`, но форма их не подхватывала: повтор драфтового ролика
-  открывался в режиме «Полное» — то есть это была совсем другая генерация.
-  Теперь пайплайн и шаги драфта восстанавливаются.
-
-### Бейджи на карточках галереи
-
-- **Обрезанное видео помечалось «Draft» вместо «Edited».** Бейдж «Draft»
-  рисовался ОТДЕЛЬНО от бейджа источника, оба в одной точке (сверху слева).
-  Сайдкар обрезки наследует `pipeline: 'draft'` от исходника, поэтому на
-  превью висели ДВА бейджа, и красный «Draft» перекрывал жёлтый «Edited».
-  Теперь метка на карточке всегда ОДНА, с приоритетом источника:
-  обрезка → DLSS 5 → Upscale → Extend → Tile → ControlNet → Refine → FPS →
-  Draft. «Draft» показывается, только если другого источника нет.
-
-### Известные ограничения
-
-- Требуется NVIDIA GPU (12+ ГБ VRAM рекомендуется, минимум 8 ГБ) и
-  драйвер CUDA 12.x.
-- Live-режим (real-time / HLS) в студию **не входит**: это отдельный
-  инструмент (свой HLS-сервер и плеер), а не обработка файла. Вкладка
-  «Upscale» работает только с готовыми видеофайлами.
-- ESLint в проекте не используется; проверка качества — `npm run typecheck`.
+- Requires NVIDIA GPU (12+ GB VRAM recommended, 8 GB minimum) and CUDA 12.x driver.
+- Live real-time HLS streaming is not part of this studio package.
+- ESLint is not included; run `npm run typecheck` for static analysis.

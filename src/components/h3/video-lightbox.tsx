@@ -33,8 +33,8 @@ interface VideoLightboxProps {
   onDelete?: (filename: string, subfolder: string) => void | Promise<void>
 }
 
-/** (правка 256) Громкость/мьют лайтбокса — в localStorage: жалоба с YouTube
- *  «каждый раз приходится убавлять заново, не запоминается». */
+/** (fix 256) Lightbox volume/mute in localStorage: YouTube user feedback
+ *  "have to lower it every time, doesn't remember". */
 const VOLUME_KEY = 'minimax.lightbox.volume'
 
 function readStoredVolume(): number {
@@ -53,7 +53,7 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  /** Bumped by "Повторить" — remounts the <video> with a fresh request. */
+  /** Bumped by "Retry" — remounts the <video> with a fresh request. */
   const [retryCount, setRetryCount] = useState(0)
   /** Set when the video element fails to load (broken cache entry etc.). */
   const [loadError, setLoadError] = useState(false)
@@ -101,12 +101,12 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
     setLoadError(false)
   }, [index, retryCount])
 
-  // (правка 352) Таймер авто-скрытия контролов — гасим при unmount,
-  // иначе колбэк стрелял по размонтированному компоненту.
+  // (fix 352) Controls auto-hide timer — clear on unmount,
+  // otherwise the callback fired on unmounted component.
   useEffect(() => () => clearTimeout(controlsTimer.current), [])
 
-  // Страховка: если текущий файл исчез из списка (удалён извне), закрываем
-  // модалку явно — рендер null оставил бы её «зависшей» без возможности Esc.
+  // Safeguard: if current file disappeared from list (deleted externally), close
+  // modal explicitly — rendering null would leave it hanging without Esc.
   const hasFile = index >= 0 && index < files.length
   useEffect(() => {
     if (!hasFile) onClose()
@@ -229,12 +229,12 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
         {/* Load error overlay with retry */}
         {loadError && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 pointer-events-auto">
-            <p className="text-sm text-white/80">Не удалось загрузить видео</p>
+            <p className="text-sm text-white/80">Failed to load video</p>
             <button
               onClick={() => setRetryCount((n) => n + 1)}
               className="px-4 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-medium transition-colors"
             >
-              Повторить
+              Retry
             </button>
           </div>
         )}
@@ -272,7 +272,7 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
               href={file.url}
               download={file.filename}
               className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-              title="Скачать"
+              title="Download"
             >
               <DownloadIcon className="w-4 h-4" />
             </a>
@@ -284,20 +284,20 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
                     onClick={() => void handleDelete()}
                     className="px-3 py-1.5 rounded-lg bg-red-500/80 hover:bg-red-500 text-white text-xs font-medium transition-colors"
                   >
-                    Удалить
+                    Delete
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
                     className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs transition-colors"
                   >
-                    Отмена
+                    Cancel
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   className="p-2 rounded-lg bg-white/10 hover:bg-red-500/40 text-white transition-colors"
-                  title="Удалить"
+                  title="Delete"
                 >
                   <Trash2Icon className="w-4 h-4" />
                 </button>
@@ -307,7 +307,7 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
             <button
               onClick={onClose}
               className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors ml-1"
-              title="Закрыть (Esc)"
+              title="Close (Esc)"
             >
               <XIcon className="w-4 h-4" />
             </button>
@@ -356,7 +356,7 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
                 className="w-20 h-1 accent-cyan-500 cursor-pointer"
-                title={`Громкость: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
               />
 
               {/* Time */}
@@ -369,10 +369,10 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
             <div className="flex items-center gap-1.5">
               {files.length > 1 && (
                 <>
-                  <button onClick={() => goTo(index - 1)} className="p-1.5 text-white/70 hover:text-white transition-colors" title="Предыдущее">
+                  <button onClick={() => goTo(index - 1)} className="p-1.5 text-white/70 hover:text-white transition-colors" title="Previous">
                     <ChevronLeftIcon className="w-4 h-4" />
                   </button>
-                  <button onClick={() => goTo(index + 1)} className="p-1.5 text-white/70 hover:text-white transition-colors" title="Следующее">
+                  <button onClick={() => goTo(index + 1)} className="p-1.5 text-white/70 hover:text-white transition-colors" title="Next">
                     <ChevronRightIcon className="w-4 h-4" />
                   </button>
                 </>
@@ -411,8 +411,8 @@ export function VideoLightbox({ files, initialIndex, onClose, onDelete }: VideoL
         <div className="absolute bottom-[80px] left-1/2 -translate-x-1/2 flex items-center gap-4 text-[10px] text-white/30 pointer-events-none">
           <span>Space — Play/Pause</span>
           <span>M — Mute</span>
-          <span>←→ — Навигация</span>
-          <span>Esc — Закрыть</span>
+          <span>←→ — Navigation</span>
+          <span>Esc — Close</span>
         </div>
       )}
     </motion.div>

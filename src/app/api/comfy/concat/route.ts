@@ -4,19 +4,19 @@ import path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { writeMetaSidecar } from '@/lib/pending-meta'
 import { mergeExtendMeta } from '@/lib/extend-meta'
 import { resolveFfmpeg } from '@/lib/thumb'
 import { probeVideoFile } from '@/lib/video-probe'
 import { ffmpegVideoArgs } from '@/lib/video-format'
-import { getVideoFormatSettings } from '@/lib/video-format-server' // (правка 386)
+import { getVideoFormatSettings } from '@/lib/video-format-server' // (fix 386)
 
 const execFileAsync = promisify(execFile)
 
 /**
- * (правка 716) Рекурсивный поиск файла по имени в подпапках (глубина ≤ depth).
- * Пропускает служебные точки и папки, начинающиеся с '.'.
+ * (fix 716) Recursive search for file by name in subfolders (depth ≤ depth).
+ * Skips service dots and folders starting with '.'.
  */
 async function findFileRecursive(root: string, fileName: string, depth: number): Promise<string | null> {
   if (depth < 0) return null
@@ -75,35 +75,35 @@ export async function POST(req: NextRequest) {
       fade?: number
       inputs?: InputSpec[]
       outName?: string
-      /** (правка 213) Подрезать КОНЕЦ первого входа (исходник) на N секунд —
-       * стык «исходник → клип 0» садится на перекрытие шева из правки 210. */
+      /** (fix 213) Trim END of first input (source) by N seconds —
+       * seam "source → clip 0" sits on seam overlap from fix 210. */
       sourceTrimSeconds?: number
-      /** (правка 218) Кроссфейд именно на ПЕРВОМ стыке «исходник → клип 0».
-       * Там контент перекрытия одинаков с обеих сторон, поэтому длинный
-       * фейд невидим как «растворение», но полностью накрывает смену
-       * характера картинки (VAE-раундтрип + pass 2: микроконтраст,
-       * резкость). Между клипами остаётся короткий `fade`. */
+      /** (fix 218) Crossfade specifically on FIRST seam "source → clip 0".
+       * Overlap content is identical on both sides, so long
+       * fade is invisible as a "dissolve", but completely covers change
+       * of image character (VAE roundtrip + pass 2: microcontrast,
+       * sharpness). Short `fade` remains between clips. */
       seamFadeSeconds?: number
-      /** (правка 250) Подрезать ГОЛОВУ входа i≥1 на N секунд — warmup-префикс
-       *  клипа (дублированные моменты хвоста клипа i-1), не съеденный кроссфейдом.
-       *  Без этой подрезки короткий fade оставлял бы повтор ~0.8 c на стыке. */
+      /** (fix 250) Trim HEAD of input i≥1 by N seconds — warmup prefix
+       *  of clip (duplicated moments of tail of clip i-1), not consumed by crossfade.
+       *  Without this trim, short fade would leave a repeat of ~0.8 s at the seam. */
       headTrims?: number[]
-      /** (правка 260) Параметры метаданных для сайдкара итогового файла. */
+      /** (fix 260) Metadata parameters for output file sidecar. */
       meta?: Record<string, unknown>
-      /** (правка 365) Подпапка output для итогового файла ('' = корень) —
-       *  extend-склейка кладёт combined-файл в папку оригинала. */
+      /** (fix 365) Output subfolder for final file ('' = root) —
+       *  extend concat places combined file in original's folder. */
       outSubfolder?: string
-      /** (правка 384) Комбинированный файл УЖЕ собран воркфлоу продления
-       *  (сегментный decode + один encode) — ffmpeg не нужен, только
-       *  метаданные с ФАКТИЧЕСКИМИ параметрами итога (probe файла):
-       *  video_length/resolution/duration для lossless-резолвера латента
-       *  и диалога меты. outName = имя готового файла в output/. */
+      /** (fix 384) Combined file ALREADY assembled by extension workflow
+       *  (segmented decode + single encode) — ffmpeg not needed, only
+       *  metadata with ACTUAL result parameters (file probe):
+       *  video_length/resolution/duration for latent lossless resolver
+       *  and meta dialog. outName = ready file name in output/. */
       metaOnly?: boolean
     }
-    // (правка 716) Числа валидируются: раньше body.fade = "abc" давал NaN
-    // (Math.min(3, "abc") → NaN), и в xfade уходило duration=NaN → ffmpeg
-    // падал с 500 вместо внятного 400. headTrims без проверки массива давал
-    // ".map is not a function" → тоже 500.
+    // (fix 716) Numbers are validated: previously body.fade = "abc" yielded NaN
+    // (Math.min(3, "abc") → NaN), and xfade received duration=NaN → ffmpeg
+    // crashed with 500 instead of clear 400. headTrims without array check gave
+    // ".map is not a function" → also 500.
     const num = (v: unknown, def: number, lo: number, hi: number): number => {
       const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
       if (!Number.isFinite(n)) return def
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       inputs.push({ name: body.generated.trim(), subfolder: '', kind: 'output' })
     }
 
-    // (правка 384) metaOnly не требует двух входов — ffmpeg не вызывается
+    // (fix 384) metaOnly does not require two inputs — ffmpeg is not invoked
     if (!body.metaOnly && inputs.length < 2) {
       return NextResponse.json(
         { error: 'Provide at least 2 inputs (source + generated, or inputs[] array)' },
@@ -141,19 +141,19 @@ export async function POST(req: NextRequest) {
     const outputDir = cfg.outputDir
     const outputRoot = path.resolve(outputDir)
 
-    // ─── (правка 384) metaOnly: файл уже собран воркфлоу — только метаданные ───
+    // ─── (fix 384) metaOnly: file already assembled by workflow — metadata only ───
     if (body.metaOnly) {
       let mName = (body.outName || '').replace(/[\\/:*?"<>|]/g, '_')
       mName = path.basename(mName)
       if (!mName) {
         return NextResponse.json({ error: 'outName required for metaOnly' }, { status: 400 })
       }
-      // (правка 716) Многоуровневый outSubfolder — как у остальных файловых
-      // роутов (sanitizeFolderPath, правка 495). Раньше принимался только
-      // ОДИН сегмент, а клиент передаёт сюда output_subfolder генерируемого
-      // ролика (use-video-gen.ts) — для вложенной папки проекта вида
-      // 'project/scenes' concat отвечал 400 Invalid outSubfolder, и итоговое
-      // видео не создавалось.
+      // (fix 716) Multi-level outSubfolder — same as other file
+      // routes (sanitizeFolderPath, fix 495). Previously only
+      // ONE segment was accepted, whereas the client sends output_subfolder of the generated
+      // clip here (use-video-gen.ts) — for a nested project folder like
+      // 'project/scenes' concat responded 400 Invalid outSubfolder, and the final
+      // video was not created.
       const mSub = sanitizeFolderPath(body.outSubfolder || '')
       const mPath = path.resolve(path.join(outputDir, ...(mSub ? mSub.split('/') : []), mName))
       if (mPath !== outputRoot && !mPath.startsWith(outputRoot + path.sep)) {
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
         if (pr.width > 0 && pr.height > 0 && pr.frames > 0) {
           actual = { width: pr.width, height: pr.height, frames: pr.frames, durationSec: pr.durationSec }
         }
-      } catch { /* без фактических полей — запишем как прислали */ }
+      } catch { /* without actual fields — record as received */ }
       if (body.meta && typeof body.meta === 'object') {
         try {
           writeMetaSidecar(mName, mSub, {
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
             combined_from: inputs.map((i2) => i2.name),
             created_at: Date.now() / 1000,
           })
-        } catch { /* сайдкар не критичен */ }
+        } catch { /* sidecar is not critical */ }
       }
       return NextResponse.json({
         filename: mName,
@@ -194,9 +194,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Resolve each input path.
-    // (правка 339) Валидация name/subfolder ДО join: basename отсекает
-    // разделители, а dot-сегменты ('.', '..') отклоняем — иначе path.join
-    // уходил выше outputDir/inputDir (path traversal через входы склейки).
+    // (fix 339) Validation of name/subfolder BEFORE join: basename strips
+    // separators, and dot segments ('.', '..') are rejected — otherwise path.join
+    // escaped above outputDir/inputDir (path traversal via concat inputs).
     const inputRoot = path.resolve(inputDir)
     const resolvedPaths: string[] = []
     for (const it of inputs) {
@@ -206,8 +206,8 @@ export async function POST(req: NextRequest) {
       if (!safeItName || safeItName === '.' || safeItName === '..') {
         return NextResponse.json({ error: `Invalid input name: ${it.name}` }, { status: 400 })
       }
-      // (правка 495) Вложенные папки: subfolder — многоуровневый
-      // относительный путь ('a/b'); сегменты '.'/'..' отбрасываются.
+      // (fix 495) Nested folders: subfolder is a multi-level
+      // relative path ('a/b'); '.'/'..' segments are stripped.
       const subSegs = sanitizeFolderPath(it.subfolder || '').split('/').filter(Boolean)
       let p = path.join(base, ...subSegs, safeItName)
       const resolvedP = path.resolve(p)
@@ -215,9 +215,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Invalid path for input: ${safeItName}` }, { status: 400 })
       }
       if (!existsSync(p) && it.kind === 'output') {
-        // (правка 716) Fallback: рекурсивный поиск по подпапкам output/.
-        // Раньше сканировались только папки ПЕРВОГО уровня, и клип,
-        // лежащий в 'project/scenes', не находился → 404 Input not found.
+        // (fix 716) Fallback: recursive search in output/ subfolders.
+        // Previously only FIRST level folders were scanned, and a clip
+        // located in 'project/scenes' was not found → 404 Input not found.
         try {
           const found = await findFileRecursive(outputDir, safeItName, 3)
           if (found) p = found
@@ -244,10 +244,10 @@ export async function POST(req: NextRequest) {
       infos.push(info)
     }
 
-    // (правка 224) Цель = ПЕРВЫЙ КЛИП (infos[1]), не исходник: клип
-    // генерится на канве pass 1 (правка 224 — аспект точный), и масштабирование
-    // его обратно под исходник вернуло бы растяжение. Исходник равномерно
-    // масштабируется под итог (~2% — незаметно). Fallback infos[0].
+    // (fix 224) Target = FIRST CLIP (infos[1]), not source: clip
+    // is generated on pass 1 canvas (fix 224 — exact aspect), and scaling
+    // it back to match source would reintroduce stretching. Source is evenly
+    // scaled to match output (~2% — imperceptible). Fallback infos[0].
     const targetW = infos[1]?.width || infos[0]?.width || 1280
     const targetH = infos[1]?.height || infos[0]?.height || 704
     const targetFps = 24
@@ -258,19 +258,19 @@ export async function POST(req: NextRequest) {
     const filterParts: string[] = []
     const trim0 = sourceTrim > 0 && !!infos[0] && infos[0].duration > sourceTrim + 0.05
     for (let i = 0; i < infos.length; i++) {
-      // (правка 213) Первый вход (исходник) с sourceTrim: режем ХВОСТ
-      // ровно на длительность перекрытия шва (правка 210 ноды) — по
-      // времени, аудио тем же числом.
+      // (fix 213) First input (source) with sourceTrim: trim TAIL
+      // by exactly the seam overlap duration (node fix 210) — by
+      // time, audio by the same number.
       if (i === 0 && trim0) {
         const keep = (infos[0].duration - sourceTrim).toFixed(4)
         filterParts.push(`[${i}:v]fps=${targetFps},trim=duration=${keep},setpts=PTS-STARTPTS,scale=${evW}:${evH},setsar=1[v${i}]`)
         filterParts.push(`[${i}:a]aresample=44100,atrim=duration=${keep},asetpts=PTS-STARTPTS[a${i}]`)
       } else {
-        // (правка 239) Убран in_color_matrix — это НЕ валидный ffmpeg фильтр,
-        // он ломает filter graph. Цвет уже корректен без него (правка 237 —
-        // убран тон-матчинг для клипов i>0).
-        // (правка 250) Головы входов i≥1: срез warmup-префикса, не съеденного
-        // фейдом (дублированные моменты хвоста предыдущего клипа).
+        // (fix 239) Removed in_color_matrix — this is NOT a valid ffmpeg filter,
+        // it breaks filter graph. Color is already correct without it (fix 237 —
+        // tone matching removed for clips i>0).
+        // (fix 250) Heads of inputs i≥1: trim warmup prefix not consumed
+        // by fade (duplicated moments of previous clip's tail).
         const ht = headTrims[i] || 0
         const headCut = ht > 0.001 ? `trim=start=${ht.toFixed(4)},setpts=PTS-STARTPTS,` : ''
         filterParts.push(`[${i}:v]${headCut}scale=${evW}:${evH},setsar=1,fps=${targetFps}[v${i}]`)
@@ -278,21 +278,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (fadeSec === 0) {
-      // (правка 292) Гибридный режим: fade=0 + seamFadeSec>0 →
-      // первый стык (исходник→клип 0) — xfade с seamFadeSec,
-      // остальные стыки — hard cut. Без seamFadeSec — все hard cut.
+      // (fix 292) Hybrid mode: fade=0 + seamFadeSec>0 →
+      // first seam (source→clip 0) is xfade with seamFadeSec,
+      // other seams are hard cut. Without seamFadeSec — all hard cut.
       if (seamFadeSec > 0.001 && infos.length >= 2) {
-        // xfade на первом стыке: [v0][v1]xfade→[v1]
+        // xfade on first seam: [v0][v1]xfade→[v1]
         const offset_0 = Math.max(0, (infos[0].duration - (trim0 ? sourceTrim : 0)) - seamFadeSec)
         filterParts.push(
           `[v0][v1]xfade=transition=fade:duration=${seamFadeSec.toFixed(3)}:offset=${offset_0.toFixed(3)}[v1]`,
         )
-        // concat для остальных: [v1][v2][v3]...concat
+        // concat for the rest: [v1][v2][v3]...concat
         const rest = infos.slice(1).map((_, i) => `[v${i + 1}]`).join('')
         filterParts.push(`${rest}concat=n=${infos.length - 1}:v=1:a=0[vout]`)
-        // Audio: acrossfade на первом стыке, потом concat
+        // Audio: acrossfade on first seam, then concat
         if (trim0) {
-          // [0:a] уже подрезан
+          // [0:a] already trimmed
         } else {
           filterParts.push(`[0:a]aresample=44100[a0]`)
         }
@@ -305,11 +305,11 @@ export async function POST(req: NextRequest) {
         const restA = infos.slice(1).map((_, i) => `[a${i + 1}]`).join('')
         filterParts.push(`${restA}concat=n=${infos.length - 1}:v=0:a=1[aout]`)
       } else {
-        // Чистый hard-cut concat: no overlap, full duration preserved.
+        // Pure hard-cut concat: no overlap, full duration preserved.
         const videoConcat = infos.map((_, i) => `[v${i}]`).join('') + `concat=n=${infos.length}:v=1:a=0[vout]`
         filterParts.push(videoConcat)
         for (let i = 0; i < infos.length; i++) {
-          if (i === 0 && trim0) continue // [0:a] уже потреблён в подрезке
+          if (i === 0 && trim0) continue // [0:a] already consumed in trim
           const ht = i >= 1 ? (headTrims[i] || 0) : 0
           const ahead = ht > 0.001 ? `atrim=start=${ht.toFixed(4)},asetpts=PTS-STARTPTS,` : ''
           filterParts.push(`[${i}:a]${ahead}aresample=44100[a${i}]`)
@@ -318,39 +318,39 @@ export async function POST(req: NextRequest) {
         filterParts.push(audioConcat)
       }
     } else {
-      // N-way xfade chain (правка 182, финальная):
-      // После каждого xfade промежуточный вывод имеет длительность
+      // N-way xfade chain (fix 182, final):
+      // After each xfade intermediate output duration is
       //   prev_out_dur + d[next] - fadeSec
-      // Поэтому offset следующего xfade считается от БЕГУЩЕЙ длительности
-      // промежуточного вывода, а НЕ от суммы входных клипов.
+      // Therefore offset of next xfade is calculated from RUNNING duration
+      // of intermediate output, NOT from sum of input clips.
       //
-      // Верификация: 3 клипа по 5.17s, fade=1s
+      // Verification: 3 clips of 5.17s each, fade=1s
       //   running = 5.17
       //   offset_0 = 5.17 - 1 = 4.17 → out dur = 5.17+5.17-1 = 9.34
       //   offset_1 = 9.34 - 1 = 8.34 → out dur = 9.34+5.17-1 = 13.51
-      //   ИТОГО: 13.51s ✅ (совпадает с ручным ffmpeg)
+      //   TOTAL: 13.51s ✅ (matches manual ffmpeg)
       //
-      // Старая формула (cumulative += d[i]; offset = cumulative - fadeSec)
-      // давала offset_1 = 9.34, что ВЫХОДИЛО за пределы промежуточного вывода
-      // (длительность 9.34s), ffmpeg обрезал хвост и итог был 9.33s.
+      // Old formula (cumulative += d[i]; offset = cumulative - fadeSec)
+      // produced offset_1 = 9.34, which EXCEEDED the boundary of intermediate output
+      // (duration 9.34s), ffmpeg trimmed the tail and output was 9.33s.
       let running = infos[0].duration - (trim0 ? sourceTrim : 0)
       for (let i = 0; i < infos.length - 1; i++) {
-        // (правка 218) Первый стык — «исходник → клип 0»: контент с обеих
-        // сторон одинаков (перекрытие шева), длинный фейд невидим, но
-        // накрывает смену характера картинки. Остальные стыки — короткий fade.
+        // (fix 218) First seam — "source → clip 0": content on both
+        // sides is identical (seam overlap), long fade is invisible, but
+        // covers change in image character. Other seams — short fade.
         const f = i === 0 ? seamFadeSec : fadeSec
         const offset_i = Math.max(0, running - f)
         filterParts.push(
           `[v${i}][v${i + 1}]xfade=transition=fade:duration=${f}:offset=${offset_i.toFixed(3)}[v${i + 1}]`,
         )
-        // (правка 250) следующий вход короче на свою головную подрезку
+        // (fix 250) next input is shorter by its head trim
         running += infos[i + 1].duration - (headTrims[i + 1] || 0) - f
       }
 
       // Audio chain: acrossfade between consecutive clips.
-      // (правка 250) головная подрезка синхронно с видеорядом.
+      // (fix 250) head trim synchronous with video stream.
       for (let i = 0; i < infos.length; i++) {
-        if (i === 0 && trim0) continue // [0:a] уже потреблён в подрезке
+        if (i === 0 && trim0) continue // [0:a] already consumed in trim
         const ht = i >= 1 ? (headTrims[i] || 0) : 0
         const ahead = ht > 0.001 ? `atrim=start=${ht.toFixed(4)},asetpts=PTS-STARTPTS,` : ''
         filterParts.push(`[${i}:a]${ahead}aresample=44100[a${i}]`)
@@ -363,14 +363,14 @@ export async function POST(req: NextRequest) {
     let outName = (body.outName || `Minimax_Studio_combined_${infos.length}`).replace(/[\\/:*?"<>|]/g, '_')
     outName = path.basename(outName)
     if (!/\.mp4$/i.test(outName)) outName = outName + '.mp4'
-    // (правка 342) Фиксированное имя + '-y' молча перезаписывало прежний
-    // результат склейки — counter-цикл, как в /api/comfy/trim.
-    // (правка 716) Многоуровневый outSubfolder (как у остальных файловых
-    // роутов — sanitizeFolderPath, правка 495). Раньше принимался только
-    // ОДИН сегмент, а клиент передаёт сюда output_subfolder генерируемого
-    // ролика (use-video-gen.ts) — для вложенной папки проекта вида
-    // 'project/scenes' concat отвечал 400 Invalid outSubfolder, и итоговое
-    // видео не создавалось.
+    // (fix 342) Fixed name + '-y' quietly overwritten previous
+    // concat result — counter loop, same as in /api/comfy/trim.
+    // (fix 716) Multi-level outSubfolder (same as other file
+    // routes — sanitizeFolderPath, fix 495). Previously only
+    // ONE segment was accepted, whereas the client sends output_subfolder of the generated
+    // clip here (use-video-gen.ts) — for a nested project folder like
+    // 'project/scenes' concat responded 400 Invalid outSubfolder, and the final
+    // video was not created.
     const outSub = sanitizeFolderPath(body.outSubfolder || '')
     const outExt = path.extname(outName)
     const outStem = outName.slice(0, outName.length - outExt.length)
@@ -396,15 +396,15 @@ export async function POST(req: NextRequest) {
     const vOutLabel = fadeSec === 0 ? 'vout' : `v${infos.length - 1}`
     const aOutLabel = fadeSec === 0 ? 'aout' : `a${infos.length - 1}`
 
-    // (правка 213а) outPath идёт ПОСЛЕДНИМ: раньше -map [a..]/-c:a приклеивались
-    // ПОСЛЕ имени файла — ffmpeg считал их опциями фантомного «второго
-    // выхода», [a1] оставался незамкнутым, и ВСЕ склейки теряли аудио.
+    // (fix 213a) outPath goes LAST: previously -map [a..]/-c:a were appended
+    // AFTER the filename — ffmpeg treated them as options of phantom "second
+    // output", [a1] remained unbound, and ALL concats lost audio.
     const baseArgs = [
       '-hide_banner', '-loglevel', 'error',
       ...inputArgs,
       '-filter_complex', filterParts.join(';'),
       '-map', `[${vOutLabel}]`,
-      // (правка 386) кодек/качество — из [video] настроек студии
+      // (fix 386) codec/quality — from studio [video] settings
       '-preset', 'fast', ...ffmpegVideoArgs(getVideoFormatSettings()),
       '-movflags', '+faststart',
       '-y',
@@ -432,8 +432,8 @@ export async function POST(req: NextRequest) {
             '-filter_complex', noAudioFilter.join(';'),
             '-map', `[${vOutLabel}]`,
             '-an',
-            // (правка 386) кодек/качество — из [video] настроек студии
-      '-preset', 'fast', ...ffmpegVideoArgs(getVideoFormatSettings()),
+            // (fix 386) codec/quality — from studio [video] settings
+            '-preset', 'fast', ...ffmpegVideoArgs(getVideoFormatSettings()),
             '-movflags', '+faststart',
             '-y',
             outPath,
@@ -445,17 +445,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // (правка 260) Метаданные комбинированного файла (например, итог
-    // продления): вызывающая сторона передаёт готовые параметры — сюда
-    // добавляем только служебные поля. Без meta сайдкар не пишем (роут
-    // используют и другие вызовы).
+    // (fix 260) Metadata of combined file (e.g. extension
+    // result): caller passes prepared parameters — here
+    // we only add service fields. Without meta, sidecar is not written (route
+    // is used by other callers too).
     if (body.meta && typeof body.meta === 'object') {
       try {
-        // (правка 293) Наследование от сайдкара исходника продления
-        // (references / цепочка extend_prompts / source_prompt — mergeExtendMeta
-        // в src/lib/extend-meta.ts). Ищем сайдкар
-        // в корне output и, как fallback, в подпапках первого уровня (как
-        // входы выше). Нет сайдкара — пишем meta как прислали.
+        // (fix 293) Inheritance from extension source sidecar
+        // (references / extend_prompts chain / source_prompt — mergeExtendMeta
+        // in src/lib/extend-meta.ts). Look for sidecar
+        // in output root and, as fallback, in first-level subfolders (same
+        // as inputs above). If no sidecar — write meta as received.
         let sourceMeta: Record<string, unknown> | null = null
         const sv = (body.meta as { source_video?: { name?: unknown } }).source_video
         const srcName = typeof sv?.name === 'string' && sv.name ? path.basename(sv.name) : ''
@@ -473,23 +473,23 @@ export async function POST(req: NextRequest) {
             if (!existsSync(resolved)) continue
             try {
               sourceMeta = JSON.parse(await fs.readFile(resolved, 'utf-8')) as Record<string, unknown>
-            } catch { /* битый сайдкар — без наследования */ }
+            } catch { /* corrupted sidecar — no inheritance */ }
             break
           }
         }
-        // (правка 383) Фактические параметры ИТОГОВОГО файла (ffprobe):
-        // video_length/resolution/duration. Раньше мета несла параметры
-        // ДЖОБА (длительность клипа, а не склейки) — теперь совпадают с
-        // реальным файлом; это же условие lossless-ветки: резолвер латента
-        // сверяет video_length/resolution меты с пробой mp4.
+        // (fix 383) ACTUAL parameters of FINAL file (ffprobe):
+        // video_length/resolution/duration. Previously meta carried parameters
+        // of JOB (clip duration, not concat) — now they match
+        // real file; this is also required for lossless branch: latent resolver
+        // matches video_length/resolution of meta against mp4 probe.
         let actual: { width: number; height: number; frames: number; durationSec: number } | null = null
         try {
           const pr = await probeVideoFile(outPath)
           if (pr.width > 0 && pr.height > 0 && pr.frames > 0) {
             actual = { width: pr.width, height: pr.height, frames: pr.frames, durationSec: pr.durationSec }
           }
-        } catch { /* проба не критична: мета без фактических полей */ }
-        writeMetaSidecar(outName, outSub, { // (правка 365) сайдкар рядом с результатом
+        } catch { /* probe is not critical: meta without actual fields */ }
+        writeMetaSidecar(outName, outSub, { // (fix 365) sidecar next to result
           ...mergeExtendMeta(body.meta as Record<string, unknown>, sourceMeta),
           ...(actual && {
             video_length: actual.frames,
@@ -501,12 +501,12 @@ export async function POST(req: NextRequest) {
           combined_audio: usedAudio,
           created_at: Date.now() / 1000,
         })
-      } catch { /* сайдкар не критичен для самой склейки */ }
+      } catch { /* sidecar is not critical for concat itself */ }
     }
 
     return NextResponse.json({
       filename: outName,
-      subfolder: outSub, // (правка 365)
+      subfolder: outSub, // (fix 365)
       audio: usedAudio,
       input_count: infos.length,
       url: `/api/comfy/file?filename=${encodeURIComponent(outName)}${outSub ? `&subfolder=${encodeURIComponent(outSub)}` : ''}`,
@@ -532,16 +532,16 @@ async function probeVideo(ffmpeg: string, filePath: string): Promise<ProbeInfo |
     ? Number(durM[1]) * 3600 + Number(durM[2]) * 60 + Number(durM[3])
     : 0
 
-  // (правка 359) Разрешение — только из строки видеопотока, иначе общий
-  // регекс цеплял чужие NxM из тегов/метаданных контейнера.
+  // (fix 359) Resolution — only from video stream line, otherwise general
+  // regex grabbed other NxM from container tags/metadata.
   const videoLine = stderr.split('\n').find((l) => /Stream #.*Video:/.test(l)) ?? stderr
   const resM = /(\d{2,5})x(\d{2,5})/.exec(videoLine)
   let width = resM ? parseInt(resM[1], 10) : 0
   let height = resM ? parseInt(resM[2], 10) : 0
 
-  // (правка 218) SAR≠1: масштаб цели — DISPLAY-аспект (как файл выглядит при
-  // воспроизведении), иначе исходник с квадратными пикселями исказился бы
-  // под storage-пропорцию, а клип (генерился по display) — наоборот.
+  // (fix 218) SAR≠1: target scale is DISPLAY aspect (how file looks on
+  // playback), otherwise source with square pixels would distort
+  // into storage proportions, and clip (generated by display) — vice versa.
   const sarM = /SAR (\d+):(\d+) DAR (\d+):(\d+)/.exec(stderr)
   if (sarM) {
     const sarW = parseInt(sarM[1], 10)

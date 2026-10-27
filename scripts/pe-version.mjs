@@ -1,25 +1,26 @@
-// Чтение и сборка ресурса версии PE (VS_VERSIONINFO).
+// Reading and building PE version resource (VS_VERSIONINFO).
 //
-// Зачем: у Electron в ресурсе версии написано «Electron / GitHub, Inc.» —
-// в свойствах файла и в колонке «Имя продукта» диспетчера задач. Для студии
-// это выглядит как чужое приложение.
+// Why: Electron's version resource says "Electron / GitHub, Inc." —
+// in file properties and in the "Product name" column of Task Manager.
+// For the studio, this looks like someone else's application.
 //
-// Секреты формата, из-за которых это неочевидно:
-//   • выравнивание — по АБСОЛУТНОМУ смещению (6 байт заголовка + ключ),
-//     а не по длине ключа. Иначе VS_FIXEDFILEINFO сдвигается на 2 байта
-//     и Windows не читает ресурс вовсе (в свойствах — пусто);
-//   • ключ таблицы строк — ШЕСТНАДЦАТЕРИЧНЫЙ: «040904B0» (en-US, Unicode),
-//     а не десятичный;
-//   • в VarFileInfo\Translation DWORD устроен как MAKELANGUAGE: кодовая
-//     страница в младшем слове, язык в старшем (0x04B00409). Без этого
-//     блока строки не привязаны к языку, и GetFileVersionInfo вернёт пустоту.
+// Format nuances that make this non-obvious:
+//   • alignment is by ABSOLUTE offset (6 bytes header + key),
+//     not by key length. Otherwise VS_FIXEDFILEINFO shifts by 2 bytes
+//     and Windows fails to read the resource at all (properties are empty);
+//   • string table key is HEXADECIMAL: "040904B0" (en-US, Unicode),
+//     not decimal;
+//   • in VarFileInfo\Translation DWORD is structured like MAKELANGUAGE:
+//     code page in the low word, language in the high word (0x04B00409).
+//     Without this block strings are not bound to a language, and
+//     GetFileVersionInfo will return empty.
 import fs from 'node:fs';
 
 export function readPeResourceInfo(exePath) {
   const buf = fs.readFileSync(exePath);
-  if (buf.readUInt16LE(0) !== 0x5a4d) throw new Error('не PE-файл');
+  if (buf.readUInt16LE(0) !== 0x5a4d) throw new Error('Not a PE file');
   const peOff = buf.readUInt32LE(0x3c);
-  if (buf.readUInt32LE(peOff) !== 0x00004550) throw new Error('нет сигнатуры PE');
+  if (buf.readUInt32LE(peOff) !== 0x00004550) throw new Error('Missing PE signature');
 
   const coff = peOff + 4;
   const numSections = buf.readUInt16LE(coff + 2);
@@ -50,9 +51,9 @@ export function readPeResourceInfo(exePath) {
   };
 
   const base = rvaToOff(rsrcRva);
-  if (base < 0) throw new Error('раздел ресурсов не найден');
+  if (base < 0) throw new Error('Resource section not found');
 
-  // Уровни: type(0) → name(1) → lang(2); лист — запись данных.
+  // Levels: type(0) → name(1) → lang(2); leaf is data entry.
   const walk = (dirOff, path, out) => {
     const nNamed = buf.readUInt16LE(dirOff + 12);
     const nId = buf.readUInt16LE(dirOff + 14);
@@ -80,7 +81,7 @@ export function readPeResourceInfo(exePath) {
   const versionLeaf = leaves.find((l) => l.path.length >= 3 && l.path[0].nameId === 16);
   if (!versionLeaf) {
     throw new Error(
-      'RT_VERSION не найден (типы в файле: ' +
+      'RT_VERSION not found (types in file: ' +
         [...new Set(leaves.map((l) => l.path[0]?.nameId))].join(', ') + ')',
     );
   }
@@ -96,9 +97,9 @@ export function readPeResourceInfo(exePath) {
   };
 }
 
-// ── Сборка VS_VERSIONINFO ────────────────────────────────────────────────
+// ── VS_VERSIONINFO assembly ──────────────────────────────────────────────
 
-/** Отступ до 4-байтовой границы ПО ТЕКУЩЕМУ смещению. */
+/** Padding to 4-byte boundary AT CURRENT offset. */
 function align4(offset) {
   return (4 - (offset % 4)) % 4;
 }
@@ -109,18 +110,18 @@ function utf16z(s) {
   return out;
 }
 
-/** Заголовок блока: wLength, wValueLength, wType. */
+/** Block header: wLength, wValueLength, wType. */
 function blockHeader(valueLength, type) {
   const h = Buffer.alloc(6);
-  h.writeUInt16LE(0, 0); // wLength — проставим после сборки
+  h.writeUInt16LE(0, 0); // wLength — filled in after assembly
   h.writeUInt16LE(valueLength, 2);
   h.writeUInt16LE(type, 4);
   return h;
 }
 
 /**
- * Строка таблицы: wLength, wValueLength (в WORD'ах), wType=1,
- * szKey, выравнивание, szValue, выравнивание.
+ * Table string: wLength, wValueLength (in WORDs), wType=1,
+ * szKey, padding, szValue, padding.
  */
 function stringEntry(key, value) {
   const k = utf16z(key);
@@ -142,9 +143,9 @@ function stringEntry(key, value) {
 }
 
 /**
- * Блок с ключом и потомками: header(6), szKey, выравнивание, children.
- * ВНИМАНИЕ: выравнивание считается от смещения 6 (после заголовка),
- * а не от длины ключа.
+ * Block with key and children: header(6), szKey, padding, children.
+ * ATTENTION: padding is calculated from offset 6 (after header),
+ * not from key length.
  */
 function blockWithKey(key, type, children, valueLength = 0) {
   const k = utf16z(key);
@@ -164,12 +165,12 @@ function blockWithKey(key, type, children, valueLength = 0) {
 }
 
 /**
- * Собирает VS_VERSIONINFO.
+ * Builds VS_VERSIONINFO.
  * strings: [['ProductName', 'Minimax H3 Studio'], ...]
- * langId/codePage — язык и кодовая страница строк (0x0409 / 0x04B0).
+ * langId/codePage — language and code page of strings (0x0409 / 0x04B0).
  */
 export function buildVersionInfo(strings, fileVer, productVer, langId = 0x0409, codePage = 0x04b0) {
-  // StringTable: ключ = «040904B0» (язык + кодовая страница, hex).
+  // StringTable: key = "040904B0" (language + code page, hex).
   const tableKey =
     langId.toString(16).padStart(4, '0').toUpperCase() +
     codePage.toString(16).padStart(4, '0').toUpperCase();
@@ -195,7 +196,7 @@ export function buildVersionInfo(strings, fileVer, productVer, langId = 0x0409, 
     head.copy(buf, o); o += 6;
     k.copy(buf, o); o += k.length;
     o += pad;
-    // MAKELANGUAGE: кодовая страница в младшем слове, язык в старшем.
+    // MAKELANGUAGE: code page in low word, language in high word.
     buf.writeUInt16LE(codePage, o);
     buf.writeUInt16LE(langId, o + 2);
     buf.writeUInt16LE(total, 0);
@@ -203,7 +204,7 @@ export function buildVersionInfo(strings, fileVer, productVer, langId = 0x0409, 
   })();
   const varFileInfo = blockWithKey('VarFileInfo', 1, translation);
 
-  // VS_FIXEDFILEINFO (52 байта)
+  // VS_FIXEDFILEINFO (52 bytes)
   const ffi = Buffer.alloc(52);
   const ms = (v) => (v >>> 16) & 0xffff;
   const ls = (v) => v & 0xffff;
@@ -221,7 +222,7 @@ export function buildVersionInfo(strings, fileVer, productVer, langId = 0x0409, 
   ffi.writeUInt32LE(0, 44);
   ffi.writeUInt32LE(0, 48);
 
-  // Корень VS_VERSIONINFO
+  // VS_VERSIONINFO root
   const rootKey = utf16z('VS_VERSION_INFO');
   const rootHead = blockHeader(52, 0);
   let off = 6;

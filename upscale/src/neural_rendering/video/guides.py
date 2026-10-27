@@ -18,9 +18,9 @@ class TemporalGuideGenerator:
     def __init__(self, width: int, height: int, flow_width: int = 640) -> None:
         self.width = width
         self.height = height
-        # (правка 716) max(1, width) — как в близком модуле
-        # frame_interpolation/guides.py: деление на width без защиты даёт
-        # ZeroDivisionError в потоке-производителе при width == 0.
+        # (fix 716) max(1, width) — as in the related module
+        # frame_interpolation/guides.py: division by width without protection yields
+        # ZeroDivisionError in the producer thread when width == 0.
         scale = min(1.0, flow_width / max(1, width))
         self.flow_width = max(64, int(round(width * scale / 2) * 2))
         self.flow_height = max(64, int(round(height * scale / 2) * 2))

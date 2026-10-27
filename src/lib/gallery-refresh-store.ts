@@ -1,20 +1,20 @@
 /**
- * Gallery refresh signal (правка 134).
+ * Gallery refresh signal (fix 134).
  *
- * Галерея (Generate / Upscale / Gallery вкладки) подхватывает новые видео
- * через useVideoGallery — она подписывается на phase генерации. Но при
- * «Заводском сбросе» / «Удалении контента» видео удаляются на бэкенде,
- * а галерея не знает об этом — она перерисовывается только при переключении
- * вкладок (компонент unmount → mount → load() заново).
+ * The gallery (Generate / Upscale / Gallery tabs) picks up new videos
+ * via useVideoGallery — it subscribes to generation phase. But during
+ * "Factory Reset" / "Clear Content", videos are deleted on the backend,
+ * and the gallery does not know about this — it only redraws when switching
+ * tabs (component unmount → mount → load() again).
  *
- * Решение: лёгкий zustand-стор-сигнал. settings-dialog шлёт
- * `bump()` после сброса/удаления; useVideoGallery подписывается на
- * `version` и при изменении вызывает `load(true)` (background, без skeleton).
+ * Solution: lightweight zustand signal store. settings-dialog sends
+ * `bump()` after reset/delete; useVideoGallery subscribes to
+ * `version` and on change calls `load(true)` (background, without skeleton).
  */
 import { create } from 'zustand'
 
 interface GalleryRefreshState {
-  /** Уникальный счётчик: при каждом bump++ все подписчики перезаряжают галерею. */
+  /** Unique counter: on each bump++ all subscribers reload the gallery. */
   version: number
   bump: () => void
 }

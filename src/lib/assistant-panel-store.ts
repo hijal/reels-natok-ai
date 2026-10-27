@@ -1,14 +1,14 @@
 /**
- * Assistant panel store (Zustand, persisted) — правка 442.
+ * Assistant panel store (Zustand, persisted) — fix 442.
  *
- * Ассистент живёт правой боковой панелью на вкладках «Генерация» и
- * «Продление» (отдельной вкладки больше нет). Стор хранит ширину панели
- * (resize за левую границу) и свёрнутость в узкий рейл.
+ * The assistant lives as a right side panel on the "Generation" and
+ * "Extend" tabs (there is no separate tab anymore). The store keeps the panel width
+ * (resize via left border) and whether it is collapsed into a narrow rail.
  *
- * Стор на уровне модуля (а не useState в компоненте), чтобы событие
- * h3:open-assistant-panel могло развернуть панель ДО её монтирования:
- * «Улучшить промпт» переключает вкладку → панель монтируется уже
- * развёрнутой и сразу подхватывает pendingImprove.
+ * Module-level store (rather than useState in a component) so that the event
+ * h3:open-assistant-panel can expand the panel BEFORE it is mounted:
+ * "Improve prompt" switches tab → panel mounts already
+ * expanded and immediately picks up pendingImprove.
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -18,13 +18,13 @@ export const ASSISTANT_PANEL_MAX = 640
 export const ASSISTANT_PANEL_DEFAULT = 380
 
 interface AssistantPanelState {
-  /** Ширина развёрнутой панели, px. */
+  /** Width of the expanded panel, px. */
   width: number
-  /** Свернута в узкий рейл (кнопка разворота + вертикальная подпись). */
+  /** Collapsed into a narrow rail (expand button + vertical label). */
   collapsed: boolean
-  /** (правка 496) Режим «3D → Video»: к системному промпту ассистента
-   *  добавляется компактный блок про перенос движения/камеры с 3D-болванки
-   *  (видео-референс = источник motion/camera, не внешнего вида). */
+  /** (fix 496) "3D → Video" mode: a compact section is added to the assistant's
+   *  system prompt about transferring motion/camera from a 3D blockout
+   *  (video reference = motion/camera source, not visual appearance). */
   guide3d: boolean
   setWidth: (w: number) => void
   setCollapsed: (v: boolean) => void
@@ -35,9 +35,9 @@ export const useAssistantPanel = create<AssistantPanelState>()(
   persist(
     (set) => ({
       width: ASSISTANT_PANEL_DEFAULT,
-      // (правка 444) По умолчанию панель свёрнута в рейл: разворачивается
-      // кнопкой ‹ в рейле или событием h3:open-assistant-panel («Улучшить
-      // промпт») — тогда открывается на полную сохранённую ширину.
+      // (fix 444) By default the panel is collapsed into a rail: expanded
+      // by the ‹ button in the rail or via the h3:open-assistant-panel event ("Improve
+      // prompt") — then opens to the full saved width.
       collapsed: true,
       guide3d: false,
       setWidth: (w) =>
@@ -47,9 +47,9 @@ export const useAssistantPanel = create<AssistantPanelState>()(
     }),
     {
       name: 'h3-assistant-panel',
-      // (правка 444) Миграция v0→v1: у тех, кто уже открывал панель
-      // (collapsed:false в localStorage), однократно сворачиваем в рейл —
-      // новый дефолт. Ширину сохраняем.
+      // (fix 444) Migration v0→v1: for those who have already opened the panel
+      // (collapsed:false in localStorage), collapse into a rail once —
+      // new default. Width is preserved.
       version: 1,
       migrate: (persisted, version) => {
         if (version === 0 && persisted && typeof persisted === 'object') {

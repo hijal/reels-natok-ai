@@ -1,42 +1,42 @@
 #!/usr/bin/env node
 /**
- * scripts/prepare-electron.mjs — переименование процесса Electron.
+ * scripts/prepare-electron.mjs — Electron process renaming.
  *
- * ЗАЧЕМ. В диспетчере задач процесс окна студии называется «electron.exe» —
- * у пользователя нет способа отличить его от чужого Electron-приложения.
- * По запросу «прибить студию, если зависла» это невозможно сделать
- * правильно. Здесь exe копируется с именем приложения, и дальше запускается
- * именно он: в диспетчере видно «MinimaxH3Studio».
+ * WHY. In Task Manager the studio window process is called "electron.exe" —
+ * the user has no way to distinguish it from another Electron app.
+ * When asked to "kill the studio if frozen", it is impossible to do
+ * properly. Here exe is copied under the application name, and that is what
+ * gets launched: Task Manager shows "MinimaxH3Studio".
  *
- * ЧТО ДЕЛАЕТСЯ.
- *   1. Копия `node_modules/electron/dist/electron.exe` →
+ * WHAT IS DONE.
+ *   1. Copy `node_modules/electron/dist/electron.exe` →
  *      `node_modules/electron/dist/MinimaxH3Studio.exe`.
- *      Имя файла образа — это ровно то, что показывает диспетчер задач.
- *      Копия, а не перемещение: штатный `node_modules/electron` остаётся
- *      нетронутым, `require('electron')` и `npm install` продолжают работать.
- *   2. В копию вписывается ресурс версии (ProductName, FileDescription,
- *      CompanyName, OriginalFilename, InternalName) — чтобы и Свойства
- *      файла, и колонка «Имя продукта» в диспетчере показывали студию,
- *      а не «Electron / GitHub, Inc.».
+ *      The image file name is exactly what Task Manager displays.
+ *      A copy, not a move: the stock `node_modules/electron` remains
+ *      intact, `require('electron')` and `npm install` continue to work.
+ *   2. The version resource is written into the copy (ProductName,
+ *      FileDescription, CompanyName, OriginalFilename, InternalName) — so that
+ *      both file Properties and the "Product name" column in Task Manager show
+ *      the studio rather than "Electron / GitHub, Inc.".
  *
- * ИДЕНТИЧНОСТЬ ПРИЛОЖЕНИЯ. Копия лежит в той же папке dist, поэтому Electron
- * находит свои ресурсы (resources/, icudtl.dat, DLL) как обычно — путь
- * вычисляется от расположения exe.
+ * APPLICATION IDENTITY. The copy is located in the same dist folder, so Electron
+ * finds its resources (resources/, icudtl.dat, DLL) as usual — the path
+ * is calculated relative to the exe location.
  *
- * ЗАПУСК. Скопию нельзя запускать напрямую из .bat: exe собран как
- * GUI-приложение (subsystem 2), stdout в консоль не попадёт. Поэтому
- * запуском занимается scripts/launch-electron.mjs — он поднимает копию с
- * stdio:'inherit' (вывод виден в консоли) и корректно завершается вместе
- * с ней.
+ * LAUNCH. The copy cannot be launched directly from .bat: exe is compiled as
+ * a GUI application (subsystem 2), stdout will not reach the console. Therefore
+ * scripts/launch-electron.mjs handles launching — it spawns the copy with
+ * stdio:'inherit' (output visible in console) and terminates cleanly along
+ * with it.
  *
- * ПОВТОРЯЕМОСТЬ. Скрипт идемпотентен: если копия уже есть и не старше
- * оригинала, ничего не делается. Любая ошибка (например, запрет менять
- * ресурсы) НЕ Ломает запуск — переименование exe уже решает задачу,
- * поэтому ошибка вписывания ресурса лишь пишется в консоль.
+ * IDEMPOTENCE. The script is idempotent: if the copy already exists and is not
+ * older than the original, nothing is done. Any error (e.g. permission denied
+ * modifying resources) DOES NOT break startup — renaming the exe already solves
+ * the problem, so a version resource update failure is only logged to console.
  *
- * Использование:
+ * Usage:
  *   node scripts/prepare-electron.mjs
- *   node scripts/prepare-electron.mjs --force   — пересоздать копию заново
+ *   node scripts/prepare-electron.mjs --force   — recreate copy from scratch
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,12 +47,12 @@ import { readPeResourceInfo, buildVersionInfo } from './pe-version.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FORCE = process.argv.includes('--force');
 
-/** Имя процесса в диспетчере задач. */
+/** Process name in Task Manager. */
 const EXE_NAME = 'MinimaxH3Studio.exe';
-/** Что показывать в свойствах файла и в колонке «Имя продукта». */
+/** What to show in file properties and in the "Product name" column. */
 const APP_TITLE = 'Minimax H3 Studio';
 const APP_VENDOR = 'Minimax H3 Studio';
-const APP_DESC = 'MiniMax H3 Studio — локальная генерация видео со звуком';
+const APP_DESC = 'MiniMax H3 Studio — local video generation with audio';
 const APP_COPYRIGHT = 'MiniMax H3 Studio';
 
 const DIST = path.join(ROOT, 'node_modules', 'electron', 'dist');
@@ -63,7 +63,7 @@ function log(msg) {
   console.log(`[prepare-electron] ${msg}`);
 }
 
-/** Копия новее оригинала? */
+/** Is the copy newer than the original? */
 function isFresh() {
   try {
     return fs.statSync(DST_EXE).mtimeMs >= fs.statSync(SRC_EXE).mtimeMs;
@@ -73,39 +73,39 @@ function isFresh() {
 }
 
 if (!fs.existsSync(SRC_EXE)) {
-  log('electron.exe не найден — пропуск (запуск пойдёт обычным путём).');
+  log('electron.exe not found — skipping (launch will proceed normally).');
   process.exit(0);
 }
 
 if (!FORCE && fs.existsSync(DST_EXE) && isFresh()) {
-  log(`${EXE_NAME} уже актуален — пропуск.`);
+  log(`${EXE_NAME} is already up to date — skipping.`);
   process.exit(0);
 }
 
-log(`копирую electron.exe → ${EXE_NAME} ...`);
+log(`copying electron.exe → ${EXE_NAME} ...`);
 try {
   fs.copyFileSync(SRC_EXE, DST_EXE);
 } catch (e) {
-  log(`НЕ УДАЛОСЬ скопировать: ${e.message}`);
-  log('приложение запустится обычным путём (имя процесса будет electron).');
+  log(`FAILED to copy: ${e.message}`);
+  log('application will launch normally (process name will be electron).');
   process.exit(0);
 }
 
-// ── Ресурс версии ─────────────────────────────────────────────────────────
-// Не критично: без него копия всё равно называется MinimaxH3Studio.exe.
+// ── Version resource ──────────────────────────────────────────────────────
+// Non-critical: without it, the copy is still named MinimaxH3Studio.exe.
 try {
   const info = readPeResourceInfo(DST_EXE);
   const langId = info.version.langId;
   const nameId = info.version.nameId;
 
-  // Версия приложения — из package.json, чтобы «Свойства файла» и
-  // «О программе» показывали то же, что и сам релиз.
+  // Application version — from package.json so that "File Properties" and
+  // "About" match the release itself.
   let fileVer = 7_00_00;
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     const [maj, min, pat] = String(pkg.version || '7.0.0').split('.').map((n) => parseInt(n, 10) || 0);
     fileVer = ((maj & 0xffff) << 16) | ((min & 0xffff) << 8) | (pat & 0xff);
-  } catch { /* версия из package.json недоступна — оставляем 7.0.0 */ }
+  } catch { /* version from package.json unavailable — fallback to 7.0.0 */ }
 
   const vi = buildVersionInfo(
     [
@@ -133,17 +133,17 @@ try {
       { stdio: 'pipe', windowsHide: true, encoding: 'utf8' },
     );
     if (r.status === 0) {
-      log('ресурс версии вписан (ProductName / FileDescription / OriginalFilename).');
+      log('version resource updated (ProductName / FileDescription / OriginalFilename).');
     } else {
-      log(`ресурс версии не вписан: ${(r.stderr || r.stdout || '').trim().split('\n').pop()}`);
-      log('(на имя процесса в диспетчере это не влияет)');
+      log(`version resource not updated: ${(r.stderr || r.stdout || '').trim().split('\n').pop()}`);
+      log('(does not affect process name in Task Manager)');
     }
   } finally {
-    try { fs.unlinkSync(tmp); } catch { /* нечего удалять */ }
+    try { fs.unlinkSync(tmp); } catch { /* nothing to remove */ }
   }
 } catch (e) {
-  log(`ресурс версии не вписан: ${e.message}`);
-  log('(на имя процесса в диспетчере это не влияет)');
+  log(`version resource not updated: ${e.message}`);
+  log('(does not affect process name in Task Manager)');
 }
 
-log(`готово: ${path.relative(ROOT, DST_EXE)}`);
+log(`done: ${path.relative(ROOT, DST_EXE)}`);

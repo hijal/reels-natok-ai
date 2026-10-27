@@ -1,27 +1,27 @@
-import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format' // (правка 386)
+import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format' // (fix 386)
 /**
- * Tile Upscale — латентный tiled-апскейл готового видео
- * (MMH3UltimateUpscale — монолитная нода: temporal chunks → latent upscale →
+ * Tile Upscale — latent tiled upscale of finished video
+ * (MMH3UltimateUpscale — monolithic node: temporal chunks → latent upscale →
  * spatial tiles → per-tile sampling → spatial stitch → temporal stitch).
  *
- * Архитектура (по воркфлоу "Minimax H3 Latent Upscale"):
+ * Architecture (based on "Minimax H3 Latent Upscale" workflow):
  *   VHS_LoadVideo (24 fps) ──→ GetImageSize → ComfyMathExpression (×2)
  *   EmptyMiniMaxH3LatentAV (src size, length) ──→ H3InjectVideoLatent (replaces
  *     video stream with encoded source frames, keeps audio stream)
  *   MMH3UltimateUpscale:
  *     model (UNET → H3SLAAttention → LoRA → H3AdaLNLoRAFix → SigmaShift)
- *     conditioning (MiniMaxH3ImageToVideo, без first_frame — правка 482)
+ *     conditioning (MiniMaxH3ImageToVideo, without first_frame — fix 482)
  *     latent_upscale_param (MMH3LatentUpscaleWithModelParams, target W×H)
  *     temporal_split_param (MMH3TemporalSplitParams)
  *     spatial_split_param (MMH3SpatialSplitParams)
  *     noise (RandomNoise), sampler (res_multistep), sigmas (BasicScheduler 2/denoise 0.1)
- *   VAEDecode → VHS_VideoCombine (24 fps, audio из исходника)
+ *   VAEDecode → VHS_VideoCombine (24 fps, audio from source)
  *
- * Тайлы: пользователь задаёт только размер тайла (tileSize) — нода
- * MMH3SpatialSplitParams работает в режиме specific_size и сама считает,
- * сколько тайлов нужно по каждой оси из размеров целевого кадра и overlap.
+ * Tiles: user sets only tile size (tileSize) — the MMH3SpatialSplitParams node
+ * operates in specific_size mode and calculates on its own how many tiles are
+ * needed along each axis based on target frame dimensions and overlap.
  *
- * Модели (наши аналоги):
+ * Models (our analogs):
  *   VAE:      minimax_h3_video_vae_int8_convrot.safetensors
  *   CLIP:     qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
  *   UNET:     minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors
@@ -33,37 +33,37 @@ export const DEFAULT_TILE_UPSCALE_PROMPT =
   'Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.'
 
 export interface TileUpscaleParams {
-  /** Имя файла в ComfyUI input/ (уже скопирован роутом). */
+  /** Filename in ComfyUI input/ (already copied by route). */
   sourceVideo: string
-  /** (правка 381) Путь к сохранённому AV-латенту исходника (относительно
-   *  output/, поле latent_file в мете; роут уже валидировал файл и передал
-   *  sourceWidth/sourceHeight = пиксельную канву ЛАТЕНТА). Задан → латент
-   *  грузится напрямую (MiniMaxStudioLoadAVLatent) вместо
-   *  Empty+H3InjectVideoLatent: без h264-декода и повторного VAE-encode
-   *  всего клипа. mp4 остаётся источником первого кадра и аудио-дорожки. */
+  /** (fix 381) Path to saved source AV latent (relative to
+   *  output/, latent_file field in metadata; route already validated file and passed
+   *  sourceWidth/sourceHeight = LATENT pixel canvas). If provided → latent
+   *  loads directly (MiniMaxStudioLoadAVLatent) instead of
+   *  Empty+H3InjectVideoLatent: without h264 decode and repeated VAE-encode
+   *  of the entire clip. mp4 remains the source of first frame and audio track. */
   sourceLatent?: string
-  /** (правка 381) Кадры исходника (ffprobe) — в latent-ветке длина
-   *  conditioning считается на сервере (mp4 целиком не грузим). */
+  /** (fix 381) Source frames (ffprobe) — in latent branch the conditioning
+   *  length is calculated on the server (mp4 is not loaded entirely). */
   sourceFrames?: number
-  /** (правка 488) Абсолютный путь к копии исходника в ComfyUI input/ —
-   *  источник аудио-дорожки в latent-ветке (VHS_LoadAudio требует реальный
-   *  путь, именем файла через input-директорию не резолвит, в отличие от
+  /** (fix 488) Absolute path to source copy in ComfyUI input/ —
+   *  source of audio track in latent branch (VHS_LoadAudio requires actual
+   *  path, does not resolve filename through input directory, unlike
    *  VHS_LoadVideo). */
   sourceAudioPath?: string
-  /** Размеры исходника в пикселях (ffprobe; в latent-ветке роут подменяет
-   *  их пиксельной канвой латента — цель ×N считается от неё). */
+  /** Source dimensions in pixels (ffprobe; in latent branch route replaces
+   *  them with latent pixel canvas — target ×N is computed from it). */
   sourceWidth: number
-  /** Размеры исходника в пикселях (ffprobe / канва латента). */
+  /** Source dimensions in pixels (ffprobe / latent canvas). */
   sourceHeight: number
-  /** Caption (default: enhance-промпт). */
+  /** Caption (default: enhance prompt). */
   prompt?: string
   /** Seed (-1 = random). */
   seed?: number
-  /** Tile size in pixels (multiple of 32). Default 768. Количество тайлов
-   *  считается автоматически из размеров целевого кадра (режим specific_size
-   *  ноды MMH3SpatialSplitParams). Клампится к меньшей стороне цели. */
+  /** Tile size in pixels (multiple of 32). Default 768. Tile count
+   *  is computed automatically from target frame dimensions (specific_size
+   *  mode of MMH3SpatialSplitParams node). Clamped to smaller target side. */
   tileSize?: number
-  /** Пространственное перекрытие, px. Default 128. */
+  /** Spatial overlap, px. Default 128. */
   overlap?: number
   /** Fade width in pixels. Default 64. */
   fade?: number
@@ -77,24 +77,24 @@ export interface TileUpscaleParams {
   upscaleModel?: string
   /** Diffusion model name. */
   diffusionModel?: string
-  /** Подпапка вывода. */
+  /** Output subfolder. */
   outputSubfolder?: string
-  /** Короткая сторона целевого разрешения в px (720|1080|1440|2160). Default 1080. (правка 265) */
+  /** Short side of target resolution in px (720|1080|1440|2160). Default 1080. (fix 265) */
   targetResolution?: number
-  /** Уровень денойза 0–1. Default 0.1. */
+  /** Denoise level 0–1. Default 0.1. */
   denoise?: number
-  /** Количество шагов сэмплирования. Default 2. */
+  /** Number of sampling steps. Default 2. */
   steps?: number
-  /** (правка 481) SyncTile: per-step синхронизация тайлов (MultiDiffusion) —
-   *  тайлы блендятся в общий канвас после КАЖДОГО шага + общий шумовой канвас.
-   *  Убирает швы/мерцание на стыках. В этом режиме нода игнорирует
-   *  fade/overlap_mode/blend/brightness_match (overlap задаёт только
-   *  геометрию рамп). Default true. */
+  /** (fix 481) SyncTile: per-step tile synchronization (MultiDiffusion) —
+   *  tiles are blended into shared canvas after EVERY step + shared noise canvas.
+   *  Eliminates seams/flicker at junctions. In this mode node ignores
+   *  fade/overlap_mode/blend/brightness_match (overlap sets only
+   *  ramp geometry). Default true. */
   syncTiles?: boolean
-  /** (правка 483) LoRA из настроек — цепочкой customLoras (включая
-   *  турбо-лору, если она включена), до AdaLN-фикса и SigmaShift. */
+  /** (fix 483) LoRA from settings — customLoras chain (including
+   *  turbo LoRA if enabled), before AdaLN fix and SigmaShift. */
   customLoras?: Array<{ name: string; strength: number }>
-  /** (правка 386) Формат/качество видео-выхода ([video] config.ini). */
+  /** (fix 386) Video output format/quality ([video] config.ini). */
   videoFormat?: VideoFormatSettings
 }
 
@@ -112,17 +112,17 @@ function snap32(n: number): number {
   return Math.max(32, Math.round(n / 32) * 32)
 }
 
-/** (правка 489) Лимит стороны цели у MMH3LatentUpscaleWithModelParams
- *  (валидация ноды: width/height max 4096). */
+/** (fix 489) Target side limit for MMH3LatentUpscaleWithModelParams
+ *  (node validation: width/height max 4096). */
 const TILE_TARGET_MAX = 4096
 
 /**
- * (правка 265/489) Целевые размеры: короткая сторона = targetResolution,
- * длинная — по пропорции исходника, но НЕ выше TILE_TARGET_MAX: у широких
- * роликов (21:9 и т.п.) 2160p по короткой стороне давал ширину >4096 и
- * ComfyUI отклонял воркфлоу (value_bigger_than_max). В этом случае вся
- * цель сжимается с сохранением пропорции, пока длинная сторона не влезет
- * в лимит ноды.
+ * (fix 265/489) Target dimensions: short side = targetResolution,
+ * long side — according to source aspect ratio, but NOT exceeding TILE_TARGET_MAX:
+ * for ultrawide videos (21:9 etc.) 2160p on the short side resulted in width >4096
+ * and ComfyUI rejected the workflow (value_bigger_than_max). In this case the entire
+ * target is scaled down preserving aspect ratio until the long side fits within
+ * the node limit.
  */
 function computeTileTarget(srcW: number, srcH: number, target: number): { targetW: number; targetH: number } {
   const shortSide = Math.min(srcW, srcH)
@@ -134,15 +134,15 @@ function computeTileTarget(srcW: number, srcH: number, target: number): { target
     const shrink = TILE_TARGET_MAX / longSide
     targetW = snap32(srcW * scale * shrink)
     targetH = snap32(srcH * scale * shrink)
-    // snap32 округляет до ближайшего кратного 32 — страховка от выхода
-    // за лимит при округлении вверх.
+    // snap32 rounds to nearest multiple of 32 — safeguard against exceeding
+    // limit when rounding up.
     targetW = Math.min(targetW, TILE_TARGET_MAX)
     targetH = Math.min(targetH, TILE_TARGET_MAX)
   }
   return { targetW, targetH }
 }
 
-/** (правка 479) Геометрия тайлов/чанков для прогресс-трекера. */
+/** (fix 479) Tile/chunk geometry for progress tracker. */
 export interface TileGeometry {
   totalTiles: number
   tilesW: number
@@ -153,10 +153,10 @@ export interface TileGeometry {
 }
 
 /**
- * (правка 479) Расчёт числа тайлов, временных чанков и единиц сэмплинга.
- * Формулы идентичны внутренним вычислениям ноды MMH3SpatialSplitParams
- * (specific_size) и MMH3TemporalSplitParams. Возвращает null, если входные
- * параметры не позволяют сделать расчёт (srcFrames = 0 в пиксельной ветке).
+ * (fix 479) Calculation of tile count, temporal chunks, and sampling units.
+ * Formulas are identical to internal calculations of MMH3SpatialSplitParams
+ * (specific_size) and MMH3TemporalSplitParams nodes. Returns null if input
+ * parameters do not permit calculation (srcFrames = 0 in pixel branch).
  */
 export function computeTileGeometry(opts: {
   sourceWidth: number
@@ -174,9 +174,9 @@ export function computeTileGeometry(opts: {
   if (!srcW || !srcH) return null
 
   const target = opts.targetResolution ?? 1080
-  // (правка 489) та же формула цели, что и в buildTileUpscaleWorkflow
-  // (кламп длинной стороны к лимиту ноды) — иначе геометрия прогресса
-  // расходилась бы с реальным воркфлоу.
+  // (fix 489) same target formula as in buildTileUpscaleWorkflow
+  // (clamping long side to node limit) — otherwise progress geometry
+  // would diverge from actual workflow.
   const { targetW, targetH } = computeTileTarget(srcW, srcH, target)
 
   const tileMax = Math.max(256, Math.floor(Math.min(targetW, targetH) / 32) * 32)
@@ -205,18 +205,18 @@ export function computeTileGeometry(opts: {
 
 export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, unknown> {
   const seed = !p.seed || p.seed < 0 ? Math.floor(Math.random() * 2 ** 31) : p.seed
-  const vhsEnc = vhsEncodeInputs(p.videoFormat) // (правка 386)
+  const vhsEnc = vhsEncodeInputs(p.videoFormat) // (fix 386)
   const prompt = (p.prompt ?? '').trim()
 
-  // (правка 381) Lossless-ветка: затравка из сохранённого латента.
+  // (fix 381) Lossless branch: seeding from saved latent.
   const latentMode = !!p.sourceLatent
-  // Сетка 17k+5 от фактических кадров (эквивалент длины из tu_src[1]),
-  // на сервере: в latent-ветке mp4 целиком в граф не грузится.
+  // 17k+5 grid from actual frames (equivalent to length from tu_src[1]),
+  // on server: in latent branch mp4 is not loaded into graph entirely.
   const srcFrames = Math.max(0, Math.round(p.sourceFrames ?? 0))
   const framesGrid = Math.max(5, srcFrames - ((srcFrames - 5) % 17))
 
-  // Target dimensions: короткая сторона = targetResolution (правка 265),
-  // длинная клампится к лимиту ноды 4096 (правка 489)
+  // Target dimensions: short side = targetResolution (fix 265),
+  // long side clamped to node limit 4096 (fix 489)
   const srcW = p.sourceWidth
   const srcH = p.sourceHeight
   const target = p.targetResolution ?? 1080
@@ -227,27 +227,27 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
   const tempOverlap = snap17(p.temporalOverlap ?? 17)
   const anchor = p.anchorStrength ?? 0.999
 
-  // Spatial params: размер тайла задаёт пользователь, сетку (сколько тайлов
-  // по осям) нода считает сама из размеров целевого кадра (режим
-  // specific_size). Тайл клампится к меньшей стороне цели (иначе нода
-  // откажет: upscale size >= tile size), fade — к перекрытию (fade > overlap
-  // тоже ошибка ноды).
+  // Spatial params: tile size set by user, grid (how many tiles
+  // along axes) computed by node itself from target frame dimensions
+  // (specific_size mode). Tile clamped to smaller side of target (otherwise
+  // node rejects: upscale size >= tile size), fade clamped to overlap (fade > overlap
+  // is also a node error).
   const tileMax = Math.max(256, Math.floor(Math.min(targetW, targetH) / 32) * 32)
   const tileSize = Math.min(snap32(p.tileSize ?? 768), tileMax)
-  // overlap строго меньше тайла (валидация ноды) — важно при клампе тайла вниз
+  // overlap strictly smaller than tile (node validation) — important when clamping tile down
   const spatialOverlap = Math.min(snap32(p.overlap ?? 128), tileSize - 32)
   const fadeWidth = Math.min(snap32(p.fade ?? 64), spatialOverlap)
   const minTile = snap32(256)
 
   // Model chain: UNET → [custom LoRAs] → SigmaShift
-  // Турбо-лора — обычная запись customLoras (ON по умолчанию), как и
-  // пользовательские LoRA; порядок задаёт loras.json.
+  // Turbo LoRA is a regular customLoras entry (ON by default), like
+  // user LoRAs; order is determined by loras.json.
   let modelSrc: [string, number] = ['tu_unet', 0]
   const modelNodes: Record<string, unknown> = {}
 
-  // (правка 483) Пользовательские LoRA — ДО
-  // AdaLN-фикса (H3AdaLNLoRAFix патчит adaLN-слои с учётом всех применённых
-  // лор, поэтому кастомные должны войти в модель раньше него).
+  // (fix 483) User LoRAs — BEFORE
+  // AdaLN fix (H3AdaLNLoRAFix patches adaLN layers taking all applied
+  // LoRAs into account, so custom ones must enter model earlier).
   const customLoras = (p.customLoras ?? []).filter((l) => l.name)
   customLoras.forEach((lora, i) => {
     const id = `tu_clora_${i}`
@@ -270,20 +270,20 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
   }
   modelSrc = ['tu_sigma', 0]
 
-  // (правка 478) Live превью как на вкладках Refine/Генерация: KJ-нода
-  // ModelPreviewOverrideKJ в конце model-цепочки шлёт собственные
-  // kj_preview_override-события на каждый шаг внутреннего сэмплинга
-  // MMH3UltimateUpscale (per-tile; обёртка OUTER_SAMPLE срабатывает в
-  // CFGGuider.sample, который нода строит от переданной ей модели).
-  // Стандартные превью в этой сборке мертвы (--preview-method NoPreviews
-  // по умолчанию), без KJ-ноды превью-окошко получало бы вообще нечего.
-  // Настройки идентичны вкладкам Refine/Генерация: vae-линк + preview_frames
-  // на всё видео (latent-ветка — framesGrid от сервера, пиксельная — счётчик
-  // кадров tu_src, как r_cap у refine). Превью каждого per-tile шага покрывает
-  // весь его временной чанк (KJ берёт min(лимит, кадров в латенте) — для
-  // коротких прогонов лишний лимит безвреден, сабсэмплинга нет); taeh3 —
-  // taesd-декодер H3 (24 ch). Scheduler (tu_sigmas) модель берёт БЕЗ обёртки —
-  // как в refine, обёртка нужна только пути сэмплинга.
+  // (fix 478) Live preview same as on Refine/Generation tabs: KJ node
+  // ModelPreviewOverrideKJ at the end of model chain sends its own
+  // kj_preview_override events on each step of internal sampling of
+  // MMH3UltimateUpscale (per-tile; OUTER_SAMPLE wrapper triggers in
+  // CFGGuider.sample, which node builds from provided model).
+  // Default previews are disabled in this build (--preview-method NoPreviews
+  // by default), without KJ node the preview window would receive nothing.
+  // Settings identical to Refine/Generation tabs: vae link + preview_frames
+  // for the whole video (latent branch — framesGrid from server, pixel branch — frame
+  // counter tu_src, like r_cap in refine). Preview of each per-tile step covers
+  // its whole temporal chunk (KJ takes min(limit, frames in latent) — for
+  // short runs extra limit is harmless, no subsampling); taeh3 is
+  // H3 taesd decoder (24 ch). Scheduler (tu_sigmas) takes model WITHOUT wrapper —
+  // like in refine, wrapper is only needed for sampling path.
   modelNodes['tu_preview'] = {
     inputs: {
       model: modelSrc,
@@ -296,7 +296,7 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
       preview_fps: 6,
     },
     class_type: 'ModelPreviewOverrideKJ',
-    _meta: { title: 'Model Preview Override (правка 478)' },
+    _meta: { title: 'Model Preview Override (fix 478)' },
   }
   const previewModel: [string, number] = ['tu_preview', 0]
 
@@ -309,7 +309,7 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
     'tu_unet': {
       inputs: {
         unet_name:
-          // (правка 293) вернули основную модель
+          // (fix 293) restored main model
           p.diffusionModel || 'minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors',
         weight_dtype: 'default',
       },
@@ -339,32 +339,32 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
 
     // ═══════════════════════════════════════════════
     //  SOURCE VIDEO LOADING
-    //  (правка 381) Два пути:
-    //   • latentMode — lossless: первозданный AV-латент из .latent-файла.
-    //     Полный h264-декод + Empty→H3InjectVideoLatent (повторный VAE-encode
-    //     всего клипа) пропускаются. mp4 вообще не декодируется (правка 482 —
-    //     first_frame убран); аудио-дорожку для mux'а дёргает VHS_LoadAudio
-    //     напрямую через ffmpeg (правка 488).
-    //   • обычный путь — как было.
+    //  (fix 381) Two paths:
+    //   • latentMode — lossless: pristine AV latent from .latent file.
+    //     Full h264 decode + Empty→H3InjectVideoLatent (repeated VAE encode
+    //     of entire clip) are skipped. mp4 is not decoded at all (fix 482 —
+    //     first_frame removed); audio track for mux is fetched by VHS_LoadAudio
+    //     directly via ffmpeg (fix 488).
+    //   • normal path — as before.
     // ═══════════════════════════════════════════════
     ...(latentMode ? {
       'tu_lat': {
         inputs: { latent: p.sourceLatent },
         class_type: 'MiniMaxStudioLoadAVLatent',
-        _meta: { title: 'AV-латент исходника (lossless, правка 381)' },
+        _meta: { title: 'Source AV Latent (lossless, fix 381)' },
       },
-      // (правка 488) Раньше аудио брали с VHS_LoadVideo (frame_load_cap=1) —
-      // но VHS режет дорожку до frame_load_cap × frame_time (≈1 кадр), и
-      // результат выходил БЕЗ звука. VHS_LoadAudio достаёт дорожку целиком
-      // через ffmpeg, не трогая видеопоток (ни RAM под кадры, ни h264-декода).
+      // (fix 488) Previously audio was taken from VHS_LoadVideo (frame_load_cap=1) —
+      // but VHS cuts track to frame_load_cap × frame_time (≈1 frame), and
+      // result had NO audio. VHS_LoadAudio extracts the full track
+      // via ffmpeg without touching video stream (no RAM for frames, no h264 decode).
       'tu_audio': {
         inputs: {
           audio_file: p.sourceAudioPath ?? p.sourceVideo,
           seek_seconds: 0,
-          duration: 0, // 0 = вся дорожка
+          duration: 0, // 0 = entire track
         },
         class_type: 'VHS_LoadAudio',
-        _meta: { title: 'Исходник: аудио-дорожка (mux)' },
+        _meta: { title: 'Source: audio track (mux)' },
       },
     } : {
       'tu_src': {
@@ -378,12 +378,12 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
           select_every_nth: 1,
         },
         class_type: 'VHS_LoadVideo',
-        _meta: { title: 'Исходник (24 fps)' },
+        _meta: { title: 'Source (24 fps)' },
       },
       'tu_size': {
         inputs: { image: ['tu_src', 0] },
         class_type: 'GetImageSize',
-        _meta: { title: 'Размеры кадра' },
+        _meta: { title: 'Frame Dimensions' },
       },
       // Target = source × 2 (already computed server-side; these are fixed numbers)
       // We use the pre-computed targetW/targetH as constants since we know them.
@@ -399,7 +399,7 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
           length: ['tu_src', 1],
         },
         class_type: 'EmptyMiniMaxH3LatentAV',
-        _meta: { title: `Пустой AV-латент ${srcW}×${srcH}` },
+        _meta: { title: `Empty AV Latent ${srcW}×${srcH}` },
       },
       'tu_inject': {
         inputs: {
@@ -413,16 +413,16 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
     }),
 
     // ═══════════════════════════════════════════════
-    //  CONDITIONING: MiniMaxH3ImageToVideo (t2v-стиль, БЕЗ first_frame)
-    //  (правка 482) Ключевой кадр frame-0 убран: он кодировался из
-    //  НИЗКОРАЗРЕШЕННОГО первого кадра исходника (простой resize до цели +
-    //  VAE-encode), а в packed-последовательности H3 сидит рядом с t=0 и
-    //  тянет первые токены к своей «мыльной» версии → первые ~5 кадров
-    //  результата «плыли», дальше эффект затухал. Контент и так зафиксирован
-    //  самим исходным латентом (denoise низкий), а стыки временных чанков
-    //  нода анкерит своими keyframes из пересэмплированных кадров
-    //  (anchor_conditioning создаёт список при отсутствии) — так автор
-    //  ноды и делает в эталонном upscale-воркфлоу (ReferenceToVideo без
+    //  CONDITIONING: MiniMaxH3ImageToVideo (t2v style, WITHOUT first_frame)
+    //  (fix 482) Key frame frame-0 removed: it was encoded from
+    //  LOW-RESOLUTION first frame of source (plain resize to target +
+    //  VAE encode), and in packed sequence of H3 sits close to t=0 and
+    //  pulls early tokens towards its "blurry" version → first ~5 frames
+    //  of result "swam", then effect faded. Content is already locked
+    //  by source latent itself (denoise is low), and temporal chunk seams
+    //  are anchored by node's own keyframes from resampled frames
+    //  (anchor_conditioning creates list if absent) — as done by
+    //  node author in reference upscale workflow (ReferenceToVideo without
     //  frame-0 keyframe).
     // ═══════════════════════════════════════════════
     'tu_cond': {
@@ -430,13 +430,13 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
         prompt,
         width: targetW,
         height: targetH,
-        // length from the source video; (правка 381) latent-ветка — от сервера
+        // length from the source video; (fix 381) latent branch — from server
         length: latentMode ? framesGrid : ['tu_src', 1],
         clip: ['tu_clip', 0],
         vae: ['tu_vae', 0],
       },
       class_type: 'MiniMaxH3ImageToVideo',
-      _meta: { title: 'Conditioning (без first_frame — правка 482)' },
+      _meta: { title: 'Conditioning (without first_frame — fix 482)' },
     },
 
     // ═══════════════════════════════════════════════
@@ -467,8 +467,8 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
       inputs: {
         upscale_width: targetW,
         upscale_height: targetH,
-        // specific_size: размер тайла задан, сетка тайлов — автоматически
-        // из upscale_width/height и overlap (нода сама нарежет осям).
+        // specific_size: tile size is set, tile grid is computed automatically
+        // from upscale_width/height and overlap (node splits along axes itself).
         tile_size_mode: 'specific_size',
         tile_width: tileSize,
         tile_height: tileSize,
@@ -479,28 +479,28 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
         fade_width: fadeWidth,
         fade_height: fadeWidth,
         min_tile_size: minTile,
-        // (правка 469) overlap_mode 'earlier' — дефолт ноды и единственный
-        // режим, согласованный с 'linear': вес нового тайла растёт 0→1 от
-        // шва вглубь полосы (на шве — контент соседа, у тела тайла — новый).
-        // Пара 'later'+'linear' переворачивала рампу: на внутреннем крае
-        // полосы брался старый контент, а за ней — новый → жёсткая граница
-        // через overlap px от каждого шва = видимая сетка тайлов.
-        // Актуально только для legacy-режима: в sync_tiles (правка 481)
-        // нода игнорирует fade/overlap_mode/blend — тайлы блендятся в общий
-        // канвас после каждого шага.
+        // (fix 469) overlap_mode 'earlier' — node default and only
+        // mode consistent with 'linear': new tile weight grows 0→1 from
+        // seam inward (at seam — neighbor content, at tile body — new).
+        // Pair 'later'+'linear' inverted the ramp: at inner edge of
+        // band old content was taken, and beyond it — new → hard boundary
+        // at overlap px from each seam = visible tile grid.
+        // Relevant only for legacy mode: in sync_tiles (fix 481)
+        // node ignores fade/overlap_mode/blend — tiles blend into shared
+        // canvas after each step.
         overlap_mode: 'earlier',
         overlap_blend: 'linear',
         masked_area_noise: 0,
         brightness_match: false,
         dynamic_fade: 'off',
         dynamic_fade_min: 32,
-        // (правка 481) SyncTile (MultiDiffusion): per-step блендинг тайлов +
-        // общий шумовой канвас. Дефолт студии — ВКЛ; legacy-режим остаётся
-        // доступен для A/B (syncTiles: false).
+        // (fix 481) SyncTile (MultiDiffusion): per-step tile blending +
+        // shared noise canvas. Studio default is ON; legacy mode remains
+        // available for A/B (syncTiles: false).
         sync_tiles: p.syncTiles !== false,
       },
       class_type: 'MMH3SpatialSplitParams',
-      _meta: { title: `Spatial Split (тайл ${tileSize}px, сетка авто)` },
+      _meta: { title: `Spatial Split (tile ${tileSize}px, auto grid)` },
     },
     'tu_noise': {
       inputs: { noise_seed: seed },
@@ -524,11 +524,11 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
     },
     'tu_upscale': {
       inputs: {
-        // (правка 478) модель через KJ-превью — кадры каждого шага
-        // per-tile сэмплинга внутри ноды попадают в превью-окошко вкладки
+        // (fix 478) model via KJ preview — frames of each step of
+        // per-tile sampling inside node reach the tab preview window
         model: previewModel,
         conditioning: ['tu_cond', 0],
-        // (правка 381) latent-ветка: затравка — сам загруженный латент
+        // (fix 381) latent branch: seed is the loaded latent itself
         latent: [latentMode ? 'tu_lat' : 'tu_inject', 0],
         noise: ['tu_noise', 0],
         sampler: ['tu_sampler', 0],
@@ -558,19 +558,19 @@ export function buildTileUpscaleWorkflow(p: TileUpscaleParams): Record<string, u
         frame_rate: 24,
         loop_count: 0,
         filename_prefix: `${sub}Minimax_Studio_tileupscale`,
-        // (правка 386) формат/качество — из [video] настроек студии
+        // (fix 386) format/quality — from studio [video] settings
         ...vhsEnc,
         save_metadata: false,
-        // (правка 321) A/V sync: force_rate=24 на входе СОХРАНЯЕТ длительность
-        // (VHS дропает/дублирует кадры), аудио-выход VHS_LoadVideo — оригинальная
-        // дорожка целиком → длительности совпадают, trim_to_audio не нужен
-        // (false → VHS допедит аудио apad до длины видео, -shortest = видео).
+        // (fix 321) A/V sync: force_rate=24 on input PRESERVES duration
+        // (VHS drops/duplicates frames), audio output of VHS_LoadVideo is original
+        // full track → durations match, trim_to_audio not needed
+        // (false → VHS pads audio apad to video length, -shortest = video).
         pingpong: false,
         save_output: true,
         images: ['tu_decode', 0],
-        // (правка 488) latent-ветка: дорожка целиком из VHS_LoadAudio;
-        // обычная — аудио-выход VHS_LoadVideo (pin 2, не режется — там
-        // frame_load_cap=0).
+        // (fix 488) latent branch: track full from VHS_LoadAudio;
+        // normal — audio output of VHS_LoadVideo (pin 2, not cut —
+        // frame_load_cap=0 there).
         audio: latentMode ? ['tu_audio', 0] : ['tu_src', 2],
       },
       class_type: 'VHS_VideoCombine',

@@ -1,26 +1,26 @@
 #!/usr/bin/env node
 /**
- * scripts/launch-electron.mjs — запуск окна студии.
+ * scripts/launch-electron.mjs — launches the studio window.
  *
- * ЗАЧЕМ НЕ `electron electron/main.js`. Обычный запуск идёт через
- * node_modules/electron/cli.js, а тот поднимает `dist/electron.exe` — в
- * диспетчере задач процесс называется «electron.exe», и пользователь не
- * может отличить студию от любого другого Electron-приложения.
+ * WHY NOT `electron electron/main.js`. Normal launch goes through
+ * node_modules/electron/cli.js, which spawns `dist/electron.exe` — in
+ * Task Manager the process is called "electron.exe", and the user cannot
+ * distinguish the studio from any other Electron app.
  *
- * Здесь запускается переименованная копия (scripts/prepare-electron.mjs):
- * `dist/MinimaxH3Studio.exe` — в диспетчере видно «MinimaxH3Studio».
+ * Here we launch the renamed copy (scripts/prepare-electron.mjs):
+ * `dist/MinimaxH3Studio.exe` — Task Manager shows "MinimaxH3Studio".
  *
- * ПОЧЕМУ НЕ НАПРЯМУЮ ИЗ .BAT. electron.exe собран как GUI-приложение
- * (PE subsystem 2), поэтому его stdout не попадает в консоль bat-окна.
- * cli.js работал как прослойка: он сам жил в консоли и запускал Electron с
- * stdio:'inherit'. Этот скрипт делает ровно то же, но для переименованного
- * бинарника — вывод остаётся виден в консоли и в панели «Консоль» внутри
- * приложения.
+ * WHY NOT DIRECTLY FROM .BAT. electron.exe is compiled as a GUI application
+ * (PE subsystem 2), so its stdout does not go to the bat console window.
+ * cli.js acted as a shim: it lived in the console and launched Electron with
+ * stdio:'inherit'. This script does the exact same thing, but for the renamed
+ * binary — output remains visible in the console and in the "Console" panel inside
+ * the app.
  *
- * ЗАПАСНОЙ ПУТЬ. Если переименованной копии нет (или prepare не отработал) —
- * запускается штатный electron.exe, приложение работает как раньше.
+ * FALLBACK PATH. If the renamed copy does not exist (or prepare did not run) —
+ * the stock electron.exe is launched, and the app works as before.
  *
- * Использование:
+ * Usage:
  *   node scripts/launch-electron.mjs electron/main.js
  */
 import { spawn } from 'node:child_process';
@@ -36,8 +36,8 @@ const STOCK = path.join(DIST, 'electron.exe');
 
 const exe = existsSync(RENAMED) ? RENAMED : STOCK;
 if (!existsSync(exe)) {
-  console.error('[launch] electron не найден в node_modules/electron/dist — ' +
-    'выполните `npm install`.');
+  console.error('[launch] electron not found in node_modules/electron/dist — ' +
+    'run `npm install`.');
   process.exit(1);
 }
 console.log(`[launch] ${path.basename(exe)} ${process.argv.slice(2).join(' ')}`);
@@ -52,7 +52,7 @@ let childClosed = false;
 child.on('close', (code, signal) => {
   childClosed = true;
   if (code === null) {
-    console.error('[launch] завершён по сигналу', signal);
+    console.error('[launch] terminated by signal', signal);
     process.exit(1);
   }
   process.exit(code);

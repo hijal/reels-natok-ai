@@ -1,22 +1,22 @@
-"""MiniMax Sparse Attention (Sol-Attn) — локальная кастомная нода для ComfyUI 0.33.0.
+"""MiniMax Sparse Attention (Sol-Attn) — local custom node for ComfyUI 0.33.0.
 
-(правка 168)
-Портирует Sol-Attn-путь из официального BlockSparseAttention (ComfyUI v0.35.0)
-на ComfyUI 0.33.0, используя только API, доступные в этой сборке:
+(fix 168)
+Ports the Sol-Attn path from official BlockSparseAttention (ComfyUI v0.35.0)
+to ComfyUI 0.33.0, using only APIs available in this build:
   - transformer_options["optimized_attention_override"] (comfy/ldm/modules/attention.py)
   - comfy.patcher_extension.CallbacksMP.ON_PREPARE_STATE / ON_CLEANUP
   - model.model_options["transformer_options"]
   - model.get_model_object("model_sampling").percent_to_sigma
   - comfy_kitchen.sol_attn / sol_attn_is_available
 
-VSA- и SLA-режимы НЕ поддерживаются (требуют to_gate_compress / minimax_h3_layout,
-которых нет в H3-модели 0.33.0). Sol-Attn — training-free, работает на любой модели.
+VSA and SLA modes are NOT supported (require to_gate_compress / minimax_h3_layout,
+not present in 0.33.0 H3 model). Sol-Attn is training-free and works on any model.
 
-Дефолт: tau=1.3, min_tokens=12288 (короткие последовательности остаются dense).
-При ошибке (нет ядра, неподходящий dtype и т.п.) — автоматический фолбэк на dense.
+Defaults: tau=1.3, min_tokens=12288 (short sequences remain dense).
+On failure (kernel unavailable, incompatible dtype, etc.) — automatic fallback to dense.
 
-Установка: достаточно положить эту папку в custom_nodes/ — ComfyUI подхватит при старте.
-Удаление: удалить папку MiniMaxSparseAttn из custom_nodes/.
+Installation: place this folder in custom_nodes/ — ComfyUI loads it at startup.
+Removal: delete the MiniMaxSparseAttn folder from custom_nodes/.
 """
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ PRODUCER_CHUNK = 4096
 
 
 class SparseAttnPatch:
-    """Параметры и runtime-состояние для одной patched-модели.
-    ON_CLEANUP колбэк сбрасывает состояние при завершении sampling-забега."""
+    """Parameters and runtime state for a single patched model.
+    ON_CLEANUP callback resets state upon sampling completion."""
 
     def __init__(self, tau, sigma_start, sigma_end, min_tokens,
                  dense_blocks, extra_tokens, verbose):
@@ -44,7 +44,7 @@ class SparseAttnPatch:
         self.dense_blocks = dense_blocks
         self.extra_tokens = extra_tokens
         self.verbose = verbose
-        self.installed = set()  # override-closures, поставленные этим патчем
+        self.installed = set()  # override-closures installed by this patch
         self.reset()
 
     def reset(self):
@@ -57,45 +57,45 @@ class SparseAttnPatch:
             logging.info(f"MiniMaxSparseAttn: {message}")
 
     def dense_reason(self, transformer_options, tokens, block_index):
-        """Причина, по которой этот вызов остаётся dense (None = можно sparse)."""
+        """Reason why this invocation remains dense (None = sparse eligible)."""
         sigmas = transformer_options.get("sigmas")
         if sigmas is not None:
             sigma = float(sigmas[0])
             if sigma > self.sigma_start or sigma < self.sigma_end:
-                return f"sigma {sigma:.3g} вне окна start/end"
+                return f"sigma {sigma:.3g} outside start/end window"
         if tokens < self.min_tokens:
-            return f"{tokens} токенов < min_tokens {self.min_tokens}"
+            return f"{tokens} tokens < min_tokens {self.min_tokens}"
         if self.dense_blocks:
             if block_index is None:
-                self.log_once("no_block_index", "модель не передаёт block_index; dense_blocks игнорируется")
+                self.log_once("no_block_index", "model does not provide block_index; dense_blocks ignored")
             elif block_index in self.dense_blocks:
-                return f"блок {block_index} в dense_blocks"
+                return f"block {block_index} in dense_blocks"
         return None
 
 
 def _ineligible(q, k, v, dim_head):
-    """Причина, по которой тензоры не могут пойти через ядро, или None."""
+    """Reason why tensors cannot pass through kernel, or None."""
     if q.device.type != "cuda":
-        return "не на CUDA"
+        return "not on CUDA"
     try:
         if not ck.sol_attn_is_available(q.device):
-            return "ядро sol_attn недоступно для этого GPU"
+            return "sol_attn kernel unavailable for this GPU"
     except Exception as e:
-        return f"ошибка проверки ядра: {e}"
+        return f"kernel availability check error: {e}"
     if q.dtype not in (torch.bfloat16, torch.float16, torch.float32):
-        return f"dtype {q.dtype} (ядро принимает bf16/fp16/fp32)"
+        return f"dtype {q.dtype} (kernel expects bf16/fp16/fp32)"
     if dim_head != HEAD_DIM:
         return f"head_dim {dim_head} != {HEAD_DIM}"
     if q.shape != k.shape or q.shape != v.shape:
-        return "cross-attention или GQA (остаёмся dense)"
+        return "cross-attention or GQA (remains dense)"
     if k.dtype != q.dtype or v.dtype != q.dtype:
-        return f"разные dtype: {q.dtype}/{k.dtype}/{v.dtype}"
+        return f"differing dtypes: {q.dtype}/{k.dtype}/{v.dtype}"
     return None
 
 
 def make_attention_override(patch: SparseAttnPatch, previous):
-    """Возвращает override-функцию, которая подставляет sparse attention.
-    Отклонённые вызовы идут через previous (прежний override) или func (dense)."""
+    """Returns override function substituting sparse attention.
+    Rejected invocations fall back through previous (prior override) or func (dense)."""
 
     def override(func, q, k, v, heads, mask=None, attn_precision=None,
                  skip_reshape=False, skip_output_reshape=False, **kwargs):
@@ -110,19 +110,19 @@ def make_attention_override(patch: SparseAttnPatch, previous):
             return func(q, k, v, heads, mask=mask, attn_precision=attn_precision,
                         skip_reshape=skip_reshape, skip_output_reshape=skip_output_reshape, **kwargs)
 
-        # Определяем число токенов
+        # Determine token count
         if skip_reshape:
             tokens = q.shape[2]
         else:
             tokens = q.shape[1]
 
-        # Проверяем, можно ли использовать sparse attention
+        # Check sparse eligibility
         reason = patch.dense_reason(transformer_options, tokens, transformer_options.get("block_index"))
         if reason is not None:
-            patch.log_once(("dense", tokens, reason), f"dense ({tokens} токенов): {reason}")
+            patch.log_once(("dense", tokens, reason), f"dense ({tokens} tokens): {reason}")
             return dense()
 
-        # Формируем BTHD-тензоры
+        # Build BTHD tensors
         if skip_reshape:
             b, _, _, dim_head = q.shape
             qs, ks, vs = (t.transpose(1, 2) for t in (q, k, v))
@@ -136,11 +136,11 @@ def make_attention_override(patch: SparseAttnPatch, previous):
             patch.log_once(("ineligible", tuple(qs.shape), reason), f"dense {tuple(qs.shape)}: {reason}")
             return dense()
 
-        # fp32 → bf16 (ядро квантизирует в int8 всё равно)
+        # fp32 -> bf16 (kernel quantizes to int8 anyway)
         if q.dtype == torch.float32:
             qs, ks, vs = (t.to(torch.bfloat16) for t in (qs, ks, vs))
 
-        # Вызываем ядро Sol-Attn
+        # Invoke Sol-Attn kernel
         try:
             out = ck.sol_attn(
                 qs, ks, vs,
@@ -152,12 +152,12 @@ def make_attention_override(patch: SparseAttnPatch, previous):
                 token_aug=patch.extra_tokens,
             ).to(q.dtype)
         except Exception as e:
-            patch.log_once(("sparse_error", tuple(qs.shape)), f"sparse failed: {e}; фолбэк на dense")
+            patch.log_once(("sparse_error", tuple(qs.shape)), f"sparse failed: {e}; fallback to dense")
             return dense()
 
         patch.log_once(("sparse", tuple(qs.shape)), f"sparse {tuple(qs.shape)}")
 
-        # Формируем выход в ожидаемом формате
+        # Format output in expected structure
         if skip_output_reshape:
             return out.transpose(1, 2)
         return out.reshape(b, -1, heads * dim_head)
@@ -166,7 +166,7 @@ def make_attention_override(patch: SparseAttnPatch, previous):
 
 
 def install_override(patch: SparseAttnPatch, transformer_options):
-    """Ставит override на hook. Идиомпотентно: не ставит повторно, если уже на месте."""
+    """Installs override onto hook. Idempotent: does not reinstall if already present."""
     current = transformer_options.get("optimized_attention_override")
     if current in patch.installed:
         return
@@ -177,7 +177,7 @@ def install_override(patch: SparseAttnPatch, transformer_options):
 
 def apply_sparse_attention(model, *, tau, start_percent, end_percent,
                            min_tokens, dense_blocks, extra_tokens, verbose):
-    """Основная функция: создаёт patched-копию модели с sparse attention override."""
+    """Core function: creates patched model copy with sparse attention override."""
     model_sampling = model.get_model_object("model_sampling")
     patch = SparseAttnPatch(
         tau=tau,
@@ -205,9 +205,9 @@ def apply_sparse_attention(model, *, tau, start_percent, end_percent,
 
 
 class MiniMaxSparseAttention:
-    """Кастомная нода ComfyUI: разреженное внимание Sol-Attn (training-free).
-    Ускоряет длинные последовательности (~1.2–2.5×), короткие остаются dense.
-    При ошибке ядра — автоматический фолбэк на dense (workflow не падает)."""
+    """Custom ComfyUI node: Sol-Attn sparse attention (training-free).
+    Accelerates long sequences (~1.2-2.5x), short sequences remain dense.
+    On kernel error — automatic fallback to dense (workflow does not fail)."""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -230,24 +230,24 @@ class MiniMaxSparseAttention:
     FUNCTION = "apply"
     CATEGORY = "model/patch"
     DESCRIPTION = (
-        "Разреженное внимание (Sol-Attn) — ускоряет длинные последовательности. "
-        "Короткие остаются плотными автоматически (min_tokens)."
+        "Sparse attention (Sol-Attn) — accelerates long sequences. "
+        "Short sequences remain dense automatically (min_tokens)."
     )
 
     @classmethod
     def apply(cls, model, tau=1.3, start_percent=0.2, end_percent=1.0,
               min_tokens=12288, extra_tokens=256, verbose=False):
-        # Проверка доступности ядра: если ядра нет — тихо пропускаем,
-        # возвращаем модель без изменений (dense fallback).
+        # Kernel availability check: if unavailable — silently skip,
+        # return unmodified model (dense fallback).
         try:
             import torch as _t
             device = _t.cuda.current_device()
             if not ck.sol_attn_is_available(device):
                 if verbose:
-                    logging.warning("MiniMaxSparseAttn: ядро sol_attn недоступно — модель не меняется (dense)")
+                    logging.warning("MiniMaxSparseAttn: sol_attn kernel unavailable — model unchanged (dense)")
                 return (model,)
         except Exception:
-            pass  # CUDA недоступна или ядра нет — dense fallback
+            pass  # CUDA unavailable or kernel absent — dense fallback
 
         patched = apply_sparse_attention(
             model,

@@ -3,14 +3,14 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from '
 import { join } from 'path'
 
 /**
- * GET  /api/assistant/chats — загрузить чаты из файла проекта.
- * PUT  /api/assistant/chats — сохранить чаты в файл проекта.
+ * GET  /api/assistant/chats — load chats from project file.
+ * PUT  /api/assistant/chats — save chats to project file.
  *
- * Файл: <project>/data/assistant-chats.json
- * Формат: { chats: AssistantChat[], activeChatId: string | null }
+ * File: <project>/data/assistant-chats.json
+ * Format: { chats: AssistantChat[], activeChatId: string | null }
  *
- * Это позволяет переносить чаты между версиями программы
- * (файл лежит в папке проекта, а не в localStorage браузера).
+ * This allows transferring chats between program versions
+ * (the file is stored in project folder, not in browser localStorage).
  */
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +27,9 @@ interface Chat {
   title: string
   createdAt: number
   updatedAt: number
-  /** (правка 427) Режим чата ('generate' | 'extend' | 'controlnet' (правка 502));
-   *  необязателен — старые записи без него клиент трактует как 'generate'.
-   *  Поля сверх валидации сохраняются как есть (JSON round-trip). */
+  /** (fix 427) Chat mode ('generate' | 'extend' | 'controlnet' (fix 502));
+   *  optional — old records without it are treated by client as 'generate'.
+   *  Extra fields beyond validation are preserved as-is (JSON round-trip). */
   mode?: 'generate' | 'extend' | 'controlnet'
   messages: ChatMessage[]
 }
@@ -73,9 +73,9 @@ function writeChats(payload: ChatsPayload): void {
     chats: payload.chats,
     activeChatId: payload.activeChatId ?? null,
   }
-  // Атомарная запись (tmp + rename): при краше/переполнении диска/гонке
-  // PUT+POST прямой writeFileSync мог оставить обрезанный JSON — и тогда
-  // ВСЕ серверные чаты терялись (readChats падал бы на парсе).
+  // Atomic write (tmp + rename): on crash/disk full/race
+  // PUT+POST direct writeFileSync could leave truncated JSON — and then
+  // ALL server chats were lost (readChats would fail parsing).
   const tmp = CHATS_FILE + '.tmp'
   writeFileSync(tmp, JSON.stringify(safe, null, 2), 'utf-8')
   renameSync(tmp, CHATS_FILE)
@@ -93,9 +93,9 @@ export async function GET() {
 /* ─── PUT ─── */
 export async function PUT(request: Request) {
   try {
-    // (правка 716) Лимит тела и числа чатов. Раньше payload был неограничен:
-    // весь массив сериализовался и писался синхронно (writeFileSync) в
-    // обработчике запроса — один запрос мог занять процесс надолго.
+    // (fix 716) Body limit and chat count limit. Previously payload was unlimited:
+    // the whole array was serialized and written synchronously (writeFileSync) in
+    // the request handler — a single request could block the process for a long time.
     const MAX_BODY_BYTES = 32 * 1024 * 1024
     const MAX_CHATS = 500
     const declared = Number(request.headers.get('content-length') || 0)
@@ -121,8 +121,8 @@ export async function PUT(request: Request) {
 }
 
 /* ─── POST ─── */
-// Псевдоним PUT: navigator.sendBeacon умеет только POST — без этого
-// хендлера фолбэк сохранения чатов при закрытии вкладки получает 405.
+// Alias of PUT: navigator.sendBeacon only supports POST — without this
+// handler the chat save fallback on tab close receives 405.
 export async function POST(request: Request) {
   return PUT(request)
 }

@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * (правка 723) FacePickDialog — окно «кого перерисовывать»: исходник с
- * прокруткой по кадрам и клик по нужному лицу.
+ * (edit 723) FacePickDialog — "Target face selection" window: source video
+ * with frame scrubbing and click-to-pick target face.
  *
- * Зачем: правило (самое крупное / левее / правее) видит только геометрию кадра
- * и в толпе или на общем плане упирается в одно и то же лицо. Клик задаёт цель
- * напрямую: нода H3 Face Track + Crop берёт ближайшее к точке лицо и ведёт
- * этого человека через весь ролик.
+ * Why: geometric rules (largest / leftmost / rightmost) only see frame geometry
+ * and get stuck on the same person in crowds or wide shots. Clicking specifies the target
+ * directly: the H3 Face Track + Crop node picks the closest face to the point and tracks
+ * that person across the entire clip.
  *
- * Координаты считаются в пикселях САМОГО ВИДЕО (video.videoWidth/Height) —
- * именно их ждут входы X/Y. Номер кадра — из fps, который вернул ffprobe
- * (video.currentTime × fps): элемент <video> кадров не отдаёт.
+ * Coordinates are calculated in pixels of the VIDEO ITSELF (video.videoWidth/Height) —
+ * which is what the X/Y inputs expect. Frame number is calculated from fps returned by ffprobe
+ * (video.currentTime * fps), since HTML <video> does not provide frame indices directly.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -29,16 +29,16 @@ import type { FaceRefinePoint } from '@/lib/face-refine-target-store'
 interface FacePickDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** URL исходника (тот же, что играет превью в панели). */
+  /** Source video URL (same as preview player in panel). */
   url: string
   filename: string
-  /** fps исходника; 24 — запасное значение, если ffprobe не ответил. */
+  /** Source fps; 24 fallback if ffprobe did not respond. */
   fps: number
-  /** Всего кадров (0 — неизвестно). */
+  /** Total frames (0 = unknown). */
   frames: number
   point: FaceRefinePoint | null
   onPick: (point: FaceRefinePoint) => void
-  /** Сбросить точку и вернуться к правилу. */
+  /** Reset point and revert to rule. */
   onClear: () => void
 }
 
@@ -66,9 +66,9 @@ export function FacePickDialog({
   const [playing, setPlaying] = useState(false)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [marker, setMarker] = useState<FaceRefinePoint | null>(point)
-  // Браузер читает далеко не все контейнеры (mkv/mxf), а без кадра клик некуда ставить.
+  // Browsers cannot play all containers (mkv/mxf), and without frames click cannot be placed.
   const [loadFailed, setLoadFailed] = useState(false)
-  // Каждое открытие подхватывает текущую точку; клики внутри окна её не сбивают.
+  // Each open picks up current point; clicks inside the dialog do not reset it.
   const openedRef = useRef(false)
 
   const frameOf = useCallback(
@@ -88,8 +88,8 @@ export function FacePickDialog({
     setLoadFailed(false)
   }, [open, point])
 
-  // Метаданные приходят после открытия: здесь же ставим курсор на кадр точки,
-  // чтобы её было видно и можно было поправить.
+  // Metadata arrives after open: set cursor to frame of point
+  // so that it's visible and can be adjusted.
   const handleMetadata = () => {
     const v = videoRef.current
     if (!v) return
@@ -118,7 +118,7 @@ export function FacePickDialog({
   const togglePlay = () => {
     const v = videoRef.current
     if (!v) return
-    if (v.paused) void v.play().catch(() => { /* автоплей заблокирован — не критично */ })
+    if (v.paused) void v.play().catch(() => { /* autoplay blocked — non-critical */ })
     else v.pause()
   }
 
@@ -134,9 +134,8 @@ export function FacePickDialog({
     ? { left: `${(marker.x / size.w) * 100}%`, top: `${(marker.y / size.h) * 100}%` }
     : null
 
-  // Вписываем даже вертикальное/огромное видео в окно: ширина ограничена
-  // 52vh по высоте (52 * aspect), а не 900px по ширине. Иначе 9:16-ролик
-  // получался высотой в несколько экранов и низ кадра уезжал под скролл.
+  // Fit even vertical/massive videos into dialog: width constrained
+  // by 52vh height (52 * aspect), rather than 900px width.
   const maxVideoWidthVh =
     size.w > 0 && size.h > 0 ? 52 * (size.w / size.h) : null
 
@@ -146,27 +145,25 @@ export function FacePickDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <CrosshairIcon className="w-4 h-4 text-yellow-400" />
-            Кого перерисовывать
+            Select Face to Redraw
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Найдите кадр, где нужное лицо видно лучше всего, и кликните по нему.
-            Нода возьмёт ближайшее к точке лицо и будет вести этого человека через
-            весь ролик.
+            Find the frame where the target face is most visible and click on it.
+            The node will select the face closest to the point and track that person
+            throughout the entire video.
             {filename && <span className="text-muted-foreground/70"> {filename}</span>}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Кадр. Клик по видео = точка. Обёртка получает ширину из aspect
-            видео и ограничения 52vh по высоте: даже огромный вертикальный
-            ролик целиком помещается в окно, без прокрутки до нижнего края.
-            Рамка обёртки совпадает с кадром, поэтому проценты маркера равны
-            пикселям видео. */}
+        {/* Frame. Click on video = point. Wrapper gets width from video aspect
+            and 52vh height constraint: even large vertical videos fit completely
+            without scrolling. */}
         <div className="flex justify-center">
           <div
             className="relative inline-block max-w-full rounded-lg overflow-hidden bg-black cursor-crosshair select-none"
             style={maxVideoWidthVh ? { width: `min(100%, ${maxVideoWidthVh}vh)` } : { width: '100%' }}
             onClick={handleClick}
-            title="Кликните по лицу"
+            title="Click on the face"
           >
             <video
               ref={videoRef}
@@ -193,12 +190,12 @@ export function FacePickDialog({
           </div>
         </div>
 
-        {/* Таймлайн и кадр */}
+        {/* Timeline and frame */}
         <div className="space-y-1">
           {loadFailed && (
             <p className="text-[10px] text-yellow-400">
-              Браузер не открыл этот файл (контейнер не читается) — выберите лицо
-              правилом в панели слева.
+              The browser could not open this file (unsupported container) — select the face
+              using the rule in the left panel.
             </p>
           )}
           <input
@@ -209,13 +206,13 @@ export function FacePickDialog({
             value={Math.min(time, duration || 0)}
             onChange={(e) => seek(parseFloat(e.target.value))}
             className="w-full accent-yellow-400"
-            aria-label="Позиция в ролике"
+            aria-label="Video position"
           />
           <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
             <span>{fmtTime(time)} / {fmtTime(duration)}</span>
             <span className="text-yellow-400">
-              кадр {frameOf(time)}{frames > 0 ? ` из ${frames}` : ''}
-              {marker ? ` · точка на кадре ${marker.frame}` : ''}
+              frame {frameOf(time)}{frames > 0 ? ` of ${frames}` : ''}
+              {marker ? ` · point on frame ${marker.frame}` : ''}
             </span>
           </div>
         </div>
@@ -223,7 +220,7 @@ export function FacePickDialog({
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={togglePlay} className="h-8 px-3 gap-1.5 text-xs">
             {playing ? <PauseIcon className="w-3.5 h-3.5" /> : <PlayIcon className="w-3.5 h-3.5" />}
-            {playing ? 'Пауза' : 'Проиграть'}
+            {playing ? 'Pause' : 'Play'}
           </Button>
           <div className="flex-1" />
           {marker && (
@@ -236,10 +233,10 @@ export function FacePickDialog({
                 size="sm"
                 onClick={() => { setMarker(null); onClear(); onOpenChange(false) }}
                 className="h-8 px-2 gap-1 text-xs text-muted-foreground"
-                title="Сбросить точку и вернуться к правилу"
+                title="Reset point and revert to rule"
               >
                 <XIcon className="w-3.5 h-3.5" />
-                Сбросить
+                Reset
               </Button>
             </>
           )}
@@ -248,7 +245,7 @@ export function FacePickDialog({
             onClick={() => onOpenChange(false)}
             className="h-8 px-4 text-xs bg-yellow-500 hover:bg-yellow-400 text-black border-0 font-medium"
           >
-            Готово
+            Done
           </Button>
         </div>
       </DialogContent>

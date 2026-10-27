@@ -1,13 +1,13 @@
 /**
- * video-format-server (правка 386) — серверная половина настроек формата
- * видео: читает config.ini → [video]. Импортировать ТОЛЬКО из серверного
- * кода (роуты, minimax-h3-client) — модуль тянет fs через app-config.
- * Сам шаблонный ввод/аргументы — чистые функции в video-format.ts.
+ * video-format-server (edit 386) — server-side half of video format settings:
+ * reads config.ini → [video]. Import ONLY from server-side code (routes,
+ * minimax-h3-client) — this module pulls in fs via app-config.
+ * The template input/arguments themselves are pure functions in video-format.ts.
  */
 import { getAppConfig } from './app-config'
 import { normalizeVideoFormat, type VideoFormatSettings } from './video-format'
 
-/** Текущие настройки формата из config.ini (с безопасными дефолтами). */
+/** Current format settings from config.ini (with safe defaults). */
 export function getVideoFormatSettings(): VideoFormatSettings {
   try {
     const cfg = getAppConfig() as {

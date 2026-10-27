@@ -4,15 +4,15 @@ import { forceReleaseAssistantLock } from '@/lib/vram-arbiter'
 export const dynamic = 'force-dynamic'
 
 /**
- * POST /api/llm/release — (правка 110) принудительное снятие блокировки
- * ассистента (зависший streaming-счётчик). Вызывается UI-fallback'ом, когда
- * кнопка «Сгенерировать» держится заблокированной больше 60 с, хотя активного
- * стрима на клиенте уже нет. Свежий замок (стрим реально идёт) НЕ снимает:
- * forceReleaseAssistantLock проверяет возраст блокировки.
+ * POST /api/llm/release — (fix 110) forced release of assistant lock
+ * (stuck streaming counter). Invoked by UI fallback when
+ * the "Generate" button remains locked for more than 60 s, even though
+ * there is no active stream on the client anymore. A fresh lock (stream actually running) is NOT released:
+ * forceReleaseAssistantLock checks lock age.
  *
- * (правка 692) `?force=1` — безусловный сброс: игнорирует minAge, снимает
- * streamingCount + chatActive сразу. Используется вторым pass клиентского
- * fallback'а, когда первый (non-force) не помог.
+ * (fix 692) `?force=1` — unconditional reset: ignores minAge, clears
+ * streamingCount + chatActive immediately. Used by second pass of client
+ * fallback when the first (non-force) did not help.
  */
 export async function POST(req: NextRequest) {
   const force = req.nextUrl.searchParams.get('force') === '1'

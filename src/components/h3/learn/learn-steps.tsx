@@ -6,70 +6,69 @@
  * with numbered <Hl> highlights + callouts explaining "what / why / how".
  * INVARIANT: every callout number n has exactly one matching <Hl n> zone.
  *
- * (правка 114) Полная актуализация тура под текущий функционал программы:
- *   + окно приветствия (правки 112–113),
- *   + диктофон в поле промпта (правки 65/74),
- *   + горячая клавиша R/К на диктовку (правка 118),
- *   + вложения чата живут только в чате (правка 108), KV-кэш LLM (правка 109),
- *   + ручной ввод значений у слайдеров (правка 107),
- *   + два режима Upscale и метки в галерее (правки 74/77/78),
- *   + отдельный шаг по LoRA: турбо-лора в списке, сила, триггеры (правки 44/95/96),
- *   + вкладка «Внешний вид» и 8 вкладок настроек (правка 111),
- *   + шаги pass 1: 2–30, по умолчанию 4, ручной ввод 1–128 (правки 63–77).
+ * (fix 114) Complete tutorial update for current app functionality:
+ *   + welcome dialog (fixes 112–113),
+ *   + dictation in prompt field (fixes 65/74),
+ *   + hotkey R/K for dictation (fix 118),
+ *   + chat attachments live only in chat (fix 108), LLM KV cache (fix 109),
+ *   + manual value entry for sliders (fix 107),
+ *   + two Upscale modes and gallery badges (fixes 74/77/78),
+ *   + dedicated LoRA step: turbo LoRA in list, strength, triggers (fixes 44/95/96),
+ *   + "Appearance" tab and 8 settings tabs (fix 111),
+ *   + pass 1 steps: 2–30, default 4, manual entry 1–128 (fixes 63–77).
  *
- * (правка 163) Актуализация под правки 136–162:
- *   + 3 режима генерации: Текст / Кадры / Референсы (правка 146),
- *   + Bonsai 2 27B — LLM по умолчанию (правка 162),
- *   + Ассистент видит видео-кадры на Bonsai (правка 162),
- *   + RTX VSR: HDR убран (правка 162), DLSS 1.5× работает (правка 162),
- *   + Bonsai light — optional, баннер не требует (правка 162),
- *   + Соотношение сторон в режиме «Кадры» из первого кадра (правка 152),
- *   + Ассистент знает режим и не ломает промпт при переключении (правка 150).
+ * (fix 163) Update for fixes 136–162:
+ *   + 3 generation modes: Text / Frames / References (fix 146),
+ *   + Bonsai 2 27B — default LLM (fix 162),
+ *   + Assistant sees video frames on Bonsai (fix 162),
+ *   + RTX VSR: HDR removed (fix 162), DLSS 1.5× works (fix 162),
+ *   + Bonsai light — optional, banner does not require it (fix 162),
+ *   + Aspect ratio in "Frames" mode from first frame (fix 152),
+ *   + Assistant knows active mode and preserves prompt structure (fix 150).
  *
- * (полная сверка с кодом) Исправлены расхождения и упрощён язык:
- *   + продление: минимум 3 с на клип (правка 434, было 5 — правка 309), 24 fps, автосклейка,
- *     результат — в папку оригинала (правка 363);
- *   + Refine: режимы «Целый»/«Частями», Match/Max, референсы из метаданных;
- *   + пайплайн «Полное»/«Драфт» и красный бейдж Draft (правки 310/313);
- *   + обрезка аудио-рефов в плеере (правка 326);
- *   + LoRA: сила −10…+10; резерв VRAM 1–16 ГБ (правка 315);
- *   + вкладка сайдбара называется «DLSS», всего вкладок десять (добавлена
- *     «Face Refine», правка 722).
+ * (code alignment) Reconciliation and simplified language:
+ *   + extend: minimum 3s per clip (fix 434, was 5 — fix 309), 24 fps, auto-stitch,
+ *     result saved in original folder (fix 363);
+ *   + Refine: "Whole" / "Chunked" modes, Match/Max, references from metadata;
+ *   + "Full" / "Draft" pipeline and red Draft badge (fixes 310/313);
+ *   + audio reference trimming in player (fix 326);
+ *   + LoRA: strength −10…+10; VRAM reserve 1–16 GB (fix 315);
+ *   + sidebar tab is called "DLSS", 10 tabs total (added
+ *     "Face Refine", fix 722).
  *
- * (правка 486) Актуализация под текущее состояние программы:
- *   + настроек стало ДЕВЯТЬ вкладок: добавились «Формат» (кодек/качество
- *     видео, правка 386) и «О программе» (правка 484), а отдельная вкладка
- *     «ComfyUI» убрана — статус и «Перепроверить» живут в «Общих», датчики
- *     VRAM/GPU/RAM — в сайдбаре;
- *   + «Видение видео» ассистента по умолчанию ВКЛ (сжатый digest с кэшем);
- *   + диффузионная модель — FastH3 VSA DataFree 4-step INT8 (правка 293);
- *   + Refine: цели «Как в исходнике/720p/1080p», шаги 2–5, слайдер
- *     «Влияние Refine» (σ 0.30–0.95, дефолт 60%);
- *   + Tile Upscale: денойз 0.05–1 (дефолт 0.2), шаги 2–8 (дефолт 2),
- *     SyncTile (правка 481) — в доп. параметрах, по умолчанию вкл;
- *   + Продление: клип 3–30 с, двухпроходный режим (Драфт/Полное);
- *   + пользовательские LoRA работают также в Refine, Tile Upscale и
- *     Продлении (правка 483);
- *   + опасная зона: четыре кнопки (добавился «Заводской сброс (всё)»);
- *   + в «Обучении» появилась подвкладка «Сценарии» (правка 485).
+ * (fix 486) Update for current state:
+ *   + NINE settings tabs: added "Format" (video codec/quality,
+ *     fix 386) and "About" (fix 484); dedicated "ComfyUI" tab removed —
+ *     status and "Recheck" live in "General", VRAM/GPU/RAM meters in sidebar;
+ *   + Assistant "Video Vision" ON by default (compressed digest with cache);
+ *   + diffusion model — FastH3 VSA DataFree 4-step INT8 (fix 293);
+ *   + Refine: targets "Same as source / 720p / 1080p", steps 2–5,
+ *     "Refine Influence" slider (σ 0.30–0.95, default 60%);
+ *   + Tile Upscale: denoise 0.05–1 (default 0.2), steps 2–8 (default 2),
+ *     SyncTile (fix 481) — in advanced parameters, on by default;
+ *   + Extend: clip 3–30 s, two-pass mode (Draft/Full);
+ *   + user LoRAs also work in Refine, Tile Upscale, and
+ *     Extend (fix 483);
+ *   + danger zone: four buttons (added "Factory Reset (All)");
+ *   + added "Workflows" subtab under "Learn" (fix 485).
  *
- * (правка 497) Новая вкладка «ControlNet» (сайдбар, секция тура, MockSidebar):
- *   генерация по контрольному видео (Fun ControlNet: depth/canny задают
- *   движение покадрово, внешний вид — по промпту). Вкладок стало девять.
+ * (fix 497) New tab "ControlNet" (sidebar, tour section, MockSidebar):
+ *   generation guided by control video (Fun ControlNet: depth/canny guide
+ *   motion frame by frame, appearance guided by prompt). Nine tabs total.
  *
- * (правка 719) Актуализация под текущее состояние программы:
- *   + разделены «точка сплита» и «всего шагов» pass 1: дефолт теперь
- *     6 из 12 (было «4 из 8»), появился регулятор «Всего шагов (pass 1)»
- *     и живая сводка «N из M» с σ-границами (правки 719);
- *   + Extend: шаги клипа вынесены в отдельное поле (эталон = 4);
- *   + клик по превью референса открывает полноэкранный просмотр — во всех
- *     вкладках (правка 719);
- *   + при старте программа сверяет, что генерация реально идёт, и не
- *     показывает «в процессе» для несуществующей задачи (правка 719);
- *   + кнопки поля промпта — вертикальная колонка (правка 717);
- *   + встроенная турбо-лора снова в списке LoRA и включена по умолчанию;
- *     в режиме «Кадры» с аудио она пропускается, пользовательские LoRA — нет;
- *   + Refine: «Проход (шаги)» — 2/3/4/5, по умолчанию 3.
+ * (fix 719) Update for current application state:
+ *   + separated "split point" and "total steps" pass 1: default is now
+ *     6 of 12 (was "4 of 8"), added "Total steps (pass 1)" slider
+ *     and live "N of M" summary with σ-boundaries (fix 719);
+ *   + Extend: clip steps moved to separate field (standard = 4);
+ *   + clicking reference preview opens full-screen view across all
+ *     tabs (fix 719);
+ *   + on launch app confirms generation is actually running, avoiding
+ *     stuck "in progress" state for non-existent job (fix 719);
+ *   + prompt field buttons arranged in vertical column (fix 717);
+ *   + built-in turbo LoRA back in LoRA list and enabled by default;
+ *     in "Frames" mode with audio it is skipped, user LoRAs are not;
+ *   + Refine: "Pass (steps)" — 2/3/4/5, default 3.
  */
 import type { ReactNode } from 'react'
 import {
@@ -112,7 +111,7 @@ export interface LearnCallout {
 export interface LearnStep {
   id: string
   title: string
-  /** One-line teaser shown in the "Что дальше" strip. */
+  /** One-line teaser shown in the "What's next" strip. */
   short: string
   mock: ReactNode
   callouts: LearnCallout[]
@@ -125,11 +124,11 @@ function Stage({ children }: { children: ReactNode }) {
 }
 
 export const LEARN_STEPS: LearnStep[] = [
-  /* ═══════════════ ЧАСТЬ 1. СТАРТ ═══════════════ */
+  /* ═══════════════ PART 1. GETTING STARTED ═══════════════ */
   {
     id: 'welcome',
-    title: 'Добро пожаловать — что это за программа',
-    short: 'Локальная студия: нейросеть MiniMax H3 на вашем ПК и start.bat.',
+    title: 'Welcome — What is this software?',
+    short: 'Local studio: MiniMax H3 neural network on your PC powered by start.bat.',
     mock: (
       <Stage>
         <Hl n={1}><MockWelcomeDialog /></Hl>
@@ -137,37 +136,37 @@ export const LEARN_STEPS: LearnStep[] = [
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
             <p className="text-xs font-mono text-cyan-300 font-semibold">start.bat</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Один клик — и запускается всё:</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">One click starts everything:</p>
             <div className="space-y-1 pt-1">
-              <p className="text-[10px] text-foreground/80">• ComfyUI (нейросеть, порт 8188)</p>
-              <p className="text-[10px] text-foreground/80">• веб-интерфейс</p>
-              <p className="text-[10px] text-foreground/80">• браузер</p>
+              <p className="text-[10px] text-foreground/80">• ComfyUI (neural network, port 8188)</p>
+              <p className="text-[10px] text-foreground/80">• web interface</p>
+              <p className="text-[10px] text-foreground/80">• browser</p>
             </div>
           </div>
         </Hl>
         <Hl n={4}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-xs text-foreground font-semibold">🖥 Всё на вашем ПК</p>
+            <p className="text-xs text-foreground font-semibold">🖥 Everything on your PC</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Нейросеть работает на вашей видеокарте, а не в облаке. Для генерации интернет не нужен — только для первичной загрузки моделей.
+              The neural network runs on your GPU, not in the cloud. No internet is needed for generation — only for initial model downloads.
             </p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Окно приветствия', text: 'Появляется при каждом запуске программы — пока вы не поставите галочку «Больше не показывать это окно». Внутри краткая инструкция из трёх шагов: скачать модели → сгенерировать первое видео → посмотреть результат. Из окна можно сразу открыть настройки или этот тур. Если окно «потерялось» — верните его: Настройки → Общие → «Показать окно приветствия».' },
-      { n: 2, title: 'Вкладки слева', text: '«Генерация» — создание видео (3 режима: Текст / Кадры / Референсы), «Продление» — продолжить готовый ролик, «Refine» — улучшить качество видео, «ControlNet» — точный перенос движения с контрольного видео (3D-болванки), «Tile Upscale» и «DLSS» — два способа повысить чёткость, «FPS» — сделать движение плавнее, «Face Refine» — перерисовать мелкие лица, «Галерея» — все готовые видео, «Обучение» — этот тур. Ассистент (чат-помощник по промптам, Bonsai 2 27B) — правая панель на вкладках «Генерация» и «Продление». Сайдбар можно свернуть.' },
-      { n: 3, title: 'start.bat — ваш пульт', text: 'Единственная точка запуска: поднимает нейросеть ComfyUI, интерфейс и открывает браузер. Если что-то пошло не так — просто перезапустите его.' },
-      { n: 4, title: 'Локально и офлайн', text: 'Видео генерируется на вашей видеокарте. После единоразовой загрузки моделей интернет больше не нужен.' },
+      { n: 1, title: 'Welcome Dialog', text: 'Appears every time you start the app — until you check "Do not show this window again". Contains a quick 3-step guide: download models → generate first video → inspect results. You can open settings or this tour directly from it. If the window was dismissed — restore it in Settings → General → "Show Welcome Dialog".' },
+      { n: 2, title: 'Sidebar Tabs', text: '"Generate" — create video (3 modes: Text / Frames / References), "Extend" — continue an existing clip, "Refine" — enhance video quality, "ControlNet" — exact motion transfer from control video (3D blockouts), "Tile Upscale" and "DLSS" — two ways to increase resolution, "FPS" — smooth motion interpolation, "Face Refine" — redraw distant or small faces, "Gallery" — all generated videos, "Learn" — this tour. The Assistant (prompt chat helper, Bonsai 2 27B) lives on the right panel in "Generate" and "Extend". The sidebar can be collapsed.' },
+      { n: 3, title: 'start.bat — Your Control Panel', text: 'The single launch point: starts the ComfyUI backend, interface, and opens your browser. If anything goes wrong — simply restart it.' },
+      { n: 4, title: 'Local and Offline', text: 'Videos generate entirely on your graphics card. After downloading the models once, internet connection is no longer needed.' },
     ],
-    tip: 'При первом запуске интерфейс может ждать, пока ComfyUI загрузится — это нормально, дождитесь зелёного индикатора.',
+    tip: 'On first launch, the interface may wait while ComfyUI loads — this is normal, wait for the green indicator.',
   },
-  /* (правка 132) Системные требования — файл подкачки, частая причина ошибок */
+  /* (fix 132) System requirements — pagefile, common source of errors */
   {
     id: 'sys-reqs',
-    title: 'Системные требования — файл подкачки',
-    short: 'Увеличьте файл подкачки до 32 ГБ, иначе будет ошибка «не хватает памяти».',
+    title: 'System Requirements — Pagefile',
+    short: 'Increase pagefile to 32 GB, otherwise "out of memory" errors will occur.',
     mock: (
       <Stage>
         <Hl n={1}>
@@ -181,174 +180,174 @@ export const LEARN_STEPS: LearnStep[] = [
                 </svg>
               </span>
               <div>
-                <p className="text-sm font-semibold text-amber-300">Файл подкачки</p>
+                <p className="text-sm font-semibold text-amber-300">Pagefile</p>
                 <p className="text-[10px] text-muted-foreground">Virtual Memory / Page File</p>
               </div>
             </div>
             <p className="text-xs text-foreground/80 leading-relaxed">
-              Программа потребляет много оперативной памяти. Если файл подкачки небольшой — Windows выдаст ошибку «не хватает памяти».
+              The app consumes a significant amount of RAM. If the pagefile is small, Windows will report out-of-memory errors.
             </p>
             <div className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[10px] text-foreground/70 leading-relaxed space-y-1">
-              <p className="font-medium text-foreground">Минимум: 32 ГБ (32768 МБ)</p>
-              <p>Рекомендуется: 64 ГБ (65536 МБ)</p>
+              <p className="font-medium text-foreground">Minimum: 32 GB (32768 MB)</p>
+              <p>Recommended: 64 GB (65536 MB)</p>
             </div>
           </div>
         </Hl>
         <Hl n={2}>
           <div className="w-[280px] rounded-xl border border-border bg-[var(--surface-1)] p-3.5 space-y-2">
-            <p className="text-xs font-semibold text-foreground">Как увеличить (Windows):</p>
+            <p className="text-xs font-semibold text-foreground">How to increase (Windows):</p>
             <div className="space-y-1.5 text-[10px] text-muted-foreground leading-relaxed">
               <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">1</span> Win + R → <code className="font-mono bg-[var(--surface-2)] px-1 rounded">sysdm.cpl</code> → Enter</p>
-              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">2</span> Вкладка «Дополнительно»</p>
-              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">3</span> «Быстродействие» → «Параметры» → «Изменить...»</p>
-              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">4</span> Снять галочку «Автоматически определять размер»</p>
-              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">5</span> Выбрать диск (обычно C:)</p>
-              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">6</span> Поставить «Максимальный размер» = <b className="text-foreground">32768</b></p>
-              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">7</span> «Установить» → «ОК» → <b className="text-foreground">перезагрузить ПК</b></p>
+              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">2</span> "Advanced" tab</p>
+              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">3</span> "Performance" → "Settings" → "Change..."</p>
+              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">4</span> Uncheck "Automatically manage paging file size"</p>
+              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">5</span> Select drive (usually C:)</p>
+              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">6</span> Set "Maximum size" = <b className="text-foreground">32768</b></p>
+              <p><span className="inline-block w-4 h-4 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold text-center leading-4">7</span> "Set" → "OK" → <b className="text-foreground">restart PC</b></p>
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-red-400/30 bg-red-500/5 p-3 space-y-1.5">
-            <p className="text-[10px] font-semibold text-red-400">❌ Без этого:</p>
+            <p className="text-[10px] font-semibold text-red-400">❌ Without this:</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Ошибка «Not enough memory» / «CUDA out of memory» / программа падает при генерации.
+              Errors such as "Not enough memory" / "CUDA out of memory" / app crashes during generation.
             </p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Почему это важно', text: 'Программа (ComfyUI + нейросеть MiniMax H3) потребляет 10–20+ ГБ оперативной памяти во время генерации. Файл подкачки (virtual memory) — это «дополнительная память» на диске, которая подстраховывает, когда RAM не хватает. Если он маленький (Windows по умолчанию ставит 1–4 ГБ) — программа выдаст ошибку.' },
-      { n: 2, title: 'Как увеличить', text: 'Win + R → sysdm.cpl → «Дополнительно» → «Быстродействие» → «Параметры» → «Изменить». Снять галочку «Автоматически», выбрать диск, «Максимальный размер» = 32768 (или больше), «Установить» → «ОК» → перезагрузить. Это займёт 30 секунд.' },
-      { n: 3, title: 'Симптомы', text: 'Если вы видите ошибки «Not enough memory», «CUDA out of memory», «Page file» или программа просто падает при генерации — скорее всего, файл подкачки слишком маленький. Увеличьте его и перезагрузите ПК.' },
+      { n: 1, title: 'Why it matters', text: 'The application (ComfyUI + MiniMax H3 neural network) consumes 10–20+ GB of RAM during generation. The pagefile (virtual memory) is backup storage on disk when RAM runs low. If it is too small (Windows default is 1–4 GB), the application will crash or throw errors.' },
+      { n: 2, title: 'How to increase', text: 'Win + R → sysdm.cpl → "Advanced" → "Performance" → "Settings" → "Change". Uncheck "Automatically manage", choose drive, set "Maximum size" to 32768 (or higher), click "Set" → "OK" → restart your PC. Takes only 30 seconds.' },
+      { n: 3, title: 'Symptoms', text: 'If you encounter "Not enough memory", "CUDA out of memory", "Page file" errors or spontaneous crashes during generation, your pagefile is likely insufficient. Increase it and restart your PC.' },
     ],
-    tip: 'Это нужно сделать один раз. После увеличения файла подкачки проблема с памятью уходит навсегда.',
+    tip: 'This only needs to be configured once. After increasing the pagefile, memory exhaustion crashes are resolved permanently.',
   },
   {
     id: 'first-run',
-    title: 'Первый запуск — скачиваем модели',
-    short: 'Жёлтый баннер → Настройки → скачать. Одноразово, ~50 ГБ.',
+    title: 'First Launch — Downloading Models',
+    short: 'Yellow banner → Settings → Download. One-time download, ~50 GB.',
     mock: (
       <Stage>
         <Hl n={1}><MockWarningBanner /></Hl>
         <Hl n={2}><MockModelsList /></Hl>
         <Hl n={3}>
           <div className="w-[190px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Статусы моделей</p>
-            <p className="text-[10px] text-muted-foreground">✓ — готово</p>
-            <p className="text-[10px] text-muted-foreground">○ — не скачано</p>
-            <p className="text-[10px] text-cyan-300">⬇ — качается (% и скорость)</p>
-            <p className="text-[10px] text-red-400">! — ошибка (повторите)</p>
+            <p className="text-[10px] font-semibold text-foreground">Model Statuses</p>
+            <p className="text-[10px] text-muted-foreground">✓ — ready</p>
+            <p className="text-[10px] text-muted-foreground">○ — not downloaded</p>
+            <p className="text-[10px] text-cyan-300">⬇ — downloading (% and speed)</p>
+            <p className="text-[10px] text-red-400">! — error (retry)</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Баннер вверху экрана', text: 'Появляется, когда нужные модели ещё не скачаны, — без них генерация будет работать некорректно. Кнопка «Скачать в настройках» открывает настройки, ✕ временно скрывает баннер.' },
-      { n: 2, title: 'Две группы моделей', text: '«Minimax H3 (генерация)» — движок видео: диффузионная модель (FastH3 VSA DataFree 4-step INT8, ~22.9 ГБ), текстовый энкодер (~15.7 ГБ), VAE, апскейлер, Turbo LoRA (~1.8 ГБ) и др. — суммарно ~44.5 ГБ обязательных; Turbo LoRA включена по умолчанию во всех режимах (кроме «Кадров» с аудио), «Скачать все» тянет её вместе с базовыми моделями. «LLM ассистент» — модель чата: по умолчанию Qwen3.5 9B (~5.7 ГБ, vision), альтернативы — Gemma 4 12B (Q3/Q4/Q5) или Bonsai 2 27B (тернарная, ~7.2 ГБ, vision). Дополнительно: модели FPS (RIFE + FILM VFI). Достаточно выбрать ОДНУ LLM-модель.'},
-      { n: 3, title: 'Загрузка — фоновая', text: 'Жмёте ⬇ рядом с моделью — видите процент и скорость. Закрыть окно настроек можно в любой момент: скачивание НЕ прервётся и продолжится в фоне, статус будет виден в баннере. Через ✕ загрузку можно остановить и продолжить позже. Скачанные модели остаются в папке models и никуда не денутся.' },
+      { n: 1, title: 'Top Banner', text: 'Appears when required models have not yet been downloaded — generation cannot function properly without them. "Download in Settings" opens settings, ✕ temporarily hides the banner.' },
+      { n: 2, title: 'Two Model Groups', text: '"Minimax H3 (generation)" — video engine: diffusion model (FastH3 VSA DataFree 4-step INT8, ~22.9 GB), text encoder (~15.7 GB), VAE, upscaler, Turbo LoRA (~1.8 GB), etc. — ~44.5 GB total required; Turbo LoRA is enabled by default in all modes (except "Frames" with audio); "Download All" grabs it with base models. "LLM Assistant" — chat model: default Qwen3.5 9B (~5.7 GB, vision), alternatives — Gemma 4 12B (Q3/Q4/Q5) or Bonsai 2 27B (ternary, ~7.2 GB, vision). Optional: FPS models (RIFE + FILM VFI). Selecting ONE LLM model is sufficient.' },
+      { n: 3, title: 'Background Downloads', text: 'Click ⬇ next to a model to see percentage and speed. You can close settings at any time: downloads continue in the background, with status visible in the banner. Click ✕ to pause and resume later. Downloaded models reside in the models directory.' },
     ],
-    tip: 'Уже скачивали модели старой версией программы? Настройки → Общие → «Перенос моделей из старой версии»: выбираете папку со старой сборкой, и программа перенесёт их сама.',
+    tip: 'Already downloaded models with an earlier build? Settings → General → "Migrate models from older version": select the previous folder and the app migrates them automatically.',
   },
   {
     id: 'interface',
-    title: 'Интерфейс — где что находится',
-    short: 'Вкладки, датчики, индикатор ComfyUI и настройки.',
+    title: 'Interface — Layout Overview',
+    short: 'Tabs, system meters, ComfyUI indicator, and settings.',
     mock: (
       <Stage>
         <Hl n={1}><MockSidebar active="generate" /></Hl>
         <Hl n={2}>
           <div className="w-[210px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Вкладка «Генерация»</MockLabel>
+            <MockLabel>"Generate" Tab</MockLabel>
             <div className="border-2 border-dashed border-border rounded-lg py-2.5 text-center">
-              <p className="text-[10px] text-muted-foreground">референсы (необязательно)</p>
+              <p className="text-[10px] text-muted-foreground">references (optional)</p>
             </div>
             <MockPrompt withMention />
             <MockSelect value="1280×704 · 720p" />
-            <MockCtaButton label="Сгенерировать видео" />
+            <MockCtaButton label="Generate Video" />
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-muted-foreground">ComfyUI подключен</span>
+              <span className="text-[10px] text-muted-foreground">ComfyUI connected</span>
             </div>
             <MockStats />
           </div>
         </Hl>
         <Hl n={4}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">⚙ Настройки — 9 вкладок</p>
-            <p className="text-[10px] text-muted-foreground">Общие · Внешний вид · LLM · Голос</p>
-            <p className="text-[10px] text-muted-foreground">Оптимизация · Формат · Ссылки</p>
-            <p className="text-[10px] text-muted-foreground">О программе · Сброс</p>
+            <p className="text-[10px] font-semibold text-foreground">⚙ Settings — 9 tabs</p>
+            <p className="text-[10px] text-muted-foreground">General · Appearance · LLM · Voice</p>
+            <p className="text-[10px] text-muted-foreground">Optimization · Format · Links</p>
+            <p className="text-[10px] text-muted-foreground">About · Reset</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Сайдбар', text: 'Десять вкладок — «Генерация», «Продление», «Refine», «ControlNet», «Tile Upscale», «FPS», «Face Refine», «DLSS», «Галерея», «Обучение». Ассистент живёт правой панелью на вкладках «Генерация» и «Продление» (ширина тянется за край, сворачивается кнопкой). Внизу — индикатор ComfyUI (зелёная точка = нейросеть на ногах) и шестерёнка настроек.' },
-      { n: 2, title: 'Рабочее место «Генерация»', text: 'Вся цепочка в одном месте: режим (Текст / Кадры / Референсы) → промпт → рефы (зависит от режима) → разрешение и длительность → «Сгенерировать видео». Ниже — карточка статуса и галерея последних видео.' },
-      { n: 3, title: 'Индикатор и датчики', text: 'Красная точка — ComfyUI не запущен: генерация невозможна (галерея и настройки доступны). Датчики VRAM / GPU / RAM — по ним видно, не упёрся ли вы в память видеокарты.' },
-      { n: 4, title: 'Настройки — 9 вкладок', text: 'Всё, что программа умеет: модели и LoRA, внешний вид, ассистент, голосовой ввод, оптимизация памяти, формат сохранения видео (кодек и качество), ссылки для ручной загрузки, «О программе» (о проекте и авторе) и «Сброс» (опасная зона). Разберём каждую в последних шагах тура.' },
+      { n: 1, title: 'Sidebar', text: 'Ten tabs — "Generate", "Extend", "Refine", "ControlNet", "Tile Upscale", "FPS", "Face Refine", "DLSS", "Gallery", "Learn". The Assistant lives on the right panel in "Generate" and "Extend" (draggable width, collapsible). At the bottom: ComfyUI indicator (green dot = backend running) and Settings gear.' },
+      { n: 2, title: '"Generate" Workspace', text: 'The full pipeline in one place: Mode (Text / Frames / References) → prompt → references (depending on mode) → resolution & length → "Generate Video". Below is the status card and recent gallery.' },
+      { n: 3, title: 'Indicator and System Meters', text: 'Red indicator means ComfyUI is offline: generation is unavailable (gallery and settings remain accessible). VRAM / GPU / RAM meters show hardware headroom.' },
+      { n: 4, title: 'Settings — 9 Tabs', text: 'Full control: models & LoRAs, appearance, assistant, voice input, memory optimization, output format (codec & quality), manual download links, "About" (credits & links), and "Reset" (danger zone).' },
     ],
-    tip: 'Сайдбар сворачивается — если хочется больше места под промпт.',
+    tip: 'The sidebar can be collapsed to provide maximum space for prompt editing.',
   },
-  /* ═══════════════ ЧАСТЬ 2. ПУТЬ К ВИДЕО ═══════════════ */
+  /* ═══════════════ PART 2. PATH TO VIDEO ═══════════════ */
   {
     id: 'modes',
-    title: 'Шаг 1 — Режим генерации',
-    short: 'Три режима: Текст · Кадры · Референсы — подберите под свои данные.',
+    title: 'Step 1 — Generation Mode',
+    short: 'Three modes: Text · Frames · References — select based on your source assets.',
     mock: (
       <Stage>
         <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-          <MockLabel>Режим генерации</MockLabel>
+          <MockLabel>Generation Mode</MockLabel>
           <div className="grid grid-cols-3 gap-1.5">
             <Hl n={1}>
               <div className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1.5 text-center">
-                <p className="text-[10px] font-semibold text-cyan-300">Текст</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">только описание</p>
+                <p className="text-[10px] font-semibold text-cyan-300">Text</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">description only</p>
               </div>
             </Hl>
             <Hl n={2}>
               <div className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1.5 text-center">
-                <p className="text-[10px] font-semibold text-cyan-300">Кадры</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">1–2 картинки → видео</p>
+                <p className="text-[10px] font-semibold text-cyan-300">Frames</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">1–2 images → video</p>
               </div>
             </Hl>
             <Hl n={3}>
               <div className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1.5 text-center">
-                <p className="text-[10px] font-semibold text-cyan-300">Референсы</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">до 15 файлов</p>
+                <p className="text-[10px] font-semibold text-cyan-300">References</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">up to 15 files</p>
               </div>
             </Hl>
           </div>
           <div className="rounded-md bg-[var(--surface-2)] px-2 py-1.5 space-y-1">
-            <p className="text-[10px] text-muted-foreground"><b>Текст:</b> промпт + аудио-рефы (голос/озвучка). Картинки и видео не используются.</p>
-            <p className="text-[10px] text-muted-foreground"><b>Кадры:</b> первый и (необязат.) последний кадр + аудио. Соотношение сторон из кадра. Скриншот — Ctrl+V.</p>
-            <p className="text-[10px] text-muted-foreground"><b>Референсы:</b> до 15 файлов — 9 картинок, 3 видео, 3 аудио. Полный контроль.</p>
+            <p className="text-[10px] text-muted-foreground"><b>Text:</b> prompt + audio references (voice/dialogue). Images and video are not used.</p>
+            <p className="text-[10px] text-muted-foreground"><b>Frames:</b> first and (optional) last frame + audio. Aspect ratio matches frame. Paste screenshot via Ctrl+V.</p>
+            <p className="text-[10px] text-muted-foreground"><b>References:</b> up to 15 files — 9 images, 3 videos, 3 audio. Full creative control.</p>
           </div>
         </div>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Текст — видео из описания', text: 'Самый простой режим: вы пишете описание сцены, модель придумывает всё остальное. Можно приложить аудио-файлы (WAV, MP3…) — например, образец голоса для озвучки. Картинки и видео в этом режиме не используются.' },
-      { n: 2, title: 'Кадры — видео из картинок', text: 'Задаёте первый кадр (обязательно) и, если хотите, последний. Промпт описывает, что происходит между ними. Картинку можно просто вставить по Ctrl+V — например, скриншот. Соотношение сторон берётся из первого кадра автоматически, поэтому селектор формата заблокирован. Аудио тоже можно приложить.' },
-      { n: 3, title: 'Референсы — полный контроль', text: 'До 15 файлов-образцов: 9 картинок (персонажи, объекты, стиль), 3 видео (движение, сцены), 3 аудио (голос, звук). У каждого файла задаётся роль — что именно из него брать. Самый гибкий режим.' },
+      { n: 1, title: 'Text — Video from Description', text: 'The simplest mode: you provide a scene prompt, and the model synthesizes everything. You can attach audio files (WAV, MP3…) — such as voice samples for dialogue. Images and video are not used in this mode.' },
+      { n: 2, title: 'Frames — Video from Images', text: 'Provide the first frame (required) and optionally the last. The prompt describes action between them. You can paste images directly with Ctrl+V. Aspect ratio is locked to match the first frame automatically to prevent distortion. Audio can also be attached.' },
+      { n: 3, title: 'References — Full Control', text: 'Up to 15 reference assets: 9 images (characters, objects, style), 3 videos (motion, scenes), 3 audio tracks (voice, sound effects). Each file is assigned a role defining how it influences generation.' },
     ],
-    tip: 'Ассистент знает выбранный режим и не добавит в промпт теги, которые не поддерживаются: при переключении на «Текст» метки &lt;Picture N&gt; и &lt;Video N&gt; автоматически уберутся.',
+    tip: 'The Assistant adapts to the selected mode and omits unsupported tags: switching to "Text" automatically strips <Picture N> and <Video N> tags.',
   },
   {
     id: 'refs',
-    title: 'Шаг 2 — Референсы (режим «Референсы»)',
-    short: 'До 15 файлов: 9 картинок, 3 видео, 3 аудио. Или ноль — тоже можно.',
+    title: 'Step 2 — References ("References" Mode)',
+    short: 'Up to 15 files: 9 images, 3 videos, 3 audio tracks. Or zero — text-only works too.',
     mock: (
       <Stage>
         <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
           <div className="flex items-center justify-between">
-            <MockLabel>Референсы</MockLabel>
+            <MockLabel>References</MockLabel>
             <span className="text-[10px] text-muted-foreground">1/9 img · 1/3 vid · 0/3 aud</span>
           </div>
           <Hl n={1}><MockRefDropzone /></Hl>
@@ -360,11 +359,11 @@ export const LEARN_STEPS: LearnStep[] = [
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] text-foreground truncate font-mono">scene_walk.mp4</p>
-                <p className="text-[10px] text-muted-foreground">сцена · движение</p>
+                <p className="text-[10px] text-muted-foreground">scene · motion</p>
               </div>
               <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
                 <span className="w-3 h-3 rounded-sm border border-cyan-500/50 bg-cyan-500/30 inline-flex items-center justify-center text-[10px] text-cyan-200">✓</span>
-                использовать звук
+                use audio
               </span>
             </div>
           </Hl>
@@ -372,20 +371,20 @@ export const LEARN_STEPS: LearnStep[] = [
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Можно вообще без них', text: 'В режиме «Референсы» генерация запускается и по одному только промпту. Референсы — точность: до 15 файлов — 9 картинок, 3 видео, 3 аудио. Картинки — кто/что, видео — как двигается, аудио — голос и звук. Скриншот можно просто вставить по Ctrl+V. В режиме «Текст» картинки и видео-рефы не используются — только аудио; в режиме «Кадры» картинки задаются полями «Первый кадр» / «Последний кадр». Клик по превью любого референса открывает его на весь экран — так видно детали, которые не разглядеть в маленьком квадрате. Работает одинаково на всех вкладках: «Генерация», «Продление», «Refine», «ControlNet», «FPS», «Upscale».' },
-      { n: 2, title: 'Роль референса', text: 'У каждого файла задаётся роль: «персонаж / объект», «сцена», «стиль», «композиция». Это подсказка модели, ЧТО брать из файла: лицо, фон, палитру или ракурс.' },
-      { n: 3, title: 'Видео и аудио', text: 'У видео-референса можно галкой включить «использовать звук» — модель возьмёт звук прямо из клипа. Аудио-файлы привязываются к намерению: «Голос», «Темп / ритм» или «Стиль». Аудио можно обрезать прямо в программе: откройте файл кликом и в плеере задайте начало и конец нужного фрагмента.' },
+      { n: 1, title: 'Optional Asset Input', text: 'In "References" mode, generation can run purely on prompt text. References provide precision: up to 15 files — 9 images, 3 videos, 3 audio. Images guide appearance, video guides motion, audio guides voice and sound. Screenshots can be pasted with Ctrl+V. In "Text" mode only audio is used; in "Frames" mode images are set via First/Last frame fields. Clicking any reference thumbnail opens full-screen preview to inspect fine details across all tabs.' },
+      { n: 2, title: 'Reference Role', text: 'Each file has an assigned role: "character / object", "scene", "style", "composition". This tells the model what to extract: face, background palette, or camera angle.' },
+      { n: 3, title: 'Video and Audio', text: 'For video references, enable "use audio" to take sound directly from the clip. Audio files can be tagged with intent: "Voice", "Tempo / rhythm", or "Style". Audio clips can be trimmed in-app by clicking the file and setting start/end in the player.' },
     ],
-    tip: 'Лучше всего работают лица/объекты крупным планом при хорошем освещении. Для речей — чистая запись голоса.',
+    tip: 'Close-up, well-lit portraits and clear subjects yield best results. For speech, use clean recordings without background music.',
   },
   {
     id: 'prompt',
-    title: 'Шаг 3 — Пишем описание (промпт)',
-    short: 'Слова решают всё: теги @, озвучка <d>…</d>, диктовка голосом.',
+    title: 'Step 3 — Writing the Prompt',
+    short: 'Language drives everything: @ tags, dialogue in <d>…</d>, voice dictation.',
     mock: (
       <Stage>
         <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-          {/* Поле промпта + вертикальная колонка кнопок справа (правка 717) */}
+          {/* Prompt field + vertical buttons column */}
           <div className="flex gap-2">
             <div className="flex-1 min-w-0">
               <Hl n={1}><MockPrompt withMention /></Hl>
@@ -404,29 +403,29 @@ export const LEARN_STEPS: LearnStep[] = [
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground/70 leading-snug">
-            <span className="text-foreground/80">✎</span> редактор ·{' '}
-            <span className="text-foreground/80">🗑</span> очистить ·{' '}
-            <span className="text-violet-300">✦</span> исправить с ассистентом
+            <span className="text-foreground/80">✎</span> editor ·{' '}
+            <span className="text-foreground/80">🗑</span> clear ·{' '}
+            <span className="text-violet-300">✦</span> enhance with assistant
           </p>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">Введите <span className="font-mono text-foreground/70">@</span> — появится список референсов</span>
+            <span className="text-[10px] text-muted-foreground">Type <span className="font-mono text-foreground/70">@</span> to see list of references</span>
           </div>
-          <div className="flex justify-end"><Hl n={4}><MockCtaButton label="Сгенерировать видео" /></Hl></div>
+          <div className="flex justify-end"><Hl n={4}><MockCtaButton label="Generate Video" /></Hl></div>
         </div>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Поле промпта и теги', text: 'Опишите сцену словами: кто, где, что делает. Модель заметно лучше понимает АНГЛИЙСКИЙ — идею можно набросать по-русски, но финальный промпт лучше перевести (кнопка «Примеры» даёт готовые английские промпты). Символ @ вставляет тег <Picture 1> — «использовать вот этот референс здесь». Реплики героев оборачивайте в <d>…</d> — они будут озвучены.' },
-      { n: 2, title: 'Голосовой ввод (диктофон)', text: 'Круглый микрофон внутри поля промпта: нажали — описываете сцену голосом — нажали ещё раз, и распознанный текст вставится прямо в промпт. Та же кнопка есть в полноэкранном редакторе и в чате Ассистента. Горячая клавиша: R (англ.) / К (рус.) — одна и та же физическая клавиша в обеих раскладках: нажмите, когда фокус НЕ в поле ввода (например, кликните в пустое место рядом) — запись стартует, нажмите ещё раз — стоп и вставка текста. Если диктовка уже идёт — клавиша всегда доводит её до конца. Включается и настраивается в Настройки → Голос.' },
-      { n: 3, title: 'Кнопки справа от поля', text: 'Справа от поля промпта стоит вертикальная колонка кнопок: ✎ — полноэкранный редактор (удобно для длинных сценариев), 🗑 — очистить поле (появляется, только когда в поле есть текст), ✦ — «Исправить промпт»: ассистент спросит, что именно изменить, и перепишет черновик. Под ними — круглый микрофон голосового ввода.' },
-      { n: 4, title: 'Запуск', text: 'Кнопка активна, когда введён промпт. Ctrl+Enter запускает генерацию прямо из поля ввода.' },
+      { n: 1, title: 'Prompt Field & Tags', text: 'Describe the scene: subject, action, environment. The model understands ENGLISH best — feel free to draft ideas in your native language, then translate them (the "Examples" button provides pre-tested English prompts). Typing @ inserts a <Picture 1> tag to ground specific elements. Wrap spoken dialogue in <d>…</d> for synchronized speech synthesis.' },
+      { n: 2, title: 'Voice Input (Dictation)', text: 'Click the microphone icon inside the prompt box to speak — click again to transcribe directly into text. Also available in the full-screen editor and Assistant chat. Global hotkey: R (press when focus is not inside a text input to start/stop). Configurable under Settings → Voice.' },
+      { n: 3, title: 'Action Buttons', text: 'To the right of the prompt field: ✎ opens full-screen editor (great for complex scripts), 🗑 clears text, ✦ launches "Enhance Prompt" with the assistant. Below sits the dictation mic.' },
+      { n: 4, title: 'Start Generation', text: 'Active whenever a prompt is present. Ctrl+Enter starts generation immediately from the prompt input.' },
     ],
-    tip: 'Пишите кинематографично: «slow camera push-in», «warm sunset light», «speaks in a whisper» — детали улучшают результат.',
+    tip: 'Use cinematic terminology: "slow camera push-in", "warm sunset rim light", "speaks in a whisper" — descriptive cues significantly elevate fidelity.',
   },
   {
     id: 'llm-assistant',
-    title: 'Ассистент — напишет промпт за вас',
-    short: 'Локальная LLM (Bonsai 2 27B) видит рефы и выдаёт готовый промпт.',
+    title: 'Assistant — Prompt Engineering Copilot',
+    short: 'Local LLM (Bonsai 2 27B) sees references and drafts structured prompts.',
     mock: (
       <Stage>
         <div className="w-[310px] rounded-lg border border-violet-500/25 bg-[var(--surface-1)] p-3 space-y-2.5">
@@ -435,13 +434,13 @@ export const LEARN_STEPS: LearnStep[] = [
               <span className="text-[10px] text-violet-300 font-bold">AI</span>
             </div>
             <div>
-              <p className="text-[10px] font-medium text-foreground">Ассистент · Bonsai 2 27B (по умолчанию)</p>
-              <p className="text-[10px] text-emerald-400">● локально · видит картинки И видео-кадры</p>
+              <p className="text-[10px] font-medium text-foreground">Assistant · Bonsai 2 27B (default)</p>
+              <p className="text-[10px] text-emerald-400">● local · analyzes images AND video frames</p>
             </div>
           </div>
           <Hl n={1}>
             <div className="rounded-lg border border-border bg-[var(--surface-2)] p-2 space-y-1">
-              <p className="text-[10px] text-muted-foreground">Вы: Опиши сцену: девушка с рефа идёт по рынку, говорит привет</p>
+              <p className="text-[10px] text-muted-foreground">You: Describe a scene: girl from reference walks through market, says hello</p>
               <p className="text-[10px] text-foreground/90 leading-relaxed">A girl with <span className="px-1 py-0.5 rounded bg-purple-500/15 text-purple-300 text-[10px]">&lt;Picture 1&gt;</span> walks through the evening market, string lights… She says: <span className="px-1 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-mono">&lt;d&gt;Hi there!&lt;/d&gt;</span> Smooth pan, warm light.</p>
             </div>
           </Hl>
@@ -452,25 +451,25 @@ export const LEARN_STEPS: LearnStep[] = [
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] text-foreground/90 font-mono truncate">photo_girl.png</p>
-                <p className="text-[10px] text-muted-foreground">виден только Ассистенту — в референсы генерации не попадает</p>
+                <p className="text-[10px] text-muted-foreground">visible only to Assistant — not added to generation references</p>
               </div>
               <span className="text-[10px] text-muted-foreground shrink-0">✕</span>
             </div>
           </Hl>
           <Hl n={3}>
             <div className="flex items-center gap-2">
-              <div className="flex-1 rounded-lg border border-border bg-[var(--surface-2)] px-2.5 py-1.5 text-[10px] text-muted-foreground">Опишите идею сцены…</div>
+              <div className="flex-1 rounded-lg border border-border bg-[var(--surface-2)] px-2.5 py-1.5 text-[10px] text-muted-foreground">Describe your scene concept…</div>
               <div className="w-7 h-7 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-violet-300 text-[10px]">➤</div>
             </div>
           </Hl>
           <div className="flex items-center justify-between gap-2">
             <Hl n={4}>
-              <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-[10px] text-violet-300 font-medium text-center">✨ Исправить промпт (из редактора)</div>
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-[10px] text-violet-300 font-medium text-center">✨ Enhance prompt (from editor)</div>
             </Hl>
             <Hl n={5}>
               <div className="rounded-lg border border-border bg-[var(--surface-2)] px-2 py-1.5 flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground">KV-кэш:</span>
-                <span className="px-1 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Выкл</span>
+                <span className="text-[10px] text-muted-foreground">KV Cache:</span>
+                <span className="px-1 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Off</span>
                 <span className="px-1 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Q8</span>
                 <span className="px-1 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Q5</span>
                 <span className="px-1 py-0.5 rounded text-[10px] border border-cyan-500/50 bg-cyan-500/15 text-cyan-300 font-medium">Q4</span>
@@ -481,23 +480,23 @@ export const LEARN_STEPS: LearnStep[] = [
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Локальная модель', text: 'По умолчанию — Qwen3.5 9B (Q4_K_M, ~5.7 ГБ, vision). Альтернативы: Gemma 4 12B (Q3/Q4/Q5) или Bonsai 2 27B (тернарная, ~7.2 ГБ, vision). Всё работает на вашей видеокарте — ничего не уходит в облако. Ассистент видит прикреплённые картинки И видео-кадры, описывает то, что на них, и фиксирует персонажей в промпте — MiniMax не выдумает другие лица.' },
-      { n: 2, title: 'Вложения — только в чате', text: 'Картинки и видео, прикреплённые в чате Ассистента, живут ТОЛЬКО в чате: они не попадают в список референсов генерации, в галерею и в Upscale. Их единственная цель — помочь Ассистенту описать сцену и собрать промпт. Картинку можно прикрепить скрепкой или просто вставить по Ctrl+V. Для генерации рефы добавляются отдельно, во вкладке «Генерация».' },
-      { n: 3, title: 'Опишите идею по-русски', text: 'Ассистент знает полный гайд MiniMax H3, подберёт правильные теги (<Picture N>, <Video N>, <Audio N>) и выдаст готовый промпт на английском. В шапке полноэкранного редактора есть «Исправить промпт» — спросит, что именно изменить, и отправит черновик с вашим заданием в LLM.' },
-      { n: 4, title: 'Видение видео', text: 'Ассистент смотрит видео-референсы: понимает, что происходит в кадре, как двигаются объекты и меняется сцена — а не только первый кадр. По умолчанию включено: видео идёт сжатым digest-описанием по кадрам, которое кэшируется по содержимому файла. Флаг «Видение видео» в Настройки → LLM можно выключить, если нужно экономить память и контекст.' },
-      { n: 5, title: 'Память длинного чата — KV-кэш', text: 'Долгие диалоги «съедают» память. Квантизация KV-кэша (Настройки → LLM: Q8 / Q5 / Q4) заметно снижает потребление памяти чата с потерей качества, почти неощутимой в ответах. По умолчанию включена Q4 — самый экономный режим; «Выкл» ставят, только если хочется максимальной точности и памяти хватает.' },
+      { n: 1, title: 'Local Model', text: 'Default — Qwen3.5 9B (Q4_K_M, ~5.7 GB, vision). Alternatives: Gemma 4 12B (Q3/Q4/Q5) or Bonsai 2 27B (ternary, ~7.2 GB, vision). Runs entirely on your GPU without cloud calls. The assistant analyzes attached images and video frames, describes their visual features, and locks character identity into the prompt.' },
+      { n: 2, title: 'Chat Attachments Stay in Chat', text: 'Media files attached in the Assistant chat remain strictly within the conversation: they do not transfer to generation references or the gallery. Their sole purpose is helping the LLM compose the prompt. Use paperclip or Ctrl+V to attach.' },
+      { n: 3, title: 'Natural Language Ideation', text: 'Describe concepts naturally in your language. The assistant understands full MiniMax H3 syntax, injects proper tags (<Picture N>, <Video N>, <Audio N>), and outputs structured English prompts. Use "Enhance prompt" in the full-screen editor to refine existing text.' },
+      { n: 4, title: 'Video Vision', text: 'The assistant parses video references: observing actions, subject movement, and environment shifts across frames. Enabled by default with cached frame digests. Can be toggled in Settings → LLM.' },
+      { n: 5, title: 'Long Context Memory — KV Cache', text: 'Extended conversations consume VRAM. KV cache quantization (Settings → LLM: Q8 / Q5 / Q4) drastically cuts memory usage with negligible impact on output quality. Q4 is enabled by default.' },
     ],
-    tip: 'Ассистент не выдумывает теги: если референсов нет — не использует <Picture N>; если есть — привязывает только существующие номера.',
+    tip: 'The assistant never hallucinates reference tags: without attached files it avoids <Picture N>; with files it links only existing reference IDs.',
   },
   {
     id: 'resdur',
-    title: 'Шаг 4 — Разрешение и длительность',
-    short: '480p для проб, 1080p для финала; до ~30 секунд. В режиме «Кадры» — из кадра.',
+    title: 'Step 4 — Resolution & Duration',
+    short: '480p for drafting, 1080p for master renders; up to ~30 seconds. In "Frames" mode aspect ratio is locked.',
     mock: (
       <Stage>
         <div className="w-[290px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-3">
           <div className="space-y-1.5">
-            <MockLabel>Разрешение</MockLabel>
+            <MockLabel>Resolution</MockLabel>
             <Hl n={1}>
               <div className="space-y-1.5">
                 <MockSelect value="1280×704 · 720p" />
@@ -510,24 +509,24 @@ export const LEARN_STEPS: LearnStep[] = [
             </Hl>
           </div>
           <div className="space-y-1.5">
-            <MockLabel>Свободное разрешение</MockLabel>
+            <MockLabel>Custom Resolution</MockLabel>
             <Hl n={2}>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="px-2 py-1 rounded-md bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[10px] font-medium">Свободное разрешение · вкл</span>
+                  <span className="px-2 py-1 rounded-md bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[10px] font-medium">Custom Resolution · on</span>
                   <span className="text-[10px] font-mono text-cyan-300/90">0.70 MP (1280×704)</span>
                 </div>
                 <MockSlider value={40} max={100} />
-                <p className="text-[10px] text-muted-foreground/70">ползунок: 0.2–3 МП · <span className="text-cyan-300/80">ручной ввод: до 16 MP</span></p>
+                <p className="text-[10px] text-muted-foreground/70">slider: 0.2–3 MP · <span className="text-cyan-300/80">manual input: up to 16 MP</span></p>
               </div>
             </Hl>
           </div>
           <div className="space-y-1.5">
-            <MockLabel>Длительность</MockLabel>
+            <MockLabel>Duration</MockLabel>
             <Hl n={3}>
               <div className="space-y-1">
                 <MockSlider value={45} />
-                <p className="text-[10px] text-muted-foreground/60">60–719 кадров · выравнивание 17n+5 · ≈ 2.5–30 с · <span className="text-cyan-300/80">ручной ввод кадров</span></p>
+                <p className="text-[10px] text-muted-foreground/60">60–719 frames · 17n+5 grid · ≈ 2.5–30s · <span className="text-cyan-300/80">manual frame input</span></p>
               </div>
             </Hl>
           </div>
@@ -535,43 +534,43 @@ export const LEARN_STEPS: LearnStep[] = [
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Пресеты и формат кадра', text: 'Качество финального видео: 480p — быстро, 720p — баланс, 1080p — детально, но дольше. Формат кадра выбирается отдельно: 16:9, вертикальное 9:16, квадрат 1:1, 4:3, 3:4 или кинематографичное 21:9. В режиме «Кадры» соотношение сторон автоматически берётся из первого кадра — селектор заблокирован, чтобы не растягивать оригинал.' },
-      { n: 2, title: 'Свободное разрешение + ручной ввод', text: 'Выключает пресеты: задаёте итоговый размер в мегапикселях — ширина и высота считаются сами из выбранного формата. Ползунок идёт от 0.2 до 3 МП, а поле ручного ввода позволяет выйти за его рамки — до 16 MP (выше 3 MP — заметно больше VRAM и времени рендера).' },
-      { n: 3, title: 'Длительность', text: 'От 2.5 до 30 секунд. Модель работает фиксированными «ступенями» кадров (17n+5), поэтому ползунок прыгает дискретно — это нормально, а не баг. Есть и ручной ввод кадров: значение подстраивается под сетку и границы модели (60–719 кадров). Длинные ролики (20–30 с) генерируются заметно дольше — держите это в уме.' },
+      { n: 1, title: 'Presets & Aspect Ratio', text: 'Output fidelity: 480p — fast drafts, 720p — balanced, 1080p — maximum detail. Aspect ratios: 16:9, vertical 9:16, square 1:1, 4:3, 3:4, or cinematic 21:9. In "Frames" mode aspect ratio is locked to the first frame automatically.' },
+      { n: 2, title: 'Custom Resolution + Manual Input', text: 'Overrides presets: set total pixel budget in megapixels, with dimensions derived from the chosen aspect ratio. Slider covers 0.2–3 MP; numeric input allows scaling up to 16 MP (note: >3 MP increases VRAM and compute time).' },
+      { n: 3, title: 'Duration', text: 'Ranges from 2.5 to 30 seconds. The model steps in 17n+5 frame increments, causing discrete slider intervals — this is standard model architecture. Manual frame counts (60–719) automatically snap to grid boundaries.' },
     ],
-    tip: 'Первые пробы делайте на 480p и короткой длительности — быстрее увидите результат и подберёте промпт.',
+    tip: 'Run initial exploratory tests at 480p with short duration to iterate quickly on prompt concepts.',
   },
   {
     id: 'queue',
-    title: 'Запуск и очередь задач',
-    short: 'Ставьте несколько видео подряд — очередь всё сделает.',
+    title: 'Launching and Task Queue',
+    short: 'Queue multiple generations sequentially — processed in background FIFO.',
     mock: (
       <div className="w-full flex flex-col items-center gap-4">
         <div className="flex items-center gap-3 flex-wrap justify-center">
-          <Hl n={1}><MockCtaButton label="Сгенерировать видео" /></Hl>
-          <Hl n={2}><MockCtaButton label="Ещё в очередь" /></Hl>
+          <Hl n={1}><MockCtaButton label="Generate Video" /></Hl>
+          <Hl n={2}><MockCtaButton label="Queue Another" /></Hl>
         </div>
         <Hl n={3}><MockQueuePill expanded /></Hl>
       </div>
     ),
     callouts: [
-      { n: 1, title: 'Запуск', text: 'Одна кнопка — одна задача. Во время генерации подпись меняется на «Ещё в очередь» — так ставят несколько видео подряд.' },
-      { n: 2, title: 'Несколько задач', text: 'Задачи выполняются по очереди: первая считается, вторая ждёт. Можно уйти в галерею или перезагрузить страницу — очередь продолжит работать. При перезапуске программы студия сверяется с ComfyUI: если задачи там действительно нет, «висящая» генерация снимается и помечается прерванной — карточка не будет вечно показывать «идёт» (правка 718).' },
-      { n: 3, title: 'Плавающая очередь (правый нижний угол)', text: 'Статусы, проценты и счётчик задач. Клик — список; ✕ у задачи — отмена (выполняемая остановится, готовые файлы не пострадают).' },
+      { n: 1, title: 'Dispatching Jobs', text: 'Click once to submit. While running, the button becomes "Queue Another" to stack subsequent prompts.' },
+      { n: 2, title: 'Sequential Processing', text: 'Jobs run sequentially. You can browse the gallery or reload the web interface while the queue processes. Upon restart, the studio verifies active tasks against ComfyUI and cleans up orphans.' },
+      { n: 3, title: 'Floating Queue Pill (Bottom-Right)', text: 'Displays real-time status, progress percentages, and queued count. Click to expand full list; click ✕ to cancel a job without affecting completed renders.' },
     ],
-    tip: 'Отмена — это не ошибка: вы увидите спокойное уведомление «Генерация отменена», а не красный алерт.',
+    tip: 'Cancelling a job produces a graceful "Generation cancelled" notice rather than an error banner.',
   },
   {
     id: 'progress',
-    title: 'Прогресс генерации',
-    short: 'Общий прогресс 0→100% через оба прохода, живой черновик кадра.',
+    title: 'Generation Progress',
+    short: 'Global progress 0→100% across both passes with live draft frame preview.',
     mock: (
       <Stage>
         <div className="space-y-2 rounded-lg border border-border bg-[var(--surface-1)] p-3 w-full max-w-[280px]">
           <Hl n={1}>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-[10px]">
-                <span className="text-cyan-400 font-medium">Генерация… 42%</span>
+                <span className="text-cyan-400 font-medium">Generating… 42%</span>
                 <span className="text-muted-foreground font-mono">0:47</span>
               </div>
               <MockBar pct={42} />
@@ -580,33 +579,33 @@ export const LEARN_STEPS: LearnStep[] = [
           <Hl n={2}>
             <div className="rounded-lg border border-cyan-500/20 bg-black/40 h-20 relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-cyan-950/60 to-blue-950/40" />
-              <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] text-cyan-300 font-medium">Pass 1 · шаг 2/3</div>
+              <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/60 rounded text-[10px] text-cyan-300 font-medium">Pass 1 · step 2/3</div>
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-16 h-9 rounded bg-[var(--surface-3)]/60 border border-cyan-500/30 creative-pulse" />
               </div>
             </div>
           </Hl>
           <Hl n={3}>
-            <p className="text-[10px] text-red-400/70 text-center py-0.5">Остановить</p>
+            <p className="text-[10px] text-red-400/70 text-center py-0.5">Stop</p>
           </Hl>
         </div>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Статус-карточка (низ левой панели)', text: 'Фаза («В очереди» → «Генерация… 42%» → «Готово ✓»), таймер и полоса прогресса.' },
-      { n: 2, title: 'Живое превью и общий прогресс', text: 'Черновой кадр прямо во время генерации — и на первом, и на втором проходе. Полоса прогресса показывает ОБЩЕЕ выполнение (0→100%) через оба прохода — не сбрасывается между ними. Подпись «Pass 1 · шаг 2/3» — текущий проход внутри.' },
-      { n: 3, title: 'Остановить', text: 'Прерывает ВСЕ активные видео-задачи; частичного файла не будет.' },
+      { n: 1, title: 'Status Card (Sidebar Bottom)', text: 'Tracks state ("Queued" → "Generating… 42%" → "Done ✓"), timer, and progress bar.' },
+      { n: 2, title: 'Live Preview & Unified Progress', text: 'Displays low-resolution latent decodes during generation across both passes. The progress bar spans 0→100% across the entire pipeline without resetting between passes.' },
+      { n: 3, title: 'Stop', text: 'Cancels active generation tasks cleanly.' },
     ],
-    tip: 'Видео ~5 секунд на 480p обычно занимает 1–3 минуты, на 1080p — заметно дольше.',
+    tip: 'A ~5-second clip at 480p typically renders in 1–3 minutes; 1080p requires additional time.',
   },
   {
     id: 'gallery',
-    title: 'Галерея готовых видео',
-    short: 'Все ролики: hover-проигрывание, метки источника (Draft, DLSS 5, Refined…).',
+    title: 'Video Gallery',
+    short: 'All clips with hover playback, source tags (Draft, DLSS 5, Refined…).',
     mock: (
       <div className="w-full max-w-[330px]">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="px-2 py-0.5 rounded-md bg-[var(--surface-2)] border border-border text-[10px] text-foreground">5 видео</span>
+          <span className="px-2 py-0.5 rounded-md bg-[var(--surface-2)] border border-border text-[10px] text-foreground">5 videos</span>
           <span className="text-[10px] text-muted-foreground">↻</span>
         </div>
         <div className="grid grid-cols-3 gap-1.5">
@@ -620,28 +619,28 @@ export const LEARN_STEPS: LearnStep[] = [
       </div>
     ),
     callouts: [
-      { n: 1, title: 'Постеры и порядок', text: 'Каждое видео — карточка с кадром-постером, новые сверху. Наведите курсор — ролик заиграет прямо в сетке (без звука).' },
-      { n: 2, title: 'Действия при наведении', text: 'Кнопка «⋮» в правом верхнем углу превью — открывает выпадающее меню: скачать, метаданные, повторить генерацию, апскейл (DLSS 5), рефайн (v2v), Tile Upscale, Face Refine, ControlNet (движение), увеличить FPS, продлить, обрезать и удалить. В плеер видео открывается кликом по самой карточке. Меню не обрезается карточкой (правка 282). Ctrl+клик по двум карточкам выделяет пару для сравнения «до / после» — следующий шаг тура.' },
-      { n: 3, title: 'Бейдж времени', text: 'Светящаяся подпись «1 мин 12 сек» — сколько заняла ГЕНЕРАЦИЯ видео (не его длина), число берётся из метаданных.' },
-      { n: 4, title: 'Метки на карточках', text: 'Вверху слева на карточке горит метка — откуда взялось видео: «Upscale» (голубая) и «DLSS 5» (розовая) — улучшенные копии после апскейла, «Refined» (зелёная) — результат вкладки «Refine», «Tile» (розово-пурпурная) — Tile Upscale, «FPS» (фиолетовая), «Extended» (голубая) — результат продления, «ControlNet» (оранжевая, «ControlNet x2» — в двухпроходном режиме), «Face Refine» (салатовая) — перерисованные лица, «Edited» (жёлтая) — обрезка. Отдельно «Draft» (красная) — видео, сгенерированное в быстром режиме «Драфт» одним проходом (его можно довести до качества вкладкой «Refine»). Метка на карточке ВСЕГДА ОДНА: если файл прошёл через несколько вкладок, показывается последняя операция — например, обрезанный драфт помечен «Edited» (жёлтая), а не «Draft». Метки видны всегда, не только при наведении.' },
+      { n: 1, title: 'Posters and Sorting', text: 'Clips appear newest first. Hovering plays preview playback in the grid.' },
+      { n: 2, title: 'Hover Action Menu', text: 'Click "⋮" in the top-right corner to open actions: download, metadata, reuse prompt, upscale (DLSS 5), Refine, Tile Upscale, Face Refine, ControlNet, FPS, extend, trim, or delete. Click thumbnail to open full player. Ctrl+click two cards to compare before/after.' },
+      { n: 3, title: 'Render Time Badge', text: 'Shows generation duration (e.g. "1 min 12 sec") pulled from metadata.' },
+      { n: 4, title: 'Source Badges', text: 'Top-left badge identifies origin: "Upscale" (cyan) / "DLSS 5" (pink), "Refined" (green), "Tile" (magenta), "FPS" (purple), "Extended" (blue), "ControlNet" (orange), "Face Refine" (lime), "Edited" (yellow), "Draft" (red). Always shows latest processing step.' },
     ],
-    tip: 'Стрелка ↻ обновляет список вручную — обычно он обновляется сам.',
+    tip: 'The ↻ icon manually refreshes the gallery.',
   },
-  /* (правка 91/122) Папки проектов — организация галереи, в туре не было */
+  /* (fix 91/122) Project folders — gallery organization */
   {
     id: 'folders',
-    title: 'Папки проектов — порядок в галерее',
-    short: 'Группируйте видео по проектам: создание, drag&drop, переименование.',
+    title: 'Project Folders — Gallery Organization',
+    short: 'Organize clips into folders: create, drag & drop, rename.',
     mock: (
       <Stage>
         <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
           <div className="flex items-center justify-between">
-            <MockLabel>Галерея · папки</MockLabel>
-            <span className="text-[10px] text-muted-foreground">+ Новая папка</span>
+            <MockLabel>Gallery · folders</MockLabel>
+            <span className="text-[10px] text-muted-foreground">+ New Folder</span>
           </div>
           <Hl n={1}>
             <div className="flex gap-1 flex-wrap">
-              {['Все видео', 'Реклама', 'Отпуск', 'Тесты'].map((f, i) => (
+              {['All Videos', 'Ads', 'Vacation', 'Tests'].map((f, i) => (
                 <span
                   key={f}
                   className={
@@ -660,66 +659,66 @@ export const LEARN_STEPS: LearnStep[] = [
               <MockGalleryTile index={5} />
               <MockGalleryTile index={4} />
               <div className="rounded-md border border-dashed border-cyan-500/40 bg-cyan-500/5 aspect-video flex items-center justify-center">
-                <span className="text-[10px] text-cyan-300">↔ перетащите видео сюда</span>
+                <span className="text-[10px] text-cyan-300">↔ drag video here</span>
               </div>
             </div>
           </Hl>
         </div>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Вкладка «Генерация»</p>
+            <p className="text-[10px] font-semibold text-foreground">"Generate" Tab</p>
             <div className="rounded-md border border-border bg-[var(--surface-2)] px-2 py-1.5 text-[10px] text-foreground/80">
-              📁 Папка проекта: <span className="text-cyan-300">Отпуск</span> ▾
+              📁 Project Folder: <span className="text-cyan-300">Vacation</span> ▾
             </div>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Новые видео лягут в выбранную папку</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">New videos will be saved to the selected folder</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Папки в галерее', text: 'Кнопка «Новая папка» создаёт подпапку в output — группируйте видео по проектам («Реклама», «Отпуск»…). Клик по папке фильтрует сетку; «Все видео» показывает всё подряд. Пустую папку можно удалить, непустую — сначала очистить.' },
-      { n: 2, title: 'Перетаскивание и переименование', text: 'Видео перетаскивается в папку drag-and-drop прямо по карточке. Имя папки можно поменять — видео внутри останутся на месте. Файлы не копируются, а переезжают, поэтому метаданные и бейджи времени никуда не теряются.' },
-      { n: 3, title: 'Папка на вкладке «Генерация»', text: 'Рядом с кнопкой генерации есть выбор папки проекта (появляется, когда папки уже созданы): все новые видео этой сессии лягут в неё. Выбор папки на вкладке «Генерация» не зависит от фильтра в «Галерее» — у каждой вкладки свой актив. Такой же выбор есть и на вкладке «ControlNet». Остальные вкладки-обработки (Refine, FPS, Tile Upscale, Face Refine, Продление, DLSS) кладут результат в папку исходника автоматически.' },
+      { n: 1, title: 'Folders in Gallery', text: 'Create subfolders in the output directory to group work. Click a folder to filter the grid; "All Videos" displays everything.' },
+      { n: 2, title: 'Drag & Drop and Renaming', text: 'Drag clips directly into folders. Renaming preserves files and metadata without moving data.' },
+      { n: 3, title: 'Folder Selection in "Generate"', text: 'Pick a default output folder next to the generate button: all new clips from the session route there automatically.' },
     ],
-    tip: 'Метаданные и бейджи времени переезжают вместе с видео — ничего не теряется.',
+    tip: 'Metadata and render time stats move seamlessly along with the files.',
   },
   {
     id: 'player',
-    title: 'Видеоплеер',
-    short: 'Клик по видео — пауза, клик по чёрному — закрыть.',
+    title: 'Video Player',
+    short: 'Click video to toggle pause, click backdrop to close.',
     mock: (
       <div className="w-full max-w-[320px] space-y-2">
         <Hl n={1}><MockLightbox /></Hl>
         <Hl n={2}>
           <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground border border-border rounded-lg py-1.5 bg-[var(--surface-2)]/60">
-            <span>Space — пауза</span><span>M — звук</span><span>←→ — видео</span><span>Esc — выход</span>
+            <span>Space — pause</span><span>M — mute</span><span>←→ — seek</span><span>Esc — exit</span>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="flex items-center justify-center gap-3 text-[10px]">
-            <span className="p-1.5 rounded-lg bg-white/10 text-white">⬇ Скачать</span>
-            <span className="p-1.5 rounded-lg bg-red-500/40 text-white">🗑 Удалить</span>
+            <span className="p-1.5 rounded-lg bg-white/10 text-white">⬇ Download</span>
+            <span className="p-1.5 rounded-lg bg-red-500/40 text-white">🗑 Delete</span>
           </div>
         </Hl>
       </div>
     ),
     callouts: [
-      { n: 1, title: 'Плеер на весь экран', text: 'Открывается кликом по карточке в галерее. Клик по САМОМУ ВИДЕО — пауза/воспроизведение, клик по чёрной области вокруг — закрыть плеер. Полоса внизу — перемотка.' },
-      { n: 2, title: 'Горячие клавиши', text: 'Space — пауза, M — звук, стрелки ← → — следующее/предыдущее видео, Esc — выход.' },
-      { n: 3, title: 'Скачивание и удаление', text: '⬇ сохраняет файл на диск (имя начинается с Minimax_Studio). Корзина удаляет видео из папки вывода после подтверждения — файл пропадёт и с диска.' },
+      { n: 1, title: 'Full-Screen Player', text: 'Click any thumbnail to open. Click the video itself to toggle pause; click the dark overlay to exit. Bottom bar handles scrubbing.' },
+      { n: 2, title: 'Keyboard Shortcuts', text: 'Space — play/pause, M — mute/unmute, ← → — next/previous clip, Esc — close player.' },
+      { n: 3, title: 'Download and Delete', text: '⬇ saves to local storage. Trash icon removes the file from disk after confirmation.' },
     ],
-    tip: 'Звук генерируется тоже: модель озвучивает реплики из <d>…</d> и учитывает аудио-референсы.',
+    tip: 'Audio is rendered simultaneously: dialogue from <d>…</d> tags and audio reference styles are embedded.',
   },
   {
     id: 'upscale',
-    title: 'Upscale — сделать видео чётче',
-    short: 'Два режима: Neural Rendering (DLSS 5) и RTX VSR 1×–4× (HDR отключён).',
+    title: 'Upscale — Enhance Video Clarity',
+    short: 'Two modes: Neural Rendering (DLSS 5) and RTX VSR 1×–4×.',
     mock: (
       <Stage>
         <Hl n={1}><MockUpscalePanel /></Hl>
         <Hl n={2}>
           <div className="w-[220px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <p className="text-[10px] font-semibold text-foreground">Результат — в общей галерее</p>
+            <p className="text-[10px] font-semibold text-foreground">Result in main gallery</p>
             <div className="grid grid-cols-2 gap-1.5">
               <div className="rounded-md border border-border bg-[var(--surface-2)]/70 p-1.5 space-y-1">
                 <span className="inline-flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[10px] font-semibold text-sky-300 border border-sky-400/40">✦ Upscale</span>
@@ -734,33 +733,33 @@ export const LEARN_STEPS: LearnStep[] = [
         </Hl>
         <Hl n={3}>
           <div className="w-[180px] rounded-lg border border-violet-500/25 bg-[var(--surface-1)] p-2.5 space-y-1">
-            <p className="text-[10px] font-semibold text-foreground">Требования</p>
-            <p className="text-[10px] text-muted-foreground">• видеокарта NVIDIA RTX</p>
-            <p className="text-[10px] text-muted-foreground">• только видео (MP4 / MOV / MKV…)</p>
-            <p className="text-[10px] text-muted-foreground">• обработка — на вашей GPU</p>
+            <p className="text-[10px] font-semibold text-foreground">Requirements</p>
+            <p className="text-[10px] text-muted-foreground">• NVIDIA RTX graphics card</p>
+            <p className="text-[10px] text-muted-foreground">• video only (MP4 / MOV / MKV…)</p>
+            <p className="text-[10px] text-muted-foreground">• processed locally on your GPU</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Два режима обработки', text: 'Neural Rendering (DLSS 5) — нейросеть «перерисовывает» кадр: настраиваются шум, тон, структура и выбирается пресет — качество растёт, но скорость падает. RTX Video Super Resolution — ускорение 1×–4× (включая 1.5×; HDR отключён — H.264 не поддерживает HDR-вывод) — быстрее и легче для GPU. Режим выбирается прямо на вкладке, кнопка запуска меняется под него.' },
-      { n: 2, title: 'Куда попадает результат', text: 'Апскейл-видео сохраняется в галерею — в ТУ ЖЕ папку проекта, где лежит исходник (файл с диска без папки попадёт в общую). Ролик получает метку: «Upscale» (голубая) — RTX VSR или «DLSS 5» (розовая) — Neural Rendering. Метка видна на карточке всегда — исходник и улучшенную копию не перепутать.' },
-      { n: 3, title: 'Требования', text: 'Нужна видеокарта NVIDIA RTX; обрабатываются только видеофайлы (MP4 / MOV / MKV и др.). Всё считается локально, на вашей GPU — файл никуда не отправляется.' },
+      { n: 1, title: 'Two Processing Modes', text: 'Neural Rendering (DLSS 5) uses generative neural synthesis with controls for noise, tone, structure, and presets. RTX Video Super Resolution (1×–4×) provides fast, lightweight driver-level upscaling.' },
+      { n: 2, title: 'Output Location', text: 'Upscaled clips are saved to the source project folder and receive "Upscale" or "DLSS 5" badges.' },
+      { n: 3, title: 'System Requirements', text: 'Requires NVIDIA RTX GPU. Supports video containers (MP4, MOV, MKV, etc.). Computed locally.' },
     ],
-    tip: 'Не уверены, какой режим выбрать — начните с RTX VSR 2×: быстрее всего и обычно достаточно для «зерна» и размытия.',
+    tip: 'When uncertain, start with RTX VSR 2× for rapid, artifact-free resolution enhancement.',
   },
-  /* ═══════════════ НОВЫЕ ВКЛАДКИ (правки 272–283) ═══════════════ */
+  /* ═══════════════ EXTENDED TABS ═══════════════ */
   {
     id: 'extend',
-    title: 'Продление — продолжить видео',
-    short: 'Возьмите готовый ролик и продолжите его на N секунд.',
+    title: 'Extend — Continue Video',
+    short: 'Seamlessly extend an existing video by N seconds.',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Источник видео</MockLabel>
+            <MockLabel>Source Video</MockLabel>
             <div className="border-2 border-dashed border-cyan-500/40 rounded-lg py-3 text-center">
-              <p className="text-[10px] text-cyan-300 font-medium">Перетащите видео или кликните для выбора</p>
+              <p className="text-[10px] text-cyan-300 font-medium">Drag video or click to select</p>
               <p className="text-[10px] text-muted-foreground mt-1">MP4 / MOV / MKV</p>
             </div>
           </div>
@@ -768,43 +767,43 @@ export const LEARN_STEPS: LearnStep[] = [
         <Hl n={2}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="space-y-1.5">
-              <MockLabel>Длительность продолжения</MockLabel>
+              <MockLabel>Extension Duration</MockLabel>
               <MockSlider value={45} />
-              <p className="text-[10px] text-muted-foreground/60">от 3 до 30 секунд на каждый новый кусок</p>
+              <p className="text-[10px] text-muted-foreground/60">3 to 30 seconds per new segment</p>
             </div>
             <div className="space-y-1.5">
-              <MockLabel>Промпт для продолжения</MockLabel>
-              <div className="rounded-lg border border-border bg-[var(--surface-2)] px-2.5 py-2 text-[10px] text-muted-foreground">Опишите, что должно произойти дальше…</div>
+              <MockLabel>Extension Prompt</MockLabel>
+              <div className="rounded-lg border border-border bg-[var(--surface-2)] px-2.5 py-2 text-[10px] text-muted-foreground">Describe what should happen next…</div>
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Как работает</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Последний кадр исходника становится первым кадром нового ролика. Промпт описывает развитие сюжета.</p>
+            <p className="text-[10px] font-semibold text-foreground">How it works</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">The final frame becomes the first frame of the new segment. Prompt guides narrative progression.</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Загрузка видео', text: 'Перетащите файл в поле или кликните, чтобы выбрать с диска. Поддерживаются MP4, MOV, MKV. Видео можно взять прямо из галереи: перетащите превьюшку в поле загрузки. Перед обработкой ролик автоматически приводится к 24 кадрам в секунду — так работает модель.' },
-      { n: 2, title: 'Параметры', text: 'Для каждого нового куска задаются длительность (3–30 секунд — совсем короткие куски могут дать заметный скачок на стыке) и промпт — что должно произойти дальше. Можно добавить несколько кусков подряд. Переключатель «Качество прохода»: «Полное» (по умолчанию) — каждый кусок генерируется в черновом разрешении и тут же дорисовывается до разрешения исходника; «Драфт» — быстрее, но проще по качеству. «Шаги сэмплера» — по умолчанию «авто»: программа берёт шаги первого прохода из метаданных исходника (нет метаданных — как на вкладке «Генерация»); можно задать вручную (2–30), тогда применяется ваше значение. Готовое видео из галереи можно продолжить, не перетаскивая, — кнопкой «Продлить» на карточке.' },
-      { n: 3, title: 'Результат', text: 'Программа сама склеивает исходный ролик с новыми кусками в один бесшовный файл. Готовое видео сохраняется в ту же папку, где лежит оригинал. Исходный ролик остаётся нетронутым.' },
+      { n: 1, title: 'Video Input', text: 'Drop a video or select from disk. Video clips from the gallery can be dragged in directly. Input is automatically resampled to 24 fps.' },
+      { n: 2, title: 'Parameters', text: 'Configure duration (3–30s) and prompt for each continuation chunk. "Full" quality runs two passes; "Draft" runs a single pass. Sampler steps default to auto (inherited from source metadata).' },
+      { n: 3, title: 'Seamless Stitching', text: 'The system stitches original and extended clips into a single continuous file in the original folder.' },
     ],
-    tip: 'Хороший промпт для продолжения — это развитие сюжета: «The camera follows her as she turns the corner and sees the ocean».'
+    tip: 'Write narrative continuations: "The camera follows her as she turns the corner and sees the ocean".',
   },
   {
     id: 'refine',
-    title: 'Refine — улучшить качество видео',
-    short: 'Повторная генерация с теми же референсами, но в большем разрешении.',
+    title: 'Refine — Elevate Video Quality',
+    short: 'Second-pass neural synthesis using source references at higher resolution.',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Целевое разрешение</MockLabel>
-            <MockSelect value="Как в исходнике (только детализация)" />
+            <MockLabel>Target Resolution</MockLabel>
+            <MockSelect value="Same as source (detail enhancement only)" />
             <div className="flex gap-1 flex-wrap">
-              {['Исходник', '720p', '1080p'].map((r, i) => (
+              {['Source', '720p', '1080p'].map((r, i) => (
                 <span key={r} className={i === 0 ? 'px-1.5 py-0.5 rounded text-[10px] border border-cyan-500/50 bg-cyan-500/15 text-cyan-300 font-medium' : 'px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground'}>{r}</span>
               ))}
             </div>
@@ -813,192 +812,192 @@ export const LEARN_STEPS: LearnStep[] = [
         <Hl n={2}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="space-y-1.5">
-              <MockLabel>Проход (шаги)</MockLabel>
-              <MockSelect value="3 шага — быстро (эталон)" />
-              <p className="text-[10px] text-muted-foreground/70">2 шага — самый быстрый · <span className="text-cyan-300/80">по умолчанию 3</span> · 4–7 — больше деталей</p>
+              <MockLabel>Pass (steps)</MockLabel>
+              <MockSelect value="3 steps — fast (standard)" />
+              <p className="text-[10px] text-muted-foreground/70">2 steps — fastest · <span className="text-cyan-300/80">default 3</span> · 4–7 — more detail</p>
             </div>
             <div className="space-y-1.5">
-              <MockLabel>Влияние Refine</MockLabel>
+              <MockLabel>Refine Influence</MockLabel>
               <MockSlider value={60} />
-              <p className="text-[10px] text-muted-foreground/70">30–95% · выше — сильнее перерисовка</p>
+              <p className="text-[10px] text-muted-foreground/70">30–95% · higher means stronger resynthesis</p>
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-violet-500/25 bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Что делает Refine</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Прогоняет готовое видео через нейросеть ещё раз в бóльшем разрешении: промпт и референсы подставляются из метаданных оригинала. Не просто апскейл — нейросеть «дорисовывает» детали.</p>
+            <p className="text-[10px] font-semibold text-foreground">What Refine does</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">Re-runs the video through the neural network at higher resolution using original metadata. Generates rich micro-details rather than basic scaling.</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Разрешение и режим', text: 'Четыре цели: «Как в исходнике» (разрешение не меняется — только детализация, самый бережный вариант), «720p» (быстрее, безопаснее по памяти), «1080p» (медленнее, максимум деталей) и «Свободное» (задаётся в мегапикселях, до 4K). Два режима обработки: «Целый» — всё видео одним куском; «Частями» — кусками по ~3/5/8 секунд с бесшовной склейкой, подходит для длинных роликов и экономит память.' },
-      { n: 2, title: 'Шаги и сила перерисовки', text: '«Проход (шаги)»: 2 — самый быстрый, 3 — по умолчанию (тот же эталонный профиль сигм, что и pass 2 в генерации), 4–7 — детальнее, но дольше (те же лестницы сигм, что у Pass 2 генерации; 7 — максимум). «Влияние Refine» (30–95%) — насколько сильно нейросеть перерисовывает кадр: выше — больше новых деталей, ниже — ближе к оригиналу; по умолчанию 60%. Под слайдером видна фактическая лестница сигм, которую получит сэмплер, а кнопка «Pass 2» одним нажатием ставит точную эталонную лестницу второго прохода генерации (3 шага от σ 0.9035). Промпт и референсы берутся из сохранённых метаданных оригинала (у продленных видео сохраняются все промпты кусков). Режим референсов Match / Max настраивается отдельно: Match — быстрее, Max — точнее держит лица (по умолчанию Max).' },
-      { n: 3, title: 'Отличие от DLSS', text: 'Refine — это повторная генерация (нейросеть «думает» над кадром), а не простое увеличение картинки. Медленнее, но качество выше: детали, текстуры, лицо перерисовываются, а не растягиваются. Хорошо подходит для апгрейда «драфтов» из вкладки «Генерация».' },
+      { n: 1, title: 'Resolution & Processing Mode', text: 'Four targets: "Same as source" (detail sharpening without scaling), "720p", "1080p", and "Custom" (up to 4K). Modes: "Whole" processes single-piece; "Chunked" processes in 3/5/8s slices with seamless stitching to save VRAM.' },
+      { n: 2, title: 'Steps & Strength', text: 'Pass steps: 2 (fastest), 3 (default baseline), 4–7 (higher detail). "Refine Influence" (30–95%, default 60%) governs resynthesis strength. Uses original prompt and reference metadata automatically.' },
+      { n: 3, title: 'Refine vs DLSS', text: 'Refine is generative diffusion re-synthesis (reconstructing textures, skin, cloth) rather than spatial interpolation. Perfect for polishing draft renders.' },
     ],
-    tip: 'Для исходника 720p — ставьте цель 1080p. Если результат ушёл далеко от оригинала — снизьте «Влияние Refine» до 40–50%.'
+    tip: 'For a 720p source, set target to 1080p. If the result diverges too far from the original, lower Refine Influence to 40–50%.',
   },
   {
     id: 'tile-upscale',
-    title: 'Tile Upscale — чанковый апскейл',
-    short: 'Увеличение разрешения тайлами: экономия VRAM, 720p–2160p.',
+    title: 'Tile Upscale — Chunked Upscaling',
+    short: 'Tile-based upscale: saves VRAM, scales 720p–2160p cleanly.',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Разрешение</MockLabel>
+            <MockLabel>Resolution</MockLabel>
             <div className="flex gap-1 flex-wrap">
               {['720p', '1080p', '1440p', '2160p'].map((r, i) => (
                 <span key={r} className={i === 1 ? 'px-1.5 py-0.5 rounded text-[10px] border border-cyan-500/50 bg-cyan-500/15 text-cyan-300 font-medium' : 'px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground'}>{r}</span>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground/70 mt-1">Защита: нельзя выбрать разрешение меньше исходника</p>
+            <p className="text-[10px] text-muted-foreground/70 mt-1">Safety: cannot select lower resolution than source</p>
           </div>
         </Hl>
         <Hl n={2}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="space-y-1.5">
-              <MockLabel>Денойз</MockLabel>
+              <MockLabel>Denoise</MockLabel>
               <MockSlider value={20} />
-              <p className="text-[10px] text-muted-foreground/70">0.05–1.0 · по умолчанию 0.2 (бережно)</p>
+              <p className="text-[10px] text-muted-foreground/70">0.05–1.0 · default 0.2 (conservative)</p>
             </div>
             <div className="space-y-1.5">
-              <MockLabel>Шаги</MockLabel>
-              <MockSelect value="2 шага (по умолчанию) · до 8" />
+              <MockLabel>Steps</MockLabel>
+              <MockSelect value="2 steps (default) · up to 8" />
             </div>
             <div className="space-y-1.5">
-              <MockLabel>▼ Дополнительные параметры</MockLabel>
-              <MockSelect value="SyncTile (швы без мерцания): Вкл" />
+              <MockLabel>▼ Advanced Parameters</MockLabel>
+              <MockSelect value="SyncTile (seamless blending): On" />
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-violet-500/25 bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Как работает</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Видео разбивается на тайлы (чанки), каждый апскейлится отдельно. Экономит VRAM — можно гнать 4K даже на 12 ГБ.</p>
+            <p className="text-[10px] font-semibold text-foreground">How it works</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">Video is subdivided into spatial tiles upscaled independently. Saves VRAM — allows 4K rendering even on 12 GB GPUs.</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Разрешение', text: 'Выберите из 720p, 1080p, 1440p, 2160p. Защита: нельзя выбрать разрешение меньше исходника (например, для 2160p исходника нельзя поставить 720p).' },
-      { n: 2, title: 'Основные настройки', text: 'Деноизинг (сила перерисовки) 0.05–1.0, по умолчанию 0.2 — бережный режим: детали добавляются, но исходник почти не меняется; выше — сильнее перерисовка, но больше риск «поплывшего» результата. Шаги — 2, 3, 4, 5, 6 или 8, по умолчанию 2; больше шагов дольше, а заметного прироста не даёт. В «Дополнительных параметрах» (кнопка ▼) живёт SyncTile — технология, которая убирает мерцание и видимые швы на стыках тайлов; включена по умолчанию, отключать не нужно. Если в настройках включены свои LoRA — они применяются и здесь (правка 483).' },
-      { n: 3, title: 'Чанки', text: 'Разбиение на тайлы включено по умолчанию для экономии памяти. На слабых GPU это позволяет апскейлить до 4K без OOM.' },
+      { n: 1, title: 'Resolution', text: 'Select 720p, 1080p, 1440p, or 2160p. Lower resolutions than source are disabled.' },
+      { n: 2, title: 'Parameters', text: 'Denoise (0.05–1.0, default 0.2) controls generative strength. Steps: 2 to 8 (2 is optimal). SyncTile blends tile seams seamlessly without flicker and is enabled by default.' },
+      { n: 3, title: 'Tiling Benefits', text: 'Tiling allows massive resolution scaling without out-of-memory errors on consumer GPUs.' },
     ],
-    tip: 'Для 720p исходника — ставьте 1080p или 1440p. 2160p — только если VRAM позволяет (12+ ГБ).' 
+    tip: 'For 720p footage, target 1080p or 1440p. Use 2160p only with 12+ GB VRAM.',
   },
   {
     id: 'controlnet',
-    title: 'ControlNet — точный перенос движения',
-    short: 'Генерация по контрольному видео: 3D-болванка задаёт движение и камеру покадрово.',
+    title: 'ControlNet — Precise Motion Transfer',
+    short: 'Generate guided by control video: 3D animatics drive motion and camera frame by frame.',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Контрольное видео (болванка)</MockLabel>
+            <MockLabel>Control Video (Animatic)</MockLabel>
             <div className="rounded-md border border-dashed border-orange-500/40 bg-orange-500/5 px-2 py-2 text-center">
-              <p className="text-[10px] text-orange-300">Перетащите видео из галереи или выберите с диска</p>
+              <p className="text-[10px] text-orange-300">Drag video from gallery or select from disk</p>
             </div>
-            <MockLabel>Тип контроля</MockLabel>
+            <MockLabel>Control Type</MockLabel>
             <div className="flex gap-1">
-              <span className="px-1.5 py-0.5 rounded text-[10px] border border-orange-500/50 bg-orange-500/15 text-orange-300 font-medium">Глубина (Depth)</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Контуры (Canny)</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] border border-orange-500/50 bg-orange-500/15 text-orange-300 font-medium">Depth</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Canny</span>
             </div>
           </div>
         </Hl>
         <Hl n={2}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="space-y-1.5">
-              <MockLabel>Сила контроля</MockLabel>
+              <MockLabel>Control Strength</MockLabel>
               <MockSlider value={50} />
-              <p className="text-[10px] text-muted-foreground/70">0–2 · по умолчанию 1.0</p>
+              <p className="text-[10px] text-muted-foreground/70">0–2 · default 1.0</p>
             </div>
             <div className="space-y-1.5">
-              <MockLabel>Промпт</MockLabel>
-              <p className="text-[10px] text-muted-foreground/70">Описание НОВОЙ сцены: персонажи, стиль, свет, звук</p>
+              <MockLabel>Prompt</MockLabel>
+              <p className="text-[10px] text-muted-foreground/70">Description of NEW scene: characters, style, lighting, sound</p>
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-violet-500/25 bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Как работает</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">С болванки снимается карта глубины (или контуры) покадрово, и нейросеть генерирует новое видео, точно повторяя движение и камеру.</p>
+            <p className="text-[10px] font-semibold text-foreground">How it works</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">Extracts depth maps or edge contours frame by frame, generating a new video matching exact motion and camera choreography.</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Контрольное видео', text: 'Источник движения: 3D-болванка (previz из Blender и т.п.), черновая анимация или любой ролик, чьё движение камеры и объектов нужно повторить. Внешний вид источника НЕ переносится — только движение. Видео можно перетащить из галереи (или через меню ⋮ → «ControlNet (движение)») либо выбрать с диска. Режим работает на той же модели MiniMax H3, что и обычная генерация, — отдельных моделей ControlNet не требуется. Дополнительно нужен препроцессор глубины Depth Anything V2 Small (~99 МБ) — он в Настройках → Модели, категория «Препроцессоры»; он же помечен «опционально», то есть без него препроцессинг карты глубины не запустится. Кроме промпта можно добавить картинки-референсы — персонаж, локация или кадр (до 9 шт.); в промпте на них ссылаются как <Picture 1>, <Picture 2>… (правка 498).' },
-      { n: 2, title: 'Тип контроля и настройки', text: '«Глубина (Depth)» — универсальный вариант: переносит объёмы сцены и движение камеры (нужна маленькая модель Depth Anything, качается там же). «Контуры (Canny)» — следует границам объектов, хорош для чёткой графики. «Сила контроля» 1.0 — строгое следование; меньше — свободнее. «Отпустить контроль после» (например 0.6) — в конце генерации модель дорисует детали свободнее, полезно если картинка выходит «плоской». Шаги пайплайна здесь такие же, как на вкладке «Генерация»: точка сплита и «Всего шагов (pass 1)» — по умолчанию 6 из 6.' },
-      { n: 3, title: 'Когда что выбрать', text: 'ControlNet — когда движение должно совпадать ТОЧНО (покадрово). Если достаточно переноса «по мотивам» — проще вкладка «Генерация», режим «Референсы» + тогл «3D → Video» в чате ассистента: там движение передаётся текстовой ссылкой на видео-референс, но менее строго.' },
+      { n: 1, title: 'Control Video Input', text: 'Input source: 3D previz (Blender animatic), draft animation, or any clip whose camera and subject motion you wish to mimic. Visual appearance is ignored — only kinetics transfer. Depth Anything V2 Small preprocessor is used.' },
+      { n: 2, title: 'Control Types', text: '"Depth" transfers volume and camera movement. "Canny" tracks edges. Control Strength (default 1.0) dictates compliance.' },
+      { n: 3, title: 'Use Cases', text: 'Choose ControlNet when motion must match frame-accurately. For loose visual inspiration, standard "References" mode suffices.' },
     ],
-    tip: 'Длительность результата обрезается под длину контрольного видео — болванка должна быть нужной длины. Промпт пишите про новую сцену, движение описывать не нужно.'
+    tip: 'Output length conforms to control video duration. Write prompts describing the new scene rather than camera motions.',
   },
   {
     id: 'face-refine',
-    title: 'Face Refine — перерисовка мелких лиц',
-    short: 'Перерисовать лицо: кроп крупно, H3, вклейка обратно.',
+    title: 'Face Refine — Redraw Distant Faces',
+    short: 'Detect, crop, high-res diffusion redraw, blend back.',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Кого перерисовывать</MockLabel>
+            <MockLabel>Target Face</MockLabel>
             <div className="rounded-md border border-dashed border-border px-2 py-2 text-center">
-              <p className="text-[10px] text-muted-foreground">◎ Указать лицо кликом по кадру</p>
+              <p className="text-[10px] text-muted-foreground">◎ Click on face in frame</p>
             </div>
-            <MockSelect value="Самое крупное лицо" />
-            <MockLabel>Референс конкретного человека</MockLabel>
+            <MockSelect value="Largest Face" />
+            <MockLabel>Person Reference Photo</MockLabel>
             <div className="rounded-md border border-dashed border-yellow-500/40 bg-yellow-500/5 px-2 py-2 text-center">
-              <p className="text-[10px] text-yellow-300">Загрузить фото человека</p>
+              <p className="text-[10px] text-yellow-300">Upload person photo</p>
             </div>
           </div>
         </Hl>
         <Hl n={2}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="space-y-1.5">
-              <MockLabel>Денойз</MockLabel>
+              <MockLabel>Denoise</MockLabel>
               <MockSlider value={35} />
-              <p className="text-[10px] text-muted-foreground/70">0.05–0.6 · по умолчанию 0.35</p>
+              <p className="text-[10px] text-muted-foreground/70">0.05–0.6 · default 0.35</p>
             </div>
             <div className="space-y-1.5">
-              <MockLabel>Канва</MockLabel>
+              <MockLabel>Canvas</MockLabel>
               <MockSelect value="512" />
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-yellow-500/25 bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Как работает</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Лицо детектится покадрово, кропится крупно, перегенерируется нейросетью и вклеивается обратно — только область лица.</p>
+            <p className="text-[10px] font-semibold text-foreground">How it works</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">Faces are detected, cropped at high resolution, regenerated via diffusion, and composited back into the original frame.</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Кого именно', text: 'Для лица три способа: клик по лицу в кадре исходника — самый точный (трекер возьмёт ближайшее к точке лицо и поведёт этого человека через весь ролик); правило («Самое крупное лицо», «Ближе к центру»…) плюс номер в рейтинге — работает всегда, но видит только геометрию кадра; референс-фото конкретного человека — сравнение лиц через insightface (модель buffalo_l скачивается сама).' },
-      { n: 2, title: 'Денойз и канва', text: 'Денойз — насколько сильно перерисовывается лицо. Значения из SDXL-семейства здесь не переносятся: H3 — flow matching со сдвигом 12, поэтому 0.25 превращается в эффективную sigma 0.800 и переписывает кадр целиком. Рабочий диапазон 0.25–0.40. Канва — размер, в котором лицо перегенерируется: 512 дешевле 768 примерно в 2.25 раза по памяти, на 12 ГБ начинайте с 512; пресеты идут до 1280 — значения выше 768 заметно дороже по VRAM и времени (модель обучена на канве до 768×1344). Шаги — 4 (наша модель 4-шаговая).' },
-      { n: 3, title: 'Когда применять', text: 'Когда лицо в кадре мелкое и «какое-то» — на дальних планах, в группах, в профиль. Лицо находит и перерисовывает та же нейросеть, что и генерацию, поэтому стиль и личность сохраняются. Промпт и референсы персонажа берутся из метаданных исходного ролика — сцена остаётся той же; свой промпт можно задать вручную. Остальной кадр не трогается: вклеивается только область лица.' },
+      { n: 1, title: 'Face Selection', text: 'Three tracking methods: direct click on face in frame (highest precision), heuristic rules ("Largest face", "Closest to center"), or reference face comparison via InsightFace.' },
+      { n: 2, title: 'Denoise and Canvas', text: 'Denoise controls modification degree (0.25–0.40 recommended). Canvas sets generation resolution: 512 is VRAM-friendly for 12 GB GPUs; 768 is master quality.' },
+      { n: 3, title: 'When to Use', text: 'Essential when subjects in wide shots suffer from soft or distorted facial features. Uses original prompt and identity references.' },
     ],
-    tip: 'Во время прогона внизу показывается живое превью кадров. Если лица не видно (человек спиной, в капюшоне), включите «Далёкие планы: искать человека» в дополнительных параметрах — голова берётся от бокса человека. Результат — обычное видео в общей галерее с меткой «Face Refine». Его можно дальше апскейлить, отпродлить или перегенерировать.'
+    tip: 'Live frame preview shows progress. Output appears in the gallery with the "Face Refine" tag.',
   },
   {
     id: 'fps',
-    title: 'FPS — увеличение частоты кадров',
-    short: 'RIFE VFI и FILM VFI: плавность движения на слабых GPU.',
+    title: 'FPS — Frame Rate Interpolation',
+    short: 'RIFE VFI and FILM VFI: smooth motion synthesis.',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Режим</MockLabel>
+            <MockLabel>Mode</MockLabel>
             <div className="grid grid-cols-2 gap-1.5">
               <div className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1.5 text-center">
                 <p className="text-[10px] font-semibold text-cyan-300">RIFE VFI</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">быстрее</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">faster</p>
               </div>
               <div className="rounded-md border border-border px-2 py-1.5 text-center">
                 <p className="text-[10px] text-muted-foreground">FILM VFI</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">качественнее</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">higher quality</p>
               </div>
             </div>
           </div>
@@ -1006,37 +1005,37 @@ export const LEARN_STEPS: LearnStep[] = [
         <Hl n={2}>
           <div className="w-[280px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
             <div className="space-y-1.5">
-              <MockLabel>Множитель</MockLabel>
-              <MockSelect value="×2 (48 fps из 24)" />
-              <p className="text-[10px] text-muted-foreground/70">×2, ×3, ×4 — сколько раз увеличить FPS</p>
+              <MockLabel>Multiplier</MockLabel>
+              <MockSelect value="×2 (48 fps from 24)" />
+              <p className="text-[10px] text-muted-foreground/70">×2, ×3, ×4 — frame rate multiplier</p>
             </div>
             <div className="space-y-1.5">
-              <MockLabel>Источник видео</MockLabel>
+              <MockLabel>Source Video</MockLabel>
               <div className="border-2 border-dashed border-cyan-500/40 rounded-lg py-2 text-center">
-                <p className="text-[10px] text-cyan-300">Перетащите или кликните</p>
+                <p className="text-[10px] text-cyan-300">Drag or click to select</p>
               </div>
             </div>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-violet-500/25 bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">VFI — что это</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">Video Frame Interpolation: нейросеть «дорисовывает» промежуточные кадры между существующими. 24 fps → 48 fps (×2) — движение становится плавнее.</p>
+            <p className="text-[10px] font-semibold text-foreground">What is VFI</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">Video Frame Interpolation synthesizes intermediate frames between existing ones: 24 fps → 48 fps (×2) for fluid motion.</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Два режима', text: 'RIFE VFI — быстрый, подходит для слабых GPU. FILM VFI — качественнее, но тяжелее. Оба работают локально, на вашей видеокарте.' },
-      { n: 2, title: 'Множитель', text: '×2 — удвоение FPS (24→48), ×3 — утроение (24→72), ×4 — учетверение (24→96). Чем выше множитель — тем дольше обработка и больше VRAM.' },
-      { n: 3, title: 'Результат', text: 'Видео с плавным движением сохраняется в общую галерею. Исходный файл остаётся нетронутым.' },
+      { n: 1, title: 'Two Modes', text: 'RIFE VFI is fast and resource-efficient. FILM VFI provides premium optical flow handling. Both run locally.' },
+      { n: 2, title: 'Multiplier', text: '×2 doubles frame rate (24→48), ×3 triples (24→72), ×4 quadruples (24→96).' },
+      { n: 3, title: 'Output', text: 'Interpolated video saves to the main gallery without modifying the source file.' },
     ],
-    tip: 'Начните с ×2 — это оптимальный баланс скорости и плавности. Для 4K видео на слабом GPU — RIFE VFI + Анти-OOM.'
+    tip: 'Begin with ×2 for ideal speed and smoothness.',
   },
   {
     id: 'meta',
-    title: 'Метаданные — рецепт видео',
-    short: 'Промпт + seed = точное повторение удачного видео.',
+    title: 'Metadata — Video Recipe',
+    short: 'Prompt + seed = exact reproducibility of successful renders.',
     mock: (
       <Stage>
         <div className="flex items-center gap-4 flex-wrap justify-center">
@@ -1052,41 +1051,41 @@ export const LEARN_STEPS: LearnStep[] = [
         </div>
         <Hl n={3}>
           <div className="flex items-center gap-2 justify-center rounded-lg border border-border bg-[var(--surface-2)]/60 px-4 py-1.5 text-[10px] text-muted-foreground">
-            📋 Скопировать промпт и seed → повторить генерацию
+            📋 Copy prompt and seed → recreate generation
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Что внутри', text: 'Промпт, seed, разрешение, шаги обоих проходов, референсы и их роли, время генерации и дата — полный рецепт того, КАК получено видео.' },
-      { n: 2, title: 'Как открыть', text: 'Кнопка ⓘ на карточке в галерее (при наведении).' },
-      { n: 3, title: 'Повторить результат', text: 'Понравилось? Скопируйте промпт и seed из метаданных и выставьте те же параметры — генерация воспроизведётся почти идентично.' },
+      { n: 1, title: 'What is Stored', text: 'Prompt, seed, resolution, pass step counts, references and roles, generation time, and date — the exact synthesis recipe.' },
+      { n: 2, title: 'How to View', text: 'Click ⓘ on any gallery card to open metadata.' },
+      { n: 3, title: 'Reproducing Results', text: 'Copy the prompt and seed to re-render nearly identical results or make subtle variations.' },
     ],
-    tip: 'Метаданные лежат рядом с видео в файле <имя>.meta.json — при переносе папки копируйте и его.',
+    tip: 'Metadata is stored alongside videos in <filename>.meta.json files.',
   },
-  /* (правки 728–730) Сравнение двух видео — шторка до/после */
+  /* (fixes 728–730) Side-by-side comparison */
   {
     id: 'compare',
-    title: 'Сравнение двух видео — шторка до / после',
-    short: 'Ctrl+клик по двум карточкам → «Сравнить» (или Enter).',
+    title: 'Side-by-Side Comparison — Before / After Splitter',
+    short: 'Ctrl+click two gallery cards → "Compare" (or Enter).',
     mock: (
       <Stage>
         <Hl n={1}>
           <div className="w-[240px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
-            <MockLabel>Галерея · выделение</MockLabel>
+            <MockLabel>Gallery · selection</MockLabel>
             <div className="grid grid-cols-2 gap-1.5">
               <div className="relative rounded-md overflow-hidden border-2 border-cyan-500/70">
                 <div className="aspect-video bg-gradient-to-br from-cyan-900/50 to-blue-950/40" />
                 <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-cyan-500 text-black text-[9px] font-bold">A</span>
-                <span className="absolute bottom-1 left-1 text-[9px] text-cyan-300 font-mono">до · слева</span>
+                <span className="absolute bottom-1 left-1 text-[9px] text-cyan-300 font-mono">before · left</span>
               </div>
               <div className="relative rounded-md overflow-hidden border-2 border-fuchsia-500/70">
                 <div className="aspect-video bg-gradient-to-br from-fuchsia-900/50 to-purple-950/40" />
                 <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-fuchsia-500 text-black text-[9px] font-bold">B</span>
-                <span className="absolute bottom-1 left-1 text-[9px] text-fuchsia-300 font-mono">после · справа</span>
+                <span className="absolute bottom-1 left-1 text-[9px] text-fuchsia-300 font-mono">after · right</span>
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/70">третий Ctrl+клик вытесняет самый первый</p>
+            <p className="text-[10px] text-muted-foreground/70">third Ctrl+click replaces the oldest selection</p>
           </div>
         </Hl>
         <Hl n={2}>
@@ -1098,150 +1097,150 @@ export const LEARN_STEPS: LearnStep[] = [
               <span className="absolute top-1 left-1 px-1 py-0.5 rounded bg-black/60 text-[9px] text-cyan-300 font-bold border border-cyan-400/40">A</span>
               <span className="absolute top-1 right-1 px-1 py-0.5 rounded bg-black/60 text-[9px] text-fuchsia-300 font-bold border border-fuchsia-400/40">B</span>
             </div>
-            <p className="text-[10px] text-muted-foreground/70">тяните шторку мышью или пальцем</p>
+            <p className="text-[10px] text-muted-foreground/70">drag split slider with mouse or touch</p>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
-            <p className="text-[10px] font-semibold text-foreground">Клавиши</p>
-            <p className="text-[10px] text-muted-foreground">Enter — открыть сравнение</p>
-            <p className="text-[10px] text-muted-foreground">Пробел — пауза / играть</p>
-            <p className="text-[10px] text-muted-foreground">← → — по кадрам (режим «Кадр»)</p>
-            <p className="text-[10px] text-muted-foreground">Esc — закрыть · сбросить выбор</p>
+            <p className="text-[10px] font-semibold text-foreground">Hotkeys</p>
+            <p className="text-[10px] text-muted-foreground">Enter — open comparison</p>
+            <p className="text-[10px] text-muted-foreground">Space — pause / play</p>
+            <p className="text-[10px] text-muted-foreground">← → — step frames (Frame mode)</p>
+            <p className="text-[10px] text-muted-foreground">Esc — close · clear selection</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Как выбрать пару', text: 'Ctrl+клик (⌘ на Mac) по двум карточкам в галерее: первая становится «A» («до», слева), вторая — «B» («после», справа). Порядок кликов задаёт стороны. В тулбаре появятся кнопки «Сравнить» и сброс выбора (×). Вместо кнопки можно нажать Enter, а Esc снимает выделение. Работает во всех вкладках с галереей.' },
-      { n: 2, title: 'Шторка и режимы', text: 'В полноэкранном окне ролики наложены друг на друга: шторка режет кадр — слева видно «до» (A), справа «после» (B). Режим «Видео» — оба играют синхронно, а длинный ролик обрезается по длительности короткого, чтобы кадры совпадали. Режим «Кадр» — без воспроизведения: пауза и покадровое листание ←/→ (24 fps) с таймлайном. Идеально, чтобы оценить результат Refine, Tile Upscale или Face Refine против исходника.' },
-      { n: 3, title: 'Управление', text: 'Шторка тянется мышью, пальцем или ставится кликом по кадру. Пробел — пауза/играть, Esc — закрыть окно. Звук по умолчанию выключен; кнопка динамика включает звук ролика A.' },
+      { n: 1, title: 'Selecting Pairs', text: 'Ctrl+click (⌘ on Mac) two cards: first becomes A (left), second B (right). Press Enter or click Compare.' },
+      { n: 2, title: 'Splitter & Modes', text: '"Video" mode syncs synchronized playback. "Frame" mode enables frame-by-frame scrutiny (24 fps) with a timeline scrub bar.' },
+      { n: 3, title: 'Controls', text: 'Drag the split divider. Space toggles play/pause, Esc exits. Speaker icon toggles audio from clip A.' },
     ],
-    tip: 'Сравнение — самый честный способ проверить апскейл: тяните шторку медленно по деталям (лица, текст, трава) — разница видна моментально.'
+    tip: 'The split viewer is the most reliable way to inspect upscaler sharpness on fine textures (eyes, cloth, hair).',
   },
-  /* ═══════════════ ЧАСТЬ 3. ГЛУБЖЕ ═══════════════ */
+  /* ═══════════════ PART 3. IN DEPTH ═══════════════ */
   {
     id: 'advanced',
-    title: 'Пайплайн и дополнительные параметры',
-    short: '«Полное» (два прохода) или «Драфт» (один), шаги, seed. Можно смело пропустить.',
+    title: 'Pipeline & Advanced Parameters',
+    short: '"Full" (two-pass) or "Draft" (single-pass), steps, seed. Optional tuning.',
     mock: (
       <Stage>
         <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2.5">
-          <p className="text-[10px] text-muted-foreground">▼ Дополнительные параметры</p>
+          <p className="text-[10px] text-muted-foreground">▼ Advanced Parameters</p>
           <Hl n={1}>
             <div className="space-y-2">
               <div className="space-y-1">
-                <MockLabel>Проход 1 (черновой): разрешение, МП</MockLabel>
+                <MockLabel>Pass 1 (draft): resolution, MP</MockLabel>
                 <MockSlider value={20} max={200} />
-                <p className="text-[10px] text-muted-foreground/70">от 0.2 МП · <span className="text-cyan-300/80">не больше финального разрешения (мин. потолок 1.0 МП)</span></p>
+                <p className="text-[10px] text-muted-foreground/70">from 0.2 MP · <span className="text-cyan-300/80">no larger than final resolution (min 1.0 MP ceiling)</span></p>
               </div>
               <div className="space-y-1">
-                <MockLabel>Проход 1: шаги (точка сплита)</MockLabel>
+                <MockLabel>Pass 1: steps (split point)</MockLabel>
                 <MockSlider value={13} max={100} />
-                <p className="text-[10px] text-muted-foreground/70">сколько сигм забирает черновой проход · ползунок 2–30 · <span className="text-cyan-300/80">по умолчанию 6</span></p>
+                <p className="text-[10px] text-muted-foreground/70">sigmas allocated to draft · slider 2–30 · <span className="text-cyan-300/80">default 6</span></p>
               </div>
               <div className="space-y-1">
-                <MockLabel>Проход 1: всего шагов</MockLabel>
+                <MockLabel>Pass 1: total steps</MockLabel>
                 <MockSlider value={30} max={100} />
-                <p className="text-[10px] text-muted-foreground/70">длина всего расписания · <span className="text-cyan-300/80">по умолчанию как у сплита (6 из 6)</span></p>
+                <p className="text-[10px] text-muted-foreground/70">total schedule length · <span className="text-cyan-300/80">default matches split (6 of 6)</span></p>
               </div>
-              <p className="text-[10px] font-mono text-cyan-300/80">Pass 1: 6 из 6 · σ 1.0 → 0.167</p>
+              <p className="text-[10px] font-mono text-cyan-300/80">Pass 1: 6 of 6 · σ 1.0 → 0.167</p>
               <div className="space-y-1">
-                <MockLabel>Сэмплер / планировщик · референсы</MockLabel>
-                <MockSelect value="euler · simple · Match (быстро)" />
+                <MockLabel>Sampler / scheduler · references</MockLabel>
+                <MockSelect value="euler · simple · Match (fast)" />
               </div>
               <div className="space-y-1">
-                <MockLabel>Проход 2 (улучшение): шаги</MockLabel>
-                <MockSelect value="3 шага (быстрее) · 4–7 — качество" />
+                <MockLabel>Pass 2 (enhancement): steps</MockLabel>
+                <MockSelect value="3 steps (faster) · 4–7 — quality" />
               </div>
             </div>
           </Hl>
           <Hl n={2}>
             <div className="space-y-1.5">
               <MockToggle on label="Low VRAM Attention" />
-              <p className="text-[10px] text-muted-foreground/70 -mt-0.5">и Chunk FeedForward — в Настройки → Оптимизация</p>
+              <p className="text-[10px] text-muted-foreground/70 -mt-0.5">and Chunk FeedForward — in Settings → Optimization</p>
             </div>
           </Hl>
           <Hl n={3}>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <MockLabel>Seed</MockLabel>
-                <span className="text-[10px] font-mono text-muted-foreground">-1 (случайный)</span>
+                <span className="text-[10px] font-mono text-muted-foreground">-1 (random)</span>
               </div>
-              <p className="text-[10px] text-muted-foreground/70">свои LoRA — в Настройки → Общие → LoRAs</p>
+              <p className="text-[10px] text-muted-foreground/70">custom LoRAs — in Settings → General → LoRAs</p>
             </div>
           </Hl>
         </div>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Полное или Драфт', text: 'Режим «Полное» — два прохода: сначала быстрый черновик в низком разрешении (от 0.2 МП, но не крупнее финала), потом улучшение до целевого качества. Режим «Драфт» — один проход в черновом качестве: заметно быстрее, в галерее такое видео получает красный бейдж «Draft», а довести его до полного качества можно вкладкой «Refine». Шаги чернового прохода задаются ДВУМЯ числами: «Шаги сэмплера» — точка сплита (сколько сигм забирает черновик, ползунок 2–30, по умолчанию 6), «Всего шагов (pass 1)» — длина всего расписания (по умолчанию столько же, сколько у точки сплита, то есть «6 из 6»). Под полями показывается живая сводка «Pass 1: 6 из 6 · σ 1.0 → 0.167»: по ней видно, куда дошёл черновик. Можно задать всего вручную — например, 8: тогда черновик возьмёт 6 сигм из 8 и уйдёт глубже по шуму. У референсов есть режим Match / Max: Match быстрее, Max точнее держит сходство.' },
-      { n: 2, title: 'Оптимизации памяти', text: 'Low VRAM Attention и Chunk FeedForward экономят видеопамять — стоят в Настройки → Оптимизация, а не в форме генерации. Если генерация падает с нехваткой VRAM — оставьте их включёнными или снизьте разрешение.' },
-      { n: 3, title: 'Seed', text: '«Зерно» случайности: -1 = каждый раз новое. Понравился результат — возьмите seed из метаданных и повторите с ним.' },
+      { n: 1, title: 'Full vs Draft', text: '"Full" mode uses two passes: low-res draft followed by high-res refinement. "Draft" runs single-pass draft rendering (tagged red "Draft" in gallery). Pass 1 steps configured via split point and total steps with live sigma summary.' },
+      { n: 2, title: 'Memory Optimizations', text: 'Low VRAM Attention and Chunk FeedForward reduce VRAM consumption (configured in Settings → Optimization).' },
+      { n: 3, title: 'Seed', text: 'Randomness seed: -1 generates a new variation every run; fixed values reproduce scenes.' },
     ],
-    tip: 'Новичку этот блок можно не открывать — значения по умолчанию подобраны для быстрого старта.',
+    tip: 'Beginners can leave these at defaults — factory values are calibrated for optimal results.',
   },
   {
     id: 'lora',
-    title: 'LoRA-модели — стиль и скорость',
-    short: 'Свои LoRA: вкл/выкл, сила от −10 до +10, триггерные слова.',
+    title: 'LoRA Models — Style and Speed',
+    short: 'Custom LoRAs: toggle on/off, strength −10 to +10, trigger words.',
     mock: (
       <Stage>
         <Hl n={1}><MockLoraList /></Hl>
         <Hl n={2}>
           <div className="w-[200px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Зачем LoRA</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">LoRA — «надстройка» над основной моделью: добавляет стиль, персонажа или предмет.</p>
-            <p className="text-[10px] text-foreground/80">Сила от −10 до +10 · триггеры подставляются в промпт автоматически</p>
+            <p className="text-[10px] font-semibold text-foreground">Why LoRAs</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">LoRA is an adapter layer over the base model: injecting characters, art styles, or objects.</p>
+            <p className="text-[10px] text-foreground/80">Strength from −10 to +10 · trigger words inserted automatically</p>
           </div>
         </Hl>
         <Hl n={3}>
           <div className="w-[190px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Где живут</p>
-            <p className="text-[10px] text-muted-foreground">Настройки → Общие → LoRAs</p>
-            <p className="text-[10px] text-muted-foreground">Файл копируется в папку LoRA программы</p>
-            <p className="text-[10px] text-muted-foreground">Прогресс копирования виден в списке</p>
+            <p className="text-[10px] font-semibold text-foreground">Where they live</p>
+            <p className="text-[10px] text-muted-foreground">Settings → General → LoRAs</p>
+            <p className="text-[10px] text-muted-foreground">Files copied to app LoRA folder</p>
+            <p className="text-[10px] text-muted-foreground">Copy progress visible in list</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Список LoRA', text: 'В списке — все .safetensors-файлы из папки LoRA программы: и те, что скачали в Настройки → Модели, и те, что добавили кнопкой «Добавить». Встроенная турбо-лора (4-step) тоже в списке и включена по умолчанию — она ускоряет генерацию. Исключение: в режиме «Кадры» с добавленным аудио турбо-лора автоматически пропускается, а обычные LoRA работают как обычно. У каждой записи есть переключатель вкл/выкл и ползунок силы от −10 до +10. Пользовательские LoRA по умолчанию выключены. Свои LoRA дополнительно имеют поле триггерных слов — при включённой LoRA они автоматически добавляются к промпту.' },
-      { n: 2, title: 'Зачем LoRA', text: 'LoRA — небольшая «надстройка» поверх основной модели: может добавить стиль, персонажа или предмет. Сила регулируется ползунком: 0 — эффекта нет, чем дальше от нуля — тем сильнее; обычно хватает значений около 1. Турбо-лора — 4-шаговый ускоритель; если её выключить, генерация пойдёт без неё (медленнее). Включённые LoRA работают не только в обычной генерации, но и в Refine, Tile Upscale и Продлении (правка 483) — стиль сохранится на всех этапах.' },
-      { n: 3, title: 'Добавить свою LoRA', text: 'Кнопка «Добавить» (Настройки → Общие → LoRAs): выбираете файл — он копируется в папку LoRA программы, прогресс копирования виден в списке. Закрыть окно настроек можно в любой момент — копирование продолжится в фоне.' },
+      { n: 1, title: 'LoRA List', text: 'Lists all .safetensors models in the LoRA directory. Includes built-in turbo LoRA (4-step, enabled by default). Custom LoRAs include trigger words appended to prompts automatically.' },
+      { n: 2, title: 'LoRA Capabilities', text: 'Adjust strength with slider (typically ~1.0). Enabled LoRAs carry over across Refine, Tile Upscale, and Extend.' },
+      { n: 3, title: 'Adding Custom LoRAs', text: 'Click "Add" in Settings → General → LoRAs to copy files into the studio library.' },
     ],
-    tip: 'Если LoRA работает, но картинка «разваливается» — вероятно, несовместимость с базовой моделью: переключите основную модель на альтернативную (Настройки → Общие).',
+    tip: 'If an art style LoRA produces artifacts, check model compatibility or try an alternative base model.',
   },
-  /* ═══════════════ ЧАСТЬ 4. НАСТРОЙКИ ═══════════════ */
+  /* ═══════════════ PART 4. SETTINGS ═══════════════ */
   {
     id: 'settings-general',
-    title: 'Настройки → Общие и Внешний вид',
-    short: 'Модели, перенос, основная модель + тема и звук.',
+    title: 'Settings → General & Appearance',
+    short: 'Models, migration, base model + theme and completion sound.',
     mock: (
       <Stage>
         <Hl n={1}><MockSettingsGeneral /></Hl>
         <Hl n={2}><MockSettingsAppearance /></Hl>
         <Hl n={3}>
           <div className="w-[210px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1.5">
-            <p className="text-[10px] font-semibold text-foreground">Список вкладок настроек</p>
-            <p className="text-[10px] text-muted-foreground">Общие · Внешний вид · LLM · Голос</p>
-            <p className="text-[10px] text-muted-foreground">Оптимизация · Формат · Ссылки</p>
-            <p className="text-[10px] text-muted-foreground">О программе · Сброс</p>
+            <p className="text-[10px] font-semibold text-foreground">Settings Tab List</p>
+            <p className="text-[10px] text-muted-foreground">General · Appearance · LLM · Voice</p>
+            <p className="text-[10px] text-muted-foreground">Optimization · Format · Links</p>
+            <p className="text-[10px] text-muted-foreground">About · Reset</p>
           </div>
         </Hl>
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Модели и перенос', text: '«Перенос моделей из старой версии» — выбираете папку со старой сборкой, программа сама найдёт ВСЕ папки models (корневая + ComfyUI/models) и перенесёт содержимое (правка 283). Защита от потери данных: проверка файла чатов, ошибки unlinkSync (правка 279). «Основная модель» — базовая (FastH3 VSA DataFree 4-step INT8, правка 293). «Свои папки моделей» — добавление своих папок с моделями (правка 257). «Своя модель (GGUF)» — выбор папки с кнопкой «Выбрать папку» (правка 278). Скачивание моделей (и копирование LoRA) не прерывается закрытием окна настроек. Bonsai light (маленькая версия) — optional, баннер не требует.' },
-      { n: 2, title: 'Внешний вид', text: 'Отдельная вкладка: тема оформления — Серая (по умолчанию) или Чёрная, — и звуковой сигнал при завершении генерации (можно выключить).' },
-      { n: 3, title: 'Девять вкладок', text: 'Полный список: Общие, Внешний вид, LLM, Голос, Оптимизация, Формат, Ссылки, О программе, Сброс. Каждая — свой инструмент: от моделей до опасной зоны.' },
+      { n: 1, title: 'Models & Migration', text: '"Migrate models from older version" scans and moves assets automatically. Manages base diffusion models, custom model paths, and GGUF quantization.' },
+      { n: 2, title: 'Appearance', text: 'Choose color theme (Gray by default, or Dark) and toggle audio chime upon completion.' },
+      { n: 3, title: 'Nine Settings Tabs', text: 'Covers General, Appearance, LLM, Voice, Optimization, Format, Links, About, and Reset.' },
     ],
-    tip: 'Если LoRA работает, но картинка разваливается — вероятно, несовместимость с базовой моделью: переключите основную модель на альтернативную.',
+    tip: 'Switch base model under General if a specific LoRA requires alternative architecture.',
   },
   {
     id: 'settings-llm-voice',
-    title: 'Настройки → LLM и Голос',
-    short: 'Модель ассистента, контекст, KV-кэш + диктовка голосом.',
+    title: 'Settings → LLM & Voice',
+    short: 'Assistant model, context window, KV cache + voice dictation.',
     mock: (
       <Stage>
         <Hl n={1}><MockSettingsLlm /></Hl>
@@ -1249,15 +1248,15 @@ export const LEARN_STEPS: LearnStep[] = [
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Ассистент и память', text: 'Модель ассистента: по умолчанию Qwen3.5 9B (~5.7 ГБ, vision). Альтернативы: Gemma 4 12B (Q3/Q4/Q5) или Bonsai 2 27B (тернарная, ~7.2 ГБ, vision) — выбирайте под свою видеокарту. Устройство: Авто / GPU / CPU. Контекст: 8K–100K токенов, по умолчанию 25K. «Видение видео» по умолчанию ВКЛЮЧЕНО: видео-референсы идут сжатым digest-описанием с кэшем; выключите, если нужно экономить память и контекст. Квантизация KV-кэша (Выкл / Q8 / Q5 / Q4) — экономит память длинных диалогов, по умолчанию Q4. Кнопка «Перезапустить LLM» (правка 482) применяет смену модели без перезапуска всей программы.' },
-      { n: 2, title: 'Голосовой ввод', text: 'Whisper-распознавание работает на CPU и не трогает видеопамять. Вкл/выкл, модель распознавания (small/medium — лучше для русского), язык. Живой тест: запись → распознанный текст. Кнопка микрофона появляется в поле промпта, полноэкранном редакторе и чате Ассистента. Горячая клавиша: R (англ.) / К (рус.) — одна физическая клавиша в обеих раскладках; диктовку можно запустить и остановить клавишей, не трогая мышку. Не срабатывает во время набора текста в полях (чтобы не ломать ввод R/К) и с зажатыми Ctrl/Alt/Meta.' },
+      { n: 1, title: 'Assistant & Memory', text: 'Select chat model: default Qwen3.5 9B (~5.7 GB, vision) or alternatives Gemma 4 12B / Bonsai 2 27B. Device: Auto / GPU / CPU. Context: 8K–100K tokens. Video Vision on by default. KV cache quantization (Q4 by default) conserves memory during long sessions.' },
+      { n: 2, title: 'Voice Input', text: 'Whisper speech recognition runs on CPU without consuming VRAM. Microphone icon appears in prompt bar, full editor, and assistant chat. Global hotkey: R/K.' },
     ],
-    tip: 'Если на 8–12 ГБ VRAM генерация «лагает» — поставьте Qwen3.5 9B или Gemma Q3 и поднимите резерв VRAM (вкладка «Оптимизация»).',
+    tip: 'On 8–12 GB GPUs, select Qwen3.5 9B or Gemma Q3 and increase VRAM reserve under Optimization.',
   },
   {
     id: 'settings-opt-comfy',
-    title: 'Настройки → Оптимизация, Формат, Ссылки, Сброс',
-    short: 'VRAM, формат видео, ручные загрузки и опасная зона.',
+    title: 'Settings → Optimization, Format, Links, Reset',
+    short: 'VRAM, video encoding format, manual links, and danger zone.',
     mock: (
       <Stage>
         <Hl n={1}><MockSettingsOpt /></Hl>
@@ -1266,33 +1265,33 @@ export const LEARN_STEPS: LearnStep[] = [
       </Stage>
     ),
     callouts: [
-      { n: 1, title: 'Оптимизация памяти', text: 'Резерв VRAM (1–16 ГБ, по умолчанию 3) и Dynamic VRAM управляют видеопамятью ComfyUI — применяются после перезапуска ComfyUI. «Резерв VRAM» — основной рычаг: менеджер моделей ComfyUI вычитает его из доступной памяти и выгружает/офлоадит веса раньше, поэтому до 100% VRAM дело не доходит. «Запас свободной VRAM (headroom)» (0–8 ГБ, по умолчанию 2 ГБ) — дополнительная страховка на стороне нативного слоя DynamicVRAM (comfy-aimdo): он следит за реально свободной VRAM по NVML, включая чужие приложения, и не даёт забрать её под веса. Low VRAM Attention и Chunk FeedForward экономят память прямо во время генерации — действуют сразу на новые генерации, без перезапуска. Если генерация падает с нехваткой видеопамяти — поднимите «Резерв VRAM», включите оба переключателя и/или снизьте разрешение.' },
-      { n: 2, title: 'Формат и Ссылки', text: 'Отдельной вкладки «ComfyUI» больше нет (правка 486): статус и кнопка «Перепроверить» переехали в «Общие», а датчики VRAM/GPU/RAM всегда видны в сайдбаре. Вкладка «Формат» — как сохранять видео: кодек (H.264 / H.265, аппаратный NVENC) и качество. Вкладка «Ссылки»: прямые URL на каждую модель для ручной загрузки (копирование в один клик) + подсказка про зеркало hf-mirror.com, если Hugging Face недоступен. Есть ещё вкладка «О программе» (правка 484) — о проекте, авторе и ссылки на каналы.' },
-      { n: 3, title: 'Сброс (опасная зона)', text: 'Четыре кнопки: «Сброс настроек» — все параметры к значениям по умолчанию. «Очистить кэш» — папка input ComfyUI (референсы и временные файлы). «Удалить контент» — папка output со всеми видео + чаты ассистента + история промптов. «Заводской сброс (всё)» — программа возвращается в состояние «как после установки»: настройки, контент и данные. Каждое действие требует подтверждения.' },
+      { n: 1, title: 'Memory Optimization', text: 'VRAM Reserve (1–16 GB, default 3) and Dynamic VRAM manage backend memory headroom. Low VRAM Attention and Chunk FeedForward apply instantly to new runs.' },
+      { n: 2, title: 'Format & Links', text: 'Configure video codec (H.264 / H.265 via NVENC) and quality. Links tab provides direct URLs and mirrors.' },
+      { n: 3, title: 'Reset (Danger Zone)', text: 'Reset Settings (defaults), Clear Cache (ComfyUI input temp files), Delete Content (outputs and chats), or Factory Reset (All).' },
     ],
-    tip: 'После «Сбросить настройки» ассистенту стоит дать полный контекст — дефолтных 25K токенов достаточно для инструкций.',
+    tip: 'Factory 25K token context provides ample room for full prompt instructions.',
   },
-  /* ═══════════════ ФИНАЛ ═══════════════ */
+  /* ═══════════════ FINALE ═══════════════ */
   {
     id: 'checklist',
-    title: 'Чек-лист первой генерации',
-    short: 'Одиннадцать пунктов с нуля — и первое видео готово.',
+    title: 'First Generation Checklist',
+    short: 'Eleven steps from zero to completed video.',
     mock: (
       <div className="w-full max-w-[400px] space-y-3">
         <Hl n={1}>
           <div className="rounded-xl border border-cyan-500/20 bg-[var(--surface-2)]/60 p-4 space-y-2.5 w-full">
             {[
-              'Скачайте модели (окно приветствия → Настройки → скачать; загрузка — в фоне)',
-              'Выберите режим: Текст / Кадры / Референсы',
-              'Загрузите референсы (если режим «Референсы») — или сразу без них',
-              'Опишите сцену в промпте — текст, голосом (🎙) или через Ассистента (Bonsai 2 27B)',
-              'Привяжите референсы через @, реплики — в <d>…</d>',
-              'Поставьте 480p и короткую длительность',
-              'Нажмите «Сгенерировать видео» и следите за превью',
-              'Готово: смотрите в галерее, рецепт — под ⓘ',
-              'Улучшить: Refine / Tile Upscale / DLSS (RTX VSR или Neural Rendering)',
-              'Продлить: вкладка «Продление» или кнопка на карточке видео',
-              'Плавность: вкладка «FPS» — RIFE VFI / FILM VFI (×2–×4)',
+              'Download models (Welcome window → Settings → Download; runs in background)',
+              'Choose mode: Text / Frames / References',
+              'Load references (if in "References" mode) — or proceed without them',
+              'Describe scene in prompt — text, voice (🎙), or via Assistant (Bonsai 2 27B)',
+              'Link references using @, dialogue inside <d>…</d>',
+              'Set 480p and short duration',
+              'Click "Generate Video" and monitor preview',
+              'Done: view in gallery, recipe under ⓘ',
+              'Enhance: Refine / Tile Upscale / DLSS (RTX VSR or Neural Rendering)',
+              'Extend: "Extend" tab or button on video card',
+              'Smoothness: "FPS" tab — RIFE VFI / FILM VFI (×2–×4)',
             ].map((t, i) => (
               <div key={i} className="flex items-center gap-2.5">
                 <span className="w-5 h-5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
@@ -1303,14 +1302,14 @@ export const LEARN_STEPS: LearnStep[] = [
         </Hl>
         <Hl n={2}>
           <div className="flex items-center gap-2 justify-center rounded-lg border border-border bg-[var(--surface-2)]/60 px-4 py-2 text-[10px] text-muted-foreground">
-            ▶ Если что-то не так — перезапустите start.bat
+            ▶ If something goes wrong — restart start.bat
           </div>
         </Hl>
       </div>
     ),
     callouts: [
-      { n: 1, title: 'Поздравляем — тур пройден!', text: 'Сделайте первую генерацию по чек-листу, а в метаданных смотрите, какие настройки на что влияют. Загляните в подвкладку «Сценарии» (правка 485) — там три готовых сценария работы: от «сразу в большом разрешении» до «драфты → Refine → Tile Upscale». Результат улучшений удобно проверять сравнением: Ctrl+клик по двум карточкам → Enter. Вернуться к туру можно в любой момент через вкладку «Обучение».' },
-      { n: 2, title: 'Типовые проблемы', text: 'Красный индикатор ComfyUI или ошибка генерации → перезапустите start.bat. «ComfyUI недоступен» во время генерации — обычно проходит само, не прерывайте. «Не хватает памяти» / «CUDA out of memory» → увеличьте файл подкачки (шаг 2) и включите Low VRAM Attention + Chunk FeedForward в Настройки → Оптимизация. Не нравится результат — смените seed (поставьте -1) или попросите Ассистента переписать промпт.' },
+      { n: 1, title: 'Congratulations — Tour Completed!', text: 'Run your first generation using the checklist, and explore metadata to see how parameters shape output. Check the "Workflows" subtab for recipe guides. Compare before/after with Ctrl+click.' },
+      { n: 2, title: 'Troubleshooting Common Issues', text: 'Red indicator or generation failure → restart start.bat. Temporary backend latency resolves automatically — do not interrupt. Out of memory → increase pagefile (Step 2) and enable Low VRAM Attention in Settings.' },
     ],
   },
 ]

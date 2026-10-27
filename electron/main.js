@@ -1,23 +1,23 @@
 /**
- * Electron main process — десктоп-обёртка MiniMax H3 Studio 7 (правка 561).
+ * Electron main process — desktop wrapper for MiniMax H3 Studio 7 (fix 561).
  *
- * Приложение остаётся веб-приложением (Next.js production server на :3000),
- * но живёт в СОБСТВЕННОМ окне без браузерного хрома: своя иконка и имя в
- * таскбаре, закрывается как обычная программа.
+ * The application remains a web application (Next.js production server on :3000),
+ * but runs in its OWN window without browser chrome: its own icon and name in
+ * the taskbar, closes like a regular application.
  *
- * Оркестрация (аналог прежнего start.bat-флоу, см. правку 551):
- *   1. single-instance lock — вторая копия фокусирует существующее окно;
- *   2. убить висящие слушатели :3000 и :8188 (осиротевшие прошлые сессии);
- *   3. поднять web-сервер (server.js) дочерним процессом — на Node самого
- *      Electron (ELECTRON_RUN_AS_NODE=1), системный Node для рантайма не нужен;
- *   4. поднять ComfyUI (python_embeded) с флагами VRAM из config/config.ini;
- *   5. дождаться ответа :3000 и открыть окно на /splash — заставка сама
- *      ждёт готовности ComfyUI (/api/comfy/health) и входит в студию;
- *   6. закрытие окна = выход из приложения = taskkill /T /F деревьев
- *      server.js и ComfyUI (вместе с их дочерними LLM/upscale-процессами).
+ * Orchestration (equivalent to previous start.bat flow, see fix 551):
+ *   1. single-instance lock — second copy focuses existing window;
+ *   2. kill hanging listeners on :3000 and :8188 (orphaned past sessions);
+ *   3. spawn web server (server.js) as a child process — using Electron's
+ *      own Node (ELECTRON_RUN_AS_NODE=1), system Node is not required for runtime;
+ *   4. spawn ComfyUI (python_embeded) with VRAM flags from config/config.ini;
+ *   5. await response from :3000 and open window at /splash — splash screen itself
+ *      awaits ComfyUI readiness (/api/comfy/health) and enters studio;
+ *   6. window close = quit application = taskkill /T /F trees of
+ *      server.js and ComfyUI (along with their child LLM/upscale processes).
  *
- * Запуск: node_modules\.bin\electron electron\main.js (скрипт `npm run desktop`,
- * либо автоматически из start.bat — там же фолбэк на старый браузерный режим).
+ * Launch: node_modules\.bin\electron electron\main.js (`npm run desktop` script,
+ * or automatically from start.bat — with fallback there to old browser mode).
  */
 const { app, BrowserWindow, Menu, dialog, shell, ipcMain } = require('electron')
 const { spawn, spawnSync } = require('node:child_process')
@@ -54,40 +54,40 @@ function resolveComfyRoot() {
         }
       }
     }
-  } catch { /* использовать env/default */ }
+  } catch { /* use env/default */ }
   const raw = configured || (process.env.COMFY_ROOT || '').trim() || 'ComfyUI-Easy-Install'
   return path.resolve(APP_ROOT, raw)
 }
 
-/* ── (правка 567) Захват консоли ────────────────────────────────
- * Весь вывод server.js, ComfyUI и самого Electron копится в кольцевой
- * буфер (для панели «Консоль» в UI) И дублируется в реальную консоль
- * (свёрнутое окно start.bat) — ничего не теряется.
- * Кэп: 2 МБ текста, обрезаем по границе строки.
+/* ── (fix 567) Console capture ────────────────────────────────
+ * All output of server.js, ComfyUI, and Electron itself is collected in a ring
+ * buffer (for the "Console" panel in UI) AND duplicated to the real console
+ * (minimized start.bat window) — nothing is lost.
+ * Cap: 2 MB of text, trimmed along newline boundary.
  *
- * (правка 588) Протокол ОПЕРАЦИЙ вместо сырого текста: ComfyUI/tqdm
- * печатает прогресс генерации ОДНИМ \r (возврат каретки без \n) — настоящая
- * консоль при этом ПЕРЕЗАПИСЫВАЕТ строку на месте. Раньше каждый шаг
- * добавлялся новой строкой — стена «0%|…| 1/6», «0%|…| 2/6»… нечитаема.
- * Теперь вывод детей проходит через терминальный ассемблер (см.
- * makeConsoleWriter): \n → операция 'a' (дописать), одиночный \r → 'r'
- * (записать текст с НАЧАЛА последней строки, затирая старое — ровно как
- * в консоли Windows; tqdm сам дописывает пробелы, чтобы затирать хвост).
- * Буфер и UI применяют операции одинаково → «Сохранить лог» тоже чистый. */
+ * (fix 588) OPERATIONS protocol instead of raw text: ComfyUI/tqdm
+ * prints generation progress with a SINGLE \r (carriage return without \n) — the real
+ * console OVERWRITES the line in-place in this case. Previously each step
+ * was added as a new line — a wall of "0%|…| 1/6", "0%|…| 2/6"… was unreadable.
+ * Now child output goes through terminal line assembler (see
+ * makeConsoleWriter): \n → 'a' op (append), solitary \r → 'r'
+ * (write text from START of last line, overwriting old text — exactly like
+ * in Windows console; tqdm appends spaces itself to clear the tail).
+ * Buffer and UI apply operations identically → "Save log" is also clean. */
 const CONSOLE_MAX = 2_000_000
 let consoleBuf = ''
-/** Очередь операций для UI: ['a'|'r', text][]. */
+/** Operation queue for UI: ['a'|'r', text][]. */
 let consolePend = []
 let consoleTimer = null
 
 /**
- * (правка 716) Флаг штатного выхода. Объявлен ВВЕРХУ файла: раньше он
- * объявлялся ниже по модулю (let quitting = false), и обработчик
- * server.on('exit') ссылался на него в TDZ-зоне. Работало только потому,
- * что обработчик регистрировался после достижения объявления, — любой
- * рефакторинг (или exit во время инициализации модуля) давал
- * ReferenceError ВНУТРИ обработчика: без диалога и без app.quit() —
- * зависший процесс Electron без окна.
+ * (fix 716) Clean exit flag. Declared at TOP of file: previously it was
+ * declared lower in the module (let quitting = false), and the handler
+ * server.on('exit') referenced it in the TDZ zone. It only worked because
+ * the handler was registered after reaching the declaration — any
+ * refactoring (or exit during module initialization) produced
+ * ReferenceError INSIDE the handler: with no dialog and no app.quit() —
+ * hanging Electron process without a window.
  */
 let quitting = false
 
@@ -102,13 +102,13 @@ function consoleBroadcast() {
   }, 400)
 }
 
-/** Применить операцию к текстовому буферу (consoleBuf и UI применяют одно и то же). */
+/** Apply operation to text buffer (consoleBuf and UI apply the same thing). */
 function applyConsoleOp(buf, op, text) {
   if (op === 'r') {
     const nl = buf.lastIndexOf('\n')
     const oldLine = buf.slice(nl + 1)
-    // Хвост старой строки затираем пробелами (EL, clear-to-line-end): если
-    // новая строка короче, остатки прошлого состояния не «просвечивают».
+    // Pad old line tail with spaces (EL, clear-to-line-end): if
+    // the new line is shorter, leftovers from previous state won't show through.
     const pad = oldLine.length > text.length ? ' '.repeat(oldLine.length - text.length) : ''
     return buf.slice(0, nl + 1) + text + pad
   }
@@ -126,23 +126,23 @@ function pushConsoleOp(op, str) {
 }
 
 function appendConsole(str, tee = true) {
-  // tee=false — строка уже выведена в реальную консоль другим путём
-  // (патч console.log ниже пишет через orig.log сам) — не дублируем.
-  // (правка 573) ПОЛНОСТЬЮ отключаем запись в process.stdout — при скрытом
-  // запуске (start_hidden.vbs) stdout — это pipe, и запись в него вызывает
-  // EPIPE (broken pipe). Логи сохраняются только в буфер для UI.
+  // tee=false — string has already been printed to the real console through another path
+  // (console.log patch below writes via orig.log itself) — do not duplicate.
+  // (fix 573) COMPLETELY disable writing to process.stdout — when launched
+  // hidden (start_hidden.vbs), stdout is a pipe, and writing to it causes
+  // EPIPE (broken pipe). Logs are preserved only in buffer for UI.
   // if (tee && process.stdout.isTTY) {
   //   try { process.stdout.write(str) } catch { /* ignore */ }
   // }
   pushConsoleOp('a', str)
 }
 
-/* (правка 588) Терминальный ассемблер строк одного потока ребёнка:
- * копит неполный хвост между чанками, режет поток по \n и \r и эмитит
- * операции. Семантика — как курсор в консоли: одиночный \r означает, что
- * СЛЕДУЮЩИЙ сегмент пишется с начала строки (операция 'r' — перезапись
- * с затиранием хвоста). Одиночный \r в САМОМ конце чанка придерживается
- * (до следующего чанка неизвестно, \r\n это или перезапись строки). */
+/* (fix 588) Terminal line assembler for a single child stream:
+ * accumulates incomplete tail between chunks, slices stream by \n and \r, and emits
+ * operations. Semantics are like a cursor in console: solitary \r means that
+ * the NEXT segment is written from the start of the line ('r' operation — overwrite
+ * clearing the tail). A solitary \r at the VERY end of chunk is held back
+ * (until the next chunk it's unknown whether it is \r\n or line overwrite). */
 function makeConsoleWriter() {
   let carry = ''
   let atLineStart = false
@@ -161,19 +161,19 @@ function makeConsoleWriter() {
     while (i < carry.length) {
       const nl = carry.indexOf('\n', i)
       const cr = carry.indexOf('\r', i)
-      if (nl === -1 && cr === -1) break // неполная строка — ждём продолжения
+      if (nl === -1 && cr === -1) break // incomplete line — wait for continuation
       if (cr !== -1 && (nl === -1 || cr < nl)) {
-        if (cr + 1 >= carry.length) break // \r в конце чанка: ждём следующий
+        if (cr + 1 >= carry.length) break // \r at end of chunk: wait for next
         if (carry[cr + 1] === '\n') {
-          flush(carry.slice(i, cr), true) // \r\n — обычный конец строки
+          flush(carry.slice(i, cr), true) // \r\n — regular end of line
           i = cr + 2
         } else {
-          flush(carry.slice(i, cr), false) // одиночный \r: дальше — с начала строки
+          flush(carry.slice(i, cr), false) // solitary \r: continue from start of line
           atLineStart = true
           i = cr + 1
         }
       } else {
-        flush(carry.slice(i, nl), true) // \n без \r
+        flush(carry.slice(i, nl), true) // \n without \r
         i = nl + 1
       }
     }
@@ -181,26 +181,26 @@ function makeConsoleWriter() {
   }
 }
 
-/* Свои логи ([desktop] …) — тоже в буфер: «вообще вся информация».
- * orig.log выводит в реальную консоль, appendConsole — без tee (без дубля). */
+/* Own logs ([desktop] …) — also into buffer: "literally all information".
+ * orig.log prints to real console, appendConsole — without tee (no duplicate). */
 {
   const fmt = (a) => a.map((x) => (typeof x === 'string' ? x : util.inspect(x))).join(' ')
-  // (правка 571) Не вызываем оригинальный console.log/warn/error — он пишет
-  // в process.stdout, который при скрытом запуске (start_hidden.vbs) может
-  // быть «broken pipe» (EPIPE). appendConsole сам пишет в буфер и в UI.
+  // (fix 571) Do not call original console.log/warn/error — it writes
+  // to process.stdout, which on hidden launch (start_hidden.vbs) may
+  // be a broken pipe (EPIPE). appendConsole writes to buffer and UI directly.
   console.log = (...a) => { appendConsole(fmt(a) + '\n', false) }
   console.warn = (...a) => { appendConsole('[warn] ' + fmt(a) + '\n', false) }
   console.error = (...a) => { appendConsole('[error] ' + fmt(a) + '\n', false) }
 }
-appendConsole(`[desktop] MiniMax H3 Studio — захват консоли запущен (${new Date().toISOString()})\n`)
+appendConsole(`[desktop] MiniMax H3 Studio — console capture started (${new Date().toISOString()})\n`)
 
-/* ── Дочерние процессы (убиваются при выходе) ── */
+/* ── Child processes (killed on exit) ── */
 const children = new Set()
 
-/* (правка 587) ComfyUI/python на Windows часто пишет в консоль в OEM-кодировке
- * (cp866) — toString('utf8') даёт кракозябры в панели «Консоль». Если
- * UTF-декодировка содержит U+FFFD (битые последовательности), пробуем IBM866
- * (TextDecoder с полным ICU, Node 22+ / Electron 44). */
+/* (fix 587) ComfyUI/python on Windows often writes to console in OEM encoding
+ * (cp866) — toString('utf8') produces garbled characters in the "Console" panel. If
+ * UTF decoding contains U+FFFD (corrupted sequences), try IBM866
+ * (TextDecoder with full ICU, Node 22+ / Electron 44). */
 let ibm866Decoder = null
 function decodeChildOutput(d) {
   const s = d.toString('utf8')
@@ -214,20 +214,20 @@ function decodeChildOutput(d) {
 function spawnChild(cmd, args, opts = {}) {
   const c = spawn(cmd, args, {
     cwd: APP_ROOT,
-    // (правка 567) pipe + захват в буфер «Консоли» (appendConsole сам
-    // дублирует в реальную консоль) — inherit рендереру недоступен.
+    // (fix 567) pipe + capture to "Console" buffer (appendConsole duplicates
+    // to real console itself) — inherit is not accessible to renderer.
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
     ...opts,
   })
-  // (правка 587) Асинхронная ошибка spawn (ENOENT и т.п.) без обработчика
-  // 'error' роняла весь main-процесс вместо понятного сообщения.
+  // (fix 587) Async spawn error (ENOENT, etc.) without 'error' handler
+  // crashed the entire main process instead of giving an understandable message.
   c.on('error', (err) => {
-    appendConsole(`[desktop] не удалось запустить процесс (${cmd}): ${err.message}\n`)
+    appendConsole(`[desktop] failed to spawn process (${cmd}): ${err.message}\n`)
     children.delete(c)
   })
-  // (правка 588) Каждый поток — со СВОИМ ассемблером строк (неполный хвост
-  // одного потока не должен склеиваться с чужим чанком).
+  // (fix 588) Each stream has its OWN line assembler (incomplete tail
+  // of one stream must not concatenate with another stream's chunk).
   const writeOut = makeConsoleWriter()
   const writeErr = makeConsoleWriter()
   c.stdout.on('data', (d) => writeOut(decodeChildOutput(d)))
@@ -237,17 +237,17 @@ function spawnChild(cmd, args, opts = {}) {
   return c
 }
 
-/** Убить дерево процесса (сам процесс + все дочерние — LLM/upscale и т.п.).
- *  taskkill /T /F — как в llm-runner: надёжнее child.kill() на Windows. */
+/** Kill process tree (process itself + all child processes — LLM/upscale, etc.).
+ *  taskkill /T /F — like in llm-runner: more reliable than child.kill() on Windows. */
 function killTree(pid) {
   if (!pid) return
   try {
     spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
-  } catch { /* уже мёртв */ }
+  } catch { /* already dead */ }
 }
 
-/** Имя образа процесса по PID («node.exe» / «python.exe» / …), '' если не нашли.
- *  (правка 587) Проверка владельца перед taskkill порта. */
+/** Process image name by PID ("node.exe" / "python.exe" / …), '' if not found.
+ *  (fix 587) Check owner before taskkill port. */
 function processImageName(pid) {
   try {
     const out = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
@@ -258,14 +258,14 @@ function processImageName(pid) {
   } catch { return '' }
 }
 
-/** Убить слушателей TCP-порта (осиротевшие прошлые сессии).
- *  (правка 561) Порт из start.bat: ДВА литеральных фильтра подряд —
- *  `:port ` в начале поля адреса И «LISTENING». Одиночный findstr-матч
- *  по подстроке ловил бы ESTABLISHED-соединения браузера/node и taskkill
- *  убивал бы чужие процессы. taskkill по PID пулинг-сокетов не трогает.
- *  (правка 587) Владелец-фильтр: убиваем только node/python/electron —
- *  постороннее приложение, случаем занявшее порт 3000/8188 (IIS, свой
- *  сервис, браузер), больше не убивается молча. */
+/** Kill TCP port listeners (orphaned past sessions).
+ *  (fix 561) Port from start.bat: TWO literal filters in a row —
+ *  `:port ` at start of address field AND "LISTENING". Single findstr match
+ *  by substring would catch ESTABLISHED browser/node connections and taskkill
+ *  would kill unrelated processes. taskkill by PID does not touch pooling sockets.
+ *  (fix 587) Owner filter: kill only node/python/electron —
+ *  third-party application that happened to occupy port 3000/8188 (IIS, custom
+ *  service, browser) is no longer killed silently. */
 const KILLABLE_IMAGES = new Set(['node.exe', 'python.exe', 'pythonw.exe', 'electron.exe'])
 function killPortListeners(port) {
   let out = ''
@@ -278,36 +278,36 @@ function killPortListeners(port) {
     const parts = line.trim().split(/\s+/)
     if (parts.length >= 5 && parts[3] === 'LISTENING') {
       const local = parts[1] || ''
-      // локальный адрес вида 0.0.0.0:3000 / [::]:3000 / 127.0.0.1:3000
+      // local address like 0.0.0.0:3000 / [::]:3000 / 127.0.0.1:3000
       if (local.endsWith(needle)) pids.add(parts[4])
     }
   }
   for (const pid of pids) {
-    if (Number(pid) === process.pid) continue // себя не убиваем
+    if (Number(pid) === process.pid) continue // do not kill self
     const image = processImageName(pid)
-    // (правка 716) Fail-SAFE, а не fail-open. Раньше проверка была
-    // `if (image && !KILLABLE_IMAGES.has(image))` — при ПУСТОМ image
-    // (процесс уже завершился: tasklist печатает локализованное
-    // «INFO: No tasks are running…», которое не подпадает под regex;
-    // либо tasklist не сработал) защита пропускалась и PID убивался
-    // БЕЗУСЛОВНО — ровно тот случай, который комментарий выше обещает
-    // не трогать (чужое приложение, случайно занявшее порт).
+    // (fix 716) Fail-SAFE, not fail-open. Previously the check was
+    // `if (image && !KILLABLE_IMAGES.has(image))` — with an EMPTY image
+    // (process already terminated: tasklist prints localized
+    // "INFO: No tasks are running…", which does not match regex;
+    // or tasklist failed), the check was skipped and PID was killed
+    // UNCONDITIONALLY — exactly the case the comment above promises
+    // not to touch (foreign app that accidentally occupied the port).
     if (!image) {
-      console.log(`[desktop] слушатель порта ${port} (PID ${pid}) — владелец не определён, не убиваем`)
+      console.log(`[desktop] port ${port} listener (PID ${pid}) — owner unknown, skipping kill`)
       continue
     }
     if (!KILLABLE_IMAGES.has(image)) {
-      console.log(`[desktop] слушатель порта ${port} (PID ${pid}, ${image}) — не наш процесс, не трогаем`)
+      console.log(`[desktop] port ${port} listener (PID ${pid}, ${image}) — not our process, skipping`)
       continue
     }
     try {
       spawnSync('taskkill', ['/PID', pid, '/F'], { windowsHide: true })
-      console.log(`[desktop] убит слушатель порта ${port}: PID ${pid} (${image})`)
+      console.log(`[desktop] killed port ${port} listener: PID ${pid} (${image})`)
     } catch { /* ignore */ }
   }
 }
 
-/* ── config.ini → флаги ComfyUI (порт правки 551 из start.bat) ── */
+/* ── config.ini → ComfyUI flags (port of fix 551 from start.bat) ── */
 function parseIniVram() {
   const v = { reserveGb: '3', dynamicVram: '1', asyncOffload: '0', vramHeadroom: '0' }
   if (!existsSync(CONFIG_INI)) return v
@@ -323,7 +323,7 @@ function parseIniVram() {
     }
     return undefined
   }
-  // первый матч выигрывает (дубли ключей от старых конфигов), /b-семантика bat
+  // first match wins (duplicate keys from old configs), /b semantics of bat
   const num = (raw, dflt, re) => (raw !== undefined && re.test(raw) ? raw : dflt)
   v.reserveGb = num(grab('reserve_gb'), '3', /^[0-9][0-9.]*$/)
   v.dynamicVram = num(grab('dynamic_vram'), '1', /^[01]$/)
@@ -334,7 +334,7 @@ function parseIniVram() {
 
 function startComfy() {
   if (!existsSync(COMFY_PY)) {
-    console.log('[desktop] ComfyUI не найден — режим frontend-only (генерация недоступна)')
+    console.log('[desktop] ComfyUI not found — frontend-only mode (generation unavailable)')
     return null
   }
   const v = parseIniVram()
@@ -353,40 +353,40 @@ function startComfy() {
 }
 
 function startWebServer() {
-  // Node самого Electron: ELECTRON_RUN_AS_NODE превращает electron.exe в
-  // обычный node — системный Node для рантайма не нужен (нужен только для
-  // npm install/build, что делает start.bat до запуска окна).
+  // Electron's own Node: ELECTRON_RUN_AS_NODE turns electron.exe into
+  // regular node — system Node is not required for runtime (needed only for
+  // npm install/build, which start.bat runs before opening the window).
   return spawnChild(process.execPath, [path.join(APP_ROOT, 'server.js')], {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
-      // (правка 587) Родитель-страж: server.js проверяет этот PID каждые 5 с
-      // и сам завершается (со своими питон-детьми через exit-хуки раннеров),
-      // если Electron умер и его before-quit-очистка не выполнилась.
+      // (fix 587) Guardian parent: server.js checks this PID every 5s
+      // and terminates itself (along with python children via runner exit hooks)
+      // if Electron died and its before-quit cleanup didn't run.
       MINIMAX_PARENT_PID: String(process.pid),
     },
   })
 }
 
-/** Ждать ответа HTTP от web-сервера (splash отдаётся сразу после старта). */
+/** Wait for HTTP response from web server (splash is served immediately after start). */
 async function waitHttp(url, timeoutMs) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
       if (res.ok) return true
-    } catch { /* ещё не поднялся */ }
+    } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 500))
   }
   return false
 }
 
-/* ── Окно ── */
+/* ── Window ── */
 let win = null
 
-/* (правка 563) Кнопки окна из рендерера (preload → IPC): свои HTML-кнопки
- * в DesktopTitleBar вместо нативных. */
+/* (fix 563) Window buttons from renderer (preload → IPC): custom HTML buttons
+ * in DesktopTitleBar instead of native ones. */
 ipcMain.on('h3:window-minimize', () => win?.minimize())
 ipcMain.on('h3:window-maximize-toggle', () => {
   if (!win) return
@@ -395,20 +395,20 @@ ipcMain.on('h3:window-maximize-toggle', () => {
 })
 ipcMain.on('h3:window-close', () => win?.close())
 
-/* (правка 567) Панель «Консоль»: полный буфер + сохранение в файл
- * через нативный диалог выбора места. */
+/* (fix 567) "Console" panel: full buffer + saving to file
+ * via native save file dialog. */
 ipcMain.handle('h3:console-get', () => consoleBuf)
 ipcMain.handle('h3:console-save', async (_e, text) => {
-  if (typeof text !== 'string' || !text.length) return { ok: false, error: 'Пустой лог' }
+  if (typeof text !== 'string' || !text.length) return { ok: false, error: 'Empty log' }
   try {
     const r = await dialog.showSaveDialog(win, {
-      title: 'Сохранить лог консоли',
+      title: 'Save console log',
       defaultPath: `h3-studio-console-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`,
-      filters: [{ name: 'Текстовый файл', extensions: ['txt'] }],
+      filters: [{ name: 'Text file', extensions: ['txt'] }],
     })
     if (r.canceled || !r.filePath) return { ok: false, canceled: true }
     await fsPromises.writeFile(r.filePath, text, 'utf8')
-    console.log(`[desktop] лог консоли сохранён: ${r.filePath}`)
+    console.log(`[desktop] console log saved: ${r.filePath}`)
     return { ok: true, path: r.filePath }
   } catch (err) {
     return { ok: false, error: String(err && err.message ? err.message : err) }
@@ -421,15 +421,15 @@ function createWindow() {
     height: 900,
     minWidth: 1200,
     minHeight: 700,
-    backgroundColor: '#1c1c20', // фон до загрузки — без белой вспышки
+    backgroundColor: '#1c1c20', // background before loading — avoids white flash
     icon: ICON,
     title: 'MiniMax H3 Studio 7',
     autoHideMenuBar: true,
     show: false,
-    // (правка 562/563) Свой окно-хром: нативный заголовок спрятан. Кнопки
-    // свернуть/развернуть/закрыть рисует САМО приложение (DesktopTitleBar)
-    // через preload-IPC — без фоновой плашки нативного titleBarOverlay,
-    // на заставке только закрытие, в приложении все три.
+    // (fix 562/563) Custom window chrome: native title bar hidden. Minimize/
+    // maximize/close buttons are rendered by the application ITSELF (DesktopTitleBar)
+    // via preload-IPC — without native titleBarOverlay background plate,
+    // only close button on splash, all three in app.
     titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -438,17 +438,17 @@ function createWindow() {
       spellcheck: false,
     },
   })
-  // Настоящее десктоп-ощущение: без меню-бара (Alt показывать не нужно).
+  // Real desktop feel: no menu bar (no need to show Alt menu).
   Menu.setApplicationMenu(null)
 
-  // Заставка открывается в обычном размере (правка 565 — НЕ максимизируем
-  // при показе). Окно разворачивается на весь экран только при входе в САМО
-  // приложение (splash → /), т.е. когда ComfyUI готов и заставка ушла.
+  // Splash opens in normal size (fix 565 — do NOT maximize
+  // on show). Window maximizes to full screen only upon entering the application
+  // ITSELF (splash → /), i.e. when ComfyUI is ready and splash is dismissed.
   win.once('ready-to-show', () => win.show())
 
-  // (правка 565) Переход splash → '/': Next.js App Router ходит через
-  // History API → событие did-navigate-in-page; полный переход (перезагрузка
-  // уже в приложении) — did-navigate. Ловим оба, максимизируем один раз.
+  // (fix 565) Transition splash → '/': Next.js App Router navigates via
+  // History API → did-navigate-in-page event; full navigation (reload
+  // while in app) — did-navigate. Catch both, maximize once.
   let maximizedForApp = false
   const maximizeWhenApp = (_e, url) => {
     if (maximizedForApp || !win) return
@@ -464,42 +464,42 @@ function createWindow() {
   win.webContents.on('did-navigate', maximizeWhenApp)
   win.webContents.on('did-navigate-in-page', maximizeWhenApp)
 
-  // Внешние ссылки — в системный браузер; новых окон приложения не плодим.
+  // External links — open in system browser; do not spawn new app windows.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url) && !url.includes(`127.0.0.1:${PORT}`) && !url.includes(`localhost:${PORT}`)) {
-      // (правка 716) .catch обязателен: openExternal отклоняется, если ОС не
-      // знает обработчика (нет браузера). Без обработчика это unhandled
-      // rejection → падение main-процесса → осиротевший ComfyUI.
+      // (fix 716) .catch is required: openExternal rejects if OS does not
+      // have a registered handler (no browser). Without handler this is unhandled
+      // rejection → crash of main process → orphaned ComfyUI.
       void shell.openExternal(url).catch((err) => {
-        console.log(`[desktop] не удалось открыть внешнюю ссылку: ${err && err.message ? err.message : err}`)
+        console.log(`[desktop] failed to open external link: ${err && err.message ? err.message : err}`)
       })
     }
     return { action: 'deny' }
   })
 
-  // (правка 716) Запрет навигации на посторонние origin. setWindowOpenHandler
-  // покрывает только window.open()/target="_blank"; навигация основного фрейма
-  // (location.href, <a href>, отправка формы, XSS) шла без ограничений, и
-  // удалённая страница наследовала preload-мост (console.get() с локальными
-  // путями, console.save(), управление окном). Плюс Electron по умолчанию
-  // АВТООДОБРЯЕТ запросы на микрофон, а приложение его использует.
+  // (fix 716) Disallow navigation to foreign origins. setWindowOpenHandler
+  // covers only window.open()/target="_blank"; main frame navigation
+  // (location.href, <a href>, form submit, XSS) proceeded unrestricted, and
+  // the remote page inherited preload bridge (console.get() with local
+  // paths, console.save(), window management). Also Electron by default
+  // AUTO-APPROVES microphone requests, and the application uses it.
   win.webContents.on('will-navigate', (event, url) => {
     if (!isLocalAppUrl(url)) {
       event.preventDefault()
-      console.log(`[desktop] навигация на посторонний origin заблокирована: ${url}`)
+      console.log(`[desktop] navigation to foreign origin blocked: ${url}`)
     }
   })
   win.webContents.on('will-redirect', (event, url) => {
     if (!isLocalAppUrl(url)) {
       event.preventDefault()
-      console.log(`[desktop] редирект на посторонний origin заблокирован: ${url}`)
+      console.log(`[desktop] redirect to foreign origin blocked: ${url}`)
     }
   })
-  // Микрофон и буфер обмена — только для локального origin приложения.
-  // Chromium запрашивает clipboard-sanitized-write для navigator.clipboard.writeText()
-  // (кнопка «Скопировать всё» в консоли, копирование промптов/путей).
-  // Раньше разрешение выдавалось только для media, поэтому копирование в
-  // Electron стабильно падало с «запрос разрешения отклонён».
+  // Microphone and clipboard — only for local application origin.
+  // Chromium requests clipboard-sanitized-write for navigator.clipboard.writeText()
+  // ("Copy all" button in console, copying prompts/paths).
+  // Previously permission was only granted for media, so copying in
+  // Electron consistently crashed with "permission request denied".
   const CLIPBOARD_PERMISSIONS = new Set([
     'clipboard-read',
     'clipboard-write',
@@ -508,11 +508,11 @@ function createWindow() {
   win.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
     const local = isLocalAppUrl(win && win.webContents.getURL())
     const allowed = local && (permission === 'media' || CLIPBOARD_PERMISSIONS.has(permission))
-    if (!allowed) console.log(`[desktop] запрос разрешения отклонён: ${permission}`)
+    if (!allowed) console.log(`[desktop] permission request denied: ${permission}`)
     callback(allowed)
   })
 
-  // F12 — DevTools (диагностика локального приложения)
+  // F12 — DevTools (diagnostics of local application)
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') {
       win.webContents.toggleDevTools()
@@ -521,24 +521,24 @@ function createWindow() {
   })
 
   win.on('closed', () => { win = null })
-  // (правка 716) .catch обязателен: loadURL отклоняется при ERR_CONNECTION_REFUSED
-  // (сервер не поднялся) или ERR_ABORTED. Без обработчика — unhandled
-  // rejection → падение main-процесса → осиротевшие ComfyUI/python-процессы
-  // (before-quit не выполнится, killTree() не вызовется).
+  // (fix 716) .catch is required: loadURL rejects on ERR_CONNECTION_REFUSED
+  // (server didn't start) or ERR_ABORTED. Without handler — unhandled
+  // rejection → crash of main process → orphaned ComfyUI/python processes
+  // (before-quit won't run, killTree() won't be called).
   void win.loadURL(`http://127.0.0.1:${PORT}/splash`).catch((err) => {
-    console.error(`[desktop] не удалось загрузить окно: ${err && err.message ? err.message : err}`)
+    console.error(`[desktop] failed to load window: ${err && err.message ? err.message : err}`)
     try {
       dialog.showErrorBox(
-        'MiniMax H3 Studio — ошибка загрузки',
-        `Не удалось открыть интерфейс:\n${err && err.message ? err.message : String(err)}\n` +
-          'Приложение будет закрыто.',
+        'MiniMax H3 Studio — load error',
+        `Failed to open interface:\n${err && err.message ? err.message : String(err)}\n` +
+          'Application will close.',
       )
     } catch { /* ignore */ }
     app.quit()
   })
 }
 
-/** (правка 716) URL принадлежит локальному приложению? */
+/** (fix 716) Does URL belong to local application? */
 function isLocalAppUrl(url) {
   if (!url) return false
   try {
@@ -551,27 +551,27 @@ function isLocalAppUrl(url) {
   }
 }
 
-/* ── Жизненный цикл ── */
+/* ── Lifecycle ── */
 
-// (правка 716) before-quit регистрируется ДО проверки single-instance lock.
-// Раньше app.quit() в ветке «вторая копия» вызывался до регистрации
-// обработчика, и скрытая консоль cmd.exe, созданная start_hidden.vbs для
-// ЭТОГО запуска, оставалась висеть навсегда (невидимый осиротевший процесс).
+// (fix 716) before-quit is registered BEFORE checking single-instance lock.
+// Previously app.quit() in the "second instance" branch was called before registering
+// the handler, and hidden cmd.exe console created by start_hidden.vbs for
+// THIS run remained hanging forever (invisible orphaned process).
 app.on('before-quit', () => {
   quitting = true
   for (const c of children) killTree(c.pid)
   children.clear()
-  // (правка 570/587) Убить родительский cmd-процесс (скрытая консоль от
-  // start_hidden.vbs / start.bat). process.ppid — НЕ cmd: в штатной цепочке
-  // запуска (start.bat → node electron\cli.js → electron.exe) родителем
-  // Electron является node.exe (cli.js), а cmd.exe — его родитель. Старая
-  // проверка «ppid — это cmd.exe» всегда проваливалась, и скрытая консоль
-  // оставалась висеть. Поднимаемся по дереву предков (до 6 уровней) и убиваем
-  // ближайший cmd.exe деревом (/T /F).
+  // (fix 570/587) Kill parent cmd process (hidden console from
+  // start_hidden.vbs / start.bat). process.ppid is NOT cmd: in standard launch
+  // chain (start.bat → node electron\cli.js → electron.exe), parent of
+  // Electron is node.exe (cli.js), and cmd.exe is its parent. Old
+  // check "ppid is cmd.exe" always failed, and hidden console
+  // remained hanging. Walk up ancestor tree (up to 6 levels) and kill
+  // nearest cmd.exe with tree (/T /F).
   killAncestorCmd()
 })
 
-// Вторая копия — фокусирует существующее окно вместо нового процесса.
+// Second instance — focus existing window instead of new process.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -583,36 +583,36 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void (async () => {
-    // Ждём готовности app (ready); в packaged-режиме путь к иконке/ресурсам
-    // не меняется — запускаемся только из папки проекта.
+    // Wait for app readiness (ready); in packaged mode path to icon/resources
+    // does not change — we only run from project folder.
     await app.whenReady()
 
-    // (релиз) Идентичность приложения в Windows. Без неё иконка в таскбаре
-    // и группировка окон идут под именем «Electron» (оно берётся из
-    // productName = name в package.json) и после переустановки/обновления
-    // Windows может «размножить» ярлыки. Явный AppUserModelID привязывает
-    // окно к нашему приложению.
+    // (release) Application identity in Windows. Without it taskbar icon
+    // and window grouping appear under the name "Electron" (taken from
+    // productName = name in package.json) and after reinstall/update
+    // Windows might duplicate shortcuts. Explicit AppUserModelID binds
+    // window to our application.
     try {
       app.setAppUserModelId('com.minimax.h3studio')
     } catch {
-      /* старые Windows — не критично */
+      /* older Windows — non-critical */
     }
 
-    // (правка 586) Оставляем только безопасную очистку слушателей портов 3000/8188.
+    // (fix 586) Keep only safe cleanup of listeners on ports 3000/8188.
     killPortListeners(PORT)
     killPortListeners(COMFY_PORT)
 
     const server = startWebServer()
     startComfy()
 
-    // Крах сервера (не our quit) — честно сообщаем и выходим.
+    // Server crash (not our quit) — report honestly and exit.
     server.on('exit', (code) => {
       if (quitting) return
       dialog.showErrorBox(
-        'MiniMax H3 Studio — сервер остановлен',
-        `Веб-сервер завершился с кодом ${code}.\n` +
-          'Подробности — в консоли запуска (start.bat).\n' +
-          'Приложение будет закрыто.',
+        'MiniMax H3 Studio — server stopped',
+        `Web server exited with code ${code}.\n` +
+          'Details available in launch console (start.bat).\n' +
+          'Application will close.',
       )
       app.quit()
     })
@@ -620,34 +620,34 @@ if (!app.requestSingleInstanceLock()) {
     const up = await waitHttp(`http://127.0.0.1:${PORT}/splash`, 120_000)
     if (!up) {
       dialog.showErrorBox(
-        'MiniMax H3 Studio — сервер не поднялся',
-        `Веб-сервер не ответил за 120 с (порт ${PORT}).\n` +
-          'Возможно, идёт первая сборка — перезапустите start.bat.',
+        'MiniMax H3 Studio — server failed to start',
+        `Web server did not respond within 120s (port ${PORT}).\n` +
+          'First build might be in progress — please restart start.bat.',
       )
       app.quit()
       return
     }
     createWindow()
   })().catch((err) => {
-    // (правка 716) Раньше IIFE был «void» без обработчика: любое исключение
-    // (например, new BrowserWindow() не удался) давало unhandled rejection →
-    // падение main-процесса → app.on('before-quit') НЕ выполнялся →
-    // killTree() не вызывался → ComfyUI/python оставались жить (порт 8188,
-    // VRAM) до следующего запуска.
-    console.error(`[desktop] критическая ошибка запуска: ${err && err.stack ? err.stack : err}`)
+    // (fix 716) Previously IIFE was "void" without a handler: any exception
+    // (e.g. new BrowserWindow() failed) caused unhandled rejection →
+    // crash of main process → app.on('before-quit') was NOT executed →
+    // killTree() was not called → ComfyUI/python remained running (port 8188,
+    // VRAM) until next launch.
+    console.error(`[desktop] critical startup error: ${err && err.stack ? err.stack : err}`)
     try {
       dialog.showErrorBox(
-        'MiniMax H3 Studio — ошибка запуска',
-        `Не удалось запустить приложение:\n${err && err.message ? err.message : String(err)}`,
+        'MiniMax H3 Studio — startup error',
+        `Failed to launch application:\n${err && err.message ? err.message : String(err)}`,
       )
     } catch { /* ignore */ }
     app.quit()
   })
 }
 
-// (правка 716) Обработчики необработанных ошибок: без них Node завершает
-// процесс, а падение main-процесса оставляет ВСЕ дочерние процессы
-// (ComfyUI, LLM, STT, upscale-мост) сиротами — они держат порты и VRAM.
+// (fix 716) Unhandled error handlers: without them Node terminates
+// the process, and main process crash leaves ALL child processes
+// (ComfyUI, LLM, STT, upscale bridge) orphaned — they hold ports and VRAM.
 process.on('unhandledRejection', (reason) => {
   console.error(`[desktop] unhandledRejection: ${reason && reason.stack ? reason.stack : reason}`)
   try { app.quit() } catch { /* ignore */ }
@@ -657,11 +657,11 @@ process.on('uncaughtException', (err) => {
   try { app.quit() } catch { /* ignore */ }
 })
 
-// (правка 716) Обработчик before-quit зарегистрирован ВЫШЕ — до проверки
-// single-instance lock (иначе app.quit() в ветке «вторая копия» оставлял
-// скрытую консоль cmd.exe висеть).
+// (fix 716) before-quit handler is registered ABOVE — before checking
+// single-instance lock (otherwise app.quit() in "second instance" branch left
+// hidden cmd.exe console hanging).
 
-/** (правка 587) Найти среди предков текущего процесса cmd.exe и убить его. */
+/** (fix 587) Find cmd.exe among current process ancestors and kill it. */
 function killAncestorCmd() {
   let pid = process.ppid
   for (let hop = 0; pid && pid > 0 && hop < 6; hop++) {
@@ -679,22 +679,22 @@ function killAncestorCmd() {
         name = (lines[0] || '').toLowerCase()
         ppid = parseInt(lines[1], 10) || 0
       }
-    } catch { /* PowerShell недоступен — выходим из цикла */ }
+    } catch { /* PowerShell unavailable — exit loop */ }
     if (!name) {
-      console.log(`[desktop] предок PID ${pid} не найден (уже завершён) — остановка поиска cmd`)
+      console.log(`[desktop] ancestor PID ${pid} not found (already terminated) — stopping cmd search`)
       return
     }
     if (name === 'cmd.exe') {
       try {
         spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
-        console.log(`[desktop] родительский cmd-процесс (PID ${pid}) завершён`)
+        console.log(`[desktop] parent cmd process (PID ${pid}) terminated`)
       } catch {
-        console.log(`[desktop] родительский cmd-процесс (PID ${pid}) уже завершён`)
+        console.log(`[desktop] parent cmd process (PID ${pid}) already terminated`)
       }
       return
     }
     pid = ppid
   }
-  console.log('[desktop] cmd.exe среди ближайших предков не найден — родителя не трогаем')
+  console.log('[desktop] cmd.exe not found among nearest ancestors — leaving parent untouched')
 }
 app.on('window-all-closed', () => app.quit())

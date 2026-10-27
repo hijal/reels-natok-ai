@@ -1,83 +1,83 @@
-# Инструкции LLM-ассистента
+# LLM Assistant Instructions
 
-Эта папка содержит **справочные копии** инструкций (системных промптов) LLM-ассистента
-MiniMax H3 Studio.
+This folder contains **reference copies** of instructions (system prompts) for the LLM assistant
+in MiniMax H3 Studio.
 
-> Правка 717: инструкции переработаны и **сжаты** (generate 4212 → 2572 токенов,
-> extend 5128 → 2873, controlnet 3624 → 2720). Причина — студия рассчитана на
-> средние и слабые ПК, где LLM крутится на CPU: длина системного промпта = время
-> префилла (до первого токена ответа) + расход контекста и KV-кэша. Плюс в длинном
-> контексте модель 9B хуже держит правила.
+> Fix 717: instructions were refactored and **condensed** (generate 4212 -> 2572 tokens,
+> extend 5128 -> 2873, controlnet 3624 -> 2720). Reason: studio is designed for
+> mid and low-end PCs where LLM runs on CPU: system prompt length = prefill time
+> (time to first token) + context and KV cache consumption. Furthermore, 9B models follow
+> rules worse in excessively long contexts.
 
-## Файлы
+## Files
 
 ### `base-framing.md`
-Роль, язык, ФОРМАТ A, уровень детализации, правило code fence, правила диалога.
+Role, language, FORMAT A, level of detail, code fence rule, dialogue rules.
 
-**Используется в:** `src/lib/h3-prompt-spec.ts` (константы `ROLE`, `FORMAT_A`,
+**Used in:** `src/lib/h3-prompt-spec.ts` (constants `ROLE`, `FORMAT_A`,
 `DETAIL`, `DETAIL_ACTION`, `FENCE`, `DIALOG`)
 
 ### `prompt-guide.md`
-Официальный гайд MiniMax H3 по структуре Ref2VA-промптов: шестисекционная
-структура, метки референсов, relationship markers, пример.
+Official MiniMax H3 guide on Ref2VA prompt structure: six-section
+structure, reference tags, relationship markers, example.
 
-**Используется в:** `src/lib/h3-prompt-spec.ts` (импортируется как `promptGuide`).
-Подключается **только в режимах с ФОРМАТОМ B** (референсы, ControlNet) — в
-text-to-video и продлении он не нужен и стоил бы ~1k лишних токенов.
+**Used in:** `src/lib/h3-prompt-spec.ts` (imported as `promptGuide`).
+Included **only in FORMAT B modes** (references, ControlNet) — in
+text-to-video and extend modes it is not needed and would cost ~1k extra tokens.
 
-> ⚠️ **Держите копии синхронными.** Эта копия и `src/lib/prompt-guide.md`
-> должны быть **байт-в-байт одинаковыми**: программа читает именно файл в
-> `src/lib/`, а этот — справочная копия для чтения и правки руками. После
-> правки скопируйте файл в `src/lib/prompt-guide.md` (или наоборот).
-> Проверить: `fc /b prompts\prompt-guide.md src\lib\prompt-guide.md`.
+> ⚠️ **Keep copies synchronized.** This copy and `src/lib/prompt-guide.md`
+> must be **byte-for-byte identical**: the application reads the file in
+> `src/lib/`, while this one is a reference copy for human inspection and editing.
+> After editing, copy the file to `src/lib/prompt-guide.md` (or vice versa).
+> Verify: `diff -u prompts/prompt-guide.md src/lib/prompt-guide.md`.
 
 ### `generate-mode.md`
-Динамическая часть системного промпта чата «Генерация» (t2v/flf/ref):
-SESSION CONTEXT, список референсов, визуальный/аудио-якорь, блок честности.
+Dynamic part of system prompt for "Generate" chat (t2v/flf/ref):
+SESSION CONTEXT, reference list, visual/audio anchor, honesty block.
 
-**Используется в:** `src/lib/assistant-stream.ts` (функция `buildSystemMessage()`)
+**Used in:** `src/lib/assistant-stream.ts` (function `buildSystemMessage()`)
 
 ### `extend-mode.md`
-Динамическая часть системного промпта чата «Продление»: список клипов,
-референсы продления, мета исходника, правила продления.
+Dynamic part of system prompt for "Extend" chat: clip list,
+extension references, source metadata, extension rules.
 
-**Используется в:** `src/lib/assistant-stream.ts` (функция `buildExtendSystemMessage()`)
+**Used in:** `src/lib/assistant-stream.ts` (function `buildExtendSystemMessage()`)
 
 ### `controlnet-mode.md`
-Динамическая часть системного промпта чата «ControlNet»: контрольное видео,
-изображения-референсы, правила режима. Для `controlType=direct` — отдельная
-ветка «перенос анимации»: контрольное видео добавляется в refs как `<Video 1>`,
-его digest кэшируется по содержимому файла, а промпт описывает новый вид.
+Dynamic part of system prompt for "ControlNet" chat: control video,
+image references, mode rules. For `controlType=direct` — dedicated
+"animation transfer" branch: control video is added to refs as `<Video 1>`,
+its digest is cached by file content, and prompt describes new appearance.
 
-**Используется в:** `src/lib/assistant-stream.ts` (функция `buildControlNetSystemMessage()`)
+**Used in:** `src/lib/assistant-stream.ts` (function `buildControlNetSystemMessage()`)
 
-## Важно
+## Important
 
-⚠️ **Эти файлы НЕ читаются программой напрямую.** Они — справочная копия для
-чтения и правки руками.
+⚠️ **These files are NOT read by the application directly.** They are reference copies for
+reading and manual editing.
 
-Программа использует инструкции из:
-- `src/lib/h3-prompt-spec.ts` — статическая часть (роль, формат, детализация, fence, диалог)
-- `src/lib/prompt-guide.md` — официальный Ref2VA-гайд (только для ФОРМАТА B)
-- `src/lib/assistant-stream.ts` — динамическая часть (контекст сессии + правила режима)
+The application uses instructions from:
+- `src/lib/h3-prompt-spec.ts` — static part (role, format, detail, fence, dialogue)
+- `src/lib/prompt-guide.md` — official Ref2VA guide (only for FORMAT B)
+- `src/lib/assistant-stream.ts` — dynamic part (session context + mode rules)
 
-Актуальный **полный** текст системных промптов для всех трёх режимов
-собирается из этих файлов: статика — `src/lib/h3-prompt-spec.ts`,
-динамика — `src/lib/assistant-stream.ts`.
+The actual **complete** text of system prompts for all three modes
+is assembled from these files: static — `src/lib/h3-prompt-spec.ts`,
+dynamic — `src/lib/assistant-stream.ts`.
 
-## Что изменилось в правке 717
+## Changes in Fix 717
 
-1. **Дубли убраны.** «Метки запрещены», «аудио не слышно», «текущий список рефов —
-   единственный источник правды» повторялись 3-4 раза в разных блоках. Теперь
-   блок «ЧЕСТНОСТЬ И ГРАНИЦЫ ЧАТА» один.
-2. **Ref2VA-гайд подключается по формату вывода**, а не всегда. В продлении он
-   не только лишний, но и ВРЕДИЛ: гайд предлагает `<Subject N>`, а правила
-   продления его запрещают.
-3. **Убрано противоречие** «лучше 400 слов на кадр» vs «3-секундный клип = один
-   шот». Детализация теперь привязана к длительности клипа.
-4. **Убран противоречие режима.** Вкладка «Генерация» в режиме продления
-   («extend») раньше попадала в ветку «Референсы» и получала в одном промпте и
-   «ФОРМАТ B», и «ФОРМАТ A, референсы не используются». Теперь для этого режима
-   явное уведомление.
-5. **Правило fence сформулировано один раз** (было и в «ФОРМАТ ОТВЕТА», и в
-   хвосте «Chat behaviour»).
+1. **Duplicates eliminated.** "Tags forbidden", "audio cannot be heard", "current ref list is
+   sole source of truth" were repeated 3-4 times across different blocks. Now
+   there is a single "HONESTY AND CHAT BOUNDARIES" block.
+2. **Ref2VA guide attached based on output format**, rather than always. In extend mode it
+   is not only redundant, but HARMFUL: guide suggests `<Subject N>`, whereas extension
+   rules forbid it.
+3. **Contradiction removed:** "prefer 400 words per shot" vs "3-second clip = single
+   shot". Detail level is now linked to clip duration.
+4. **Mode conflict removed.** The "Generate" tab in extend mode
+   ("extend") previously landed in "References" branch, receiving both
+   "FORMAT B" and "FORMAT A, references not used" in one prompt. Now explicit
+   notification is provided for this mode.
+5. **Fence rule formulated once** (was present in both "RESPONSE FORMAT" and
+   tail of "Chat behaviour").

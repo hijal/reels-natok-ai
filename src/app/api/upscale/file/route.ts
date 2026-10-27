@@ -4,10 +4,10 @@ import { serveLocalFile, isPathInsideRoots } from '@/lib/local-file'
 import { upscaleAllowedRoots } from '@/lib/upscale-paths'
 
 /**
- * (правка 74) GET /api/upscale/file?path=<absolute path>
- * Стриминг результата (Range-поддержка, video seek). Пути ограничены
- * разрешёнными корнями: общая папка output ComfyUI (результаты с правки 74.2),
- * data/upscale-output (старые результаты), data/upscale-input, upscale/outputs.
+ * (fix 74) GET /api/upscale/file?path=<absolute path>
+ * Result streaming (Range support, video seek). Paths are restricted to
+ * allowed roots: shared ComfyUI output folder (results from fix 74.2),
+ * data/upscale-output (legacy results), data/upscale-input, upscale/outputs.
  */
 export const dynamic = 'force-dynamic'
 
@@ -17,9 +17,9 @@ export async function GET(req: NextRequest) {
     return new Response('Missing path', { status: 400 })
   }
   const resolved = path.resolve(raw)
-  // (правка 716) Проверка по сегментам (isPathInsideRoots) вместо
-  // префиксного startsWith('..'): легитимный файл «..foo.mp4» внутри
-  // разрешённой папки больше не отвергается с 403.
+  // (fix 716) Segment-based check (isPathInsideRoots) instead of
+  // prefix startsWith('..'): a legitimate file "..foo.mp4" inside
+  // an allowed folder is no longer rejected with 403.
   if (!isPathInsideRoots(resolved, upscaleAllowedRoots())) {
     return new Response('Forbidden path', { status: 403 })
   }

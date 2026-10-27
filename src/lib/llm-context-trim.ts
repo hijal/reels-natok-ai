@@ -1,31 +1,31 @@
 /**
- * Token estimation & context trimming for the assistant chat — (правка 169).
+ * Token estimation & context trimming for the assistant chat — (fix 169).
  *
- * Требования к длинным чатам:
- *   1) системный промпт присутствует ВСЕГДА (H3-спек, рефы, правила) —
- *      он не считается «историей» и не участвует в обрезке;
- *   2) режется ТОЛЬКО начало истории: модель всегда видит то, что
- *      обсуждали в конце (самый длинный влезающий хвост);
- *   3) последнее сообщение не трогаем никогда — к нему сервер прикрепил
- *      референсы и вложения текущего хода;
- *   4) если даже [system + последнее сообщение] не влезает — деградируем
- *      медиа (прореживаем кадры видео), а не шлём заведомый оверфлоу.
+ * Requirements for long chats:
+ *   1) system prompt is ALWAYS present (H3 spec, refs, rules) —
+ *      it is not considered "history" and does not participate in trimming;
+ *   2) trimmed from the START of history ONLY: model always sees what was
+ *      discussed at the end (the longest fitting tail);
+ *   3) the last message is never touched — references and attachments of current
+ *      turn were attached to it by the server;
+ *   4) if even [system + last message] doesn't fit — degrade media
+ *      (subsample video frames), rather than sending certain overflow.
  *
- * Медиа живёт только на последнем user-сообщении (рефы и вложения чата
- * прикрепляются к текущему ходу при КАЖДОМ запросе заново), поэтому
- * обрезка истории с начала не может «молча потерять» приложенные
- * референсы — на следующем ходу они снова окажутся в хвосте.
+ * Media lives only on the last user message (refs and chat attachments
+ * are attached to the current turn on EVERY request anew), so
+ * trimming history from the start cannot "silently lose" attached
+ * references — on the next turn they will again be in the tail.
  */
 
 /**
- * Rough token estimate, char-class aware (правка 258).
+ * Rough token estimate, char-class aware (fix 258).
  *
- * Прежняя плоская оценка 0.4 токена/символ занижала РУССКИЙ текст: у
- * Qwen/Bonsai-токенизаторов кириллица стоит ~0.5–0.7 токена на символ.
- * В длинных русских чатах бюджет обрезки врал в 1.5 раза — реальные токены
- * переваливали окно, сервер молча резал историю (а с ней и смысл) — отсюда
- * «ассистент глючит после 4–5 промптов». Кириллица считается по 0.65
- * (консервативно), остальное (латиница/цифры/пунктуация) — по 0.3.
+ * Previous flat estimate of 0.4 tokens/character underestimated Cyrillic text:
+ * in Qwen/Bonsai tokenizers Cyrillic costs ~0.5–0.7 tokens per character.
+ * In long Cyrillic chats the trimming budget was off by 1.5x — actual tokens
+ * exceeded the window, server silently trimmed history (and with it context) — hence
+ * "assistant glitches after 4–5 prompts". Cyrillic is counted at 0.65
+ * (conservative), other characters (Latin/digits/punctuation) at 0.3.
  */
 export function estimateTokens(text: string): number {
   let cyr = 0
@@ -36,19 +36,19 @@ export function estimateTokens(text: string): number {
   return Math.ceil(cyr * 0.65 + (text.length - cyr) * 0.3)
 }
 
-/** Обёртка chat-шаблона на сообщение (role-теги, спец-токены). Ранее не
- *  учитывалась: ~16 токенов × 60 сообщений ≈ 1000 «невидимых» токенов. */
+/** Chat template wrapper per message (role tags, special tokens). Previously
+ *  unaccounted for: ~16 tokens × 60 messages ≈ 1000 "invisible" tokens. */
 export const TEMPLATE_TOKENS_PER_MSG = 16
 
-/** Vision-токены на один кадр 512px (standard backend — целое видео). */
+/** Vision tokens per one 512px frame (standard backend — whole video). */
 export const FRAME_TOKENS_512 = 768
 
-/** Запас на суммарную ошибку эвристических оценок по всему промпту.
- *  (правка 258) поднят 192 → 320: оценка дешевле переполнения окна. */
+/** Safety margin for aggregate heuristic estimation error across entire prompt.
+ *  (fix 258) raised 192 → 320: estimation is cheaper than window overflow. */
 export const TRIM_SAFETY_MARGIN = 320
 
-/** (правка 258) Жёсткий потолок длины истории независимо от бюджета:
- *  страховка от сюрпризов chat-шаблонов на ОЧЕНЬ длинных чатах. */
+/** (fix 258) Hard cap on history length regardless of budget:
+ *  insurance against chat template surprises on VERY long chats. */
 export const MAX_HISTORY_MESSAGES = 60
 
 export interface TrimMessage {
@@ -75,12 +75,12 @@ export function estimateMessageTokens(content: string | unknown[]): number {
           tokens += 256
         } else if (p.type === 'video') {
           if (Array.isArray(p.video_frames)) {
-            // (правка 162) Bonsai: кадры 256px, до 48 шт. — 384/кадр консервативно.
+            // (fix 162) Bonsai: 256px frames, up to 48 frames — 384/frame conservatively.
             tokens += (p.video_frames as unknown[]).length * 384
           } else if (typeof p.est_frames === 'number') {
-            // (правка 169) standard backend: длительность видео ограничена
-            // бюджетом контекста ДО прикрепления (videoBudgetSec) — оценку
-            // считаем по фактическому лимиту кадров, а не «плоскими» 15К.
+            // (fix 169) standard backend: video duration is bounded
+            // by context budget BEFORE attachment (videoBudgetSec) — estimate
+            // calculated based on actual frame limit rather than "flat" 15K.
             tokens += (p.est_frames as number) * FRAME_TOKENS_512
           } else {
             tokens += 15_000
@@ -95,22 +95,22 @@ export function estimateMessageTokens(content: string | unknown[]): number {
   return 0
 }
 
-/** Полная стоимость сообщения: контент + обёртка chat-шаблона. */
+/** Full message cost: content + chat template wrapper. */
 export function messageTokens(m: { content: string | unknown[] }): number {
   return estimateMessageTokens(m.content) + TEMPLATE_TOKENS_PER_MSG
 }
 
 /**
- * (правка 169) Суффиксная обрезка: [system] + самый длинный хвост истории,
- * влезающий в бюджет (ctx − запас ответа − safety). Свойства:
- *   • системный промпт (индекс 0) сохраняется всегда;
- *   • режем только с начала; последнее сообщение сохраняется всегда —
- *     даже если оно одно не влезает (медиа), дальше работает
- *     degradeMediaToBudget, а не тихая потеря текущего хода;
- *   • хвост выравнивается по user-сообщению (шаблон ждёт user после system,
- *     иначе часть шаблонов рендерит «ответ без вопроса»);
- *   • если что-то отрезано — в первое оставленное сообщение добавляется
- *     заметка-маркер: модель понимает, почему история начинается резко.
+ * (fix 169) Suffix trimming: [system] + longest history tail
+ * fitting within budget (ctx − output reserve − safety). Properties:
+ *   • system prompt (index 0) is always preserved;
+ *   • trimmed only from the start; last message is always preserved —
+ *     even if it alone doesn't fit (media), degradeMediaToBudget
+ *     handles it next, rather than silent loss of current turn;
+ *   • tail is aligned to user message (template expects user after system,
+ *     otherwise some templates render "answer without a question");
+ *   • if anything was trimmed — trim notice marker is added to the first kept message:
+ *     model understands why history starts abruptly.
  */
 export function trimToContext(
   messages: TrimMessage[],
@@ -118,11 +118,11 @@ export function trimToContext(
   outputReserve: number,
 ): TrimMessage[] {
   const budget = ctxSize - outputReserve - TRIM_SAFETY_MARGIN
-  // (правка 717) Раньше при budget <= 0 (или messages.length <= 2) функция
-  // возвращала messages КАК ЕСТЬ — и огромный последний запрос уходил в
-  // модель целиком, переполняя окно. Теперь в вырожденном случае режем
-  // ТЕКСТ последнего сообщения (медиа трогать нельзя — оно крепится заново
-  // каждый ход) и честно сообщаем об усечении.
+  // (fix 717) Previously when budget <= 0 (or messages.length <= 2) the function
+  // returned messages AS IS — and huge last request was sent to
+  // model in its entirety, overflowing the window. Now in degenerate case we trim
+  // the TEXT of the last message (media must not be touched — it is re-attached
+  // each turn) and honestly report truncation.
   if (budget <= 0) return truncateLastMessageText(messages)
   if (messages.length <= 2) {
     const sysTokens = messageTokens(messages[0])
@@ -131,21 +131,21 @@ export function trimToContext(
   }
 
   const sys = messages[0]
-  // (правка 258) жёсткий потолок длины истории (страховка от шаблонных
-  // сюрпризов на очень длинных чатах) — до бюджетной обрезки.
+  // (fix 258) hard cap on history length (safeguard against template
+  // surprises on very long chats) — before budget trimming.
   const rest = messages.length - 1 > MAX_HISTORY_MESSAGES
     ? messages.slice(messages.length - MAX_HISTORY_MESSAGES)
     : messages.slice(1)
   const wasCapped = messages.length - 1 > MAX_HISTORY_MESSAGES
   const sysTokens = messageTokens(sys)
 
-  // Суффиксные суммы: suf[i] — суммарные токены хвоста rest[i..].
+  // Suffix sums: suf[i] — aggregate tokens of tail rest[i..].
   const suf = new Array<number>(rest.length + 1).fill(0)
   for (let i = rest.length - 1; i >= 0; i--) suf[i] = suf[i + 1] + messageTokens(rest[i])
 
-  if (!wasCapped && sysTokens + suf[0] <= budget) return messages // всё влезает — не трогаем
+  if (!wasCapped && sysTokens + suf[0] <= budget) return messages // everything fits — don't touch
 
-  // Самый длинный влезающий хвост (последнее сообщение не режем никогда).
+  // Longest fitting tail (last message is never trimmed).
   let start = 0
   while (start < rest.length - 1 && sysTokens + suf[start] > budget) start++
   while (start < rest.length - 1 && rest[start].role === 'assistant') start++
@@ -156,16 +156,16 @@ export function trimToContext(
 }
 
 /**
- * (правка 717) Аварийное усечение: обрезаем ТЕКСТ последнего сообщения,
- * чтобы хоть что-то влезло в окно. Медиа-части не трогаем (картинки/видео
- * перекрепляются каждый ход заново), но в текст добавляем явную пометку,
- * чтобы модель знала, что ввод обрезан.
+ * (fix 717) Emergency truncation: trim TEXT of the last message
+ * so that at least something fits in the window. Media parts are left intact (images/videos
+ * are re-attached on each turn), but explicit notice is added to text
+ * so the model knows input was truncated.
  */
 function truncateLastMessageText(messages: TrimMessage[]): TrimMessage[] {
   if (messages.length === 0) return messages
   const out = messages.slice()
   const last = out[out.length - 1]
-  const notice = '[Ввод обрезан: не поместился в контекст модели.]'
+  const notice = '[Input truncated: did not fit into model context.]'
   if (typeof last.content === 'string') {
     const maxChars = 20_000
     const text = last.content.length > maxChars ? last.content.slice(0, maxChars) : last.content
@@ -189,10 +189,10 @@ function truncateLastMessageText(messages: TrimMessage[]): TrimMessage[] {
   return out
 }
 
-/** (правка 169) Заметка об обрезке в первое оставленное сообщение. */
+/** (fix 169) Trim notice in the first preserved message. */
 function withTrimNotice<T extends { content: string | unknown[] }>(msg: T): T {
   const notice =
-    '[Заметка: более ранние сообщения этого чата не поместились в контекст и были обрезаны. Опирайся на последние сообщения и текущие прикреплённые референсы.]'
+    '[Note: earlier messages in this chat did not fit into context and were trimmed. Rely on recent messages and currently attached references.]'
   if (typeof msg.content === 'string') {
     return { ...msg, content: `${notice}\n\n${msg.content}` }
   }
@@ -210,12 +210,12 @@ function withTrimNotice<T extends { content: string | unknown[] }>(msg: T): T {
 }
 
 /**
- * (правка 169) Последний рубеж: [system + последнее сообщение] само по себе
- * не влезает в окно. Равномерно прореживаем кадры видео (Bonsai
- * video_frames), пока промп не влезет; картинки и целые видео не трогаем
- * (их лимиты считаются ДО прикрепления — videoBudgetSec). Ниже 4 кадров не
- * режем — движение станет нечитаемым; дальше решает бэкенд (standard:
- * context shift с n_keep, system уцелеет; Bonsai: честная ошибка).
+ * (fix 169) Last resort: [system + last message] alone does not
+ * fit into window. Evenly subsample video frames (Bonsai
+ * video_frames) until prompt fits; images and whole videos are not touched
+ * (their limits are calculated BEFORE attachment — videoBudgetSec). We do not
+ * trim below 4 frames — motion would become illegible; beyond that backend decides (standard:
+ * context shift with n_keep, system survives; Bonsai: honest error).
  */
 export function degradeMediaToBudget(
   messages: TrimMessage[],
@@ -246,7 +246,7 @@ export function degradeMediaToBudget(
     })
     if (best < 0 || bestN <= 4) break
     const frames = parts[best].video_frames as string[]
-    // Равномерно: каждый второй кадр + гарантированно последний.
+    // Evenly: every other frame + guaranteed last frame.
     parts[best] = {
       ...parts[best],
       video_frames: frames.filter((_, i) => i % 2 === 0 || i === frames.length - 1),
@@ -257,11 +257,11 @@ export function degradeMediaToBudget(
 }
 
 /**
- * (правка 169) Сколько секунд одного видео можно отдать под vision
- * (standard backend, целое видео): кадр 512px ≈ FRAME_TOKENS_512, 8 fps.
- * 60-секундный реф на 8 fps — ~480 кадров ≈ сотни тысяч vision-токенов;
- * прежняя «плоская» оценка в 15К приводила к реальному переполнению.
- * Свободное место делится поровну между видео-референсами хода.
+ * (fix 169) How many seconds of one video can be allocated to vision
+ * (standard backend, whole video): 512px frame ≈ FRAME_TOKENS_512, 8 fps.
+ * A 60-second ref at 8 fps is ~480 frames ≈ hundreds of thousands of vision tokens;
+ * previous "flat" estimate of 15K led to real overflows.
+ * Available room is divided evenly among video references of the turn.
  */
 export function videoBudgetSec(
   messages: TrimMessage[],

@@ -11,28 +11,28 @@ import {
 } from '@/lib/multipart-stream'
 
 /**
- * (правка 108) Вложения чата ассистента — ИЗОЛИРОВАННОЕ хранилище.
+ * (fix 108) Assistant chat attachments — ISOLATED storage.
  *
- * Картинки/видео, прикреплённые в чате, существуют ТОЛЬКО в чате и нужны
- * ТОЛЬКО для генерации описания (мультимодальный LLM). Они НЕ должны:
- *   • лежать в ComfyUI/input/ (общая папка референсов генерации);
- *   • попадать в референсы генерации (<Picture N>/<Video N>);
- *   • появляться в галерее / upscale / «чистке input».
+ * Images/videos attached in chat exist ONLY in chat and are needed
+ * ONLY for description generation (multimodal LLM). They must NOT:
+ *   • reside in ComfyUI/input/ (shared generation references folder);
+ *   • enter generation references (<Picture N>/<Video N>);
+ *   • appear in gallery / upscale / "cleanup input".
  *
- * Поэтому они живут в отдельной папке проекта <project>/data/chat-attachments/
- * (переносима вместе с data/assistant-chats.json) и обслуживаются этим роутом.
+ * Therefore, they live in a dedicated project folder <project>/data/chat-attachments/
+ * (portable alongside data/assistant-chats.json) and are served by this route.
  *
- *   POST   /api/assistant/attachment          — загрузка (FormData: file)
- *   GET    /api/assistant/attachment?filename — подача (Range-совместимо)
- *   DELETE /api/assistant/attachment?filename — удаление (при удалении чата)
+ *   POST   /api/assistant/attachment          — upload (FormData: file)
+ *   GET    /api/assistant/attachment?filename — serve (Range-capable)
+ *   DELETE /api/assistant/attachment?filename — delete (when deleting chat)
  */
 export const dynamic = 'force-dynamic'
 
 const ATTACH_DIR = resolve(process.cwd(), 'data', 'chat-attachments')
 
-// Лимит вложения: раньше файл буферизовался целиком без ограничения, и
-// гигабайтное видео могло уронить весь Node-процесс (вместе с генерациями).
-// 1 ГБ достаточно для любых референсов LLM.
+// Attachment limit: previously file was buffered entirely without limit, and
+// gigabyte video could crash the entire Node process (along with generations).
+// 1 GB is sufficient for any LLM references.
 const MAX_ATTACH_BYTES = 1024 * 1024 * 1024
 
 /** Unsafe filename characters — replace with '_' (any OS). */
@@ -72,9 +72,9 @@ export async function POST(req: NextRequest) {
     if (!webBody) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
-    // (правка 587) Стриминговый разбор multipart (как /api/loras): req.formData()
-    // буферизовал ВСЁ тело в heap до проверок — гигабайтное вложение раздувало
-    // память до отдачи 413. Имя файла приходит в заголовках части ДО байтов.
+    // (fix 587) Streaming multipart parsing (like /api/loras): req.formData()
+    // buffered the ENTIRE body in heap before checks — a gigabyte attachment bloated
+    // memory before returning 413. Filename comes in part headers BEFORE bytes.
     part = await readFirstMultipartPart(webBody, req.headers.get('content-type'))
     if (!part.filename) {
       part.cancel()
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     if (!ext) {
       part.cancel()
       return NextResponse.json(
-        { error: 'Поддерживаются только изображения и видео (png, jpg, webp, gif, mp4, webm, mov…)' },
+        { error: 'Only images and videos are supported (png, jpg, webp, gif, mp4, webm, mov…)' },
         { status: 400 },
       )
     }
@@ -92,11 +92,11 @@ export async function POST(req: NextRequest) {
     const safeBase = basename(part.filename).replace(UNSAFE, '_') || 'attachment'
     const unique = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-${safeBase}`
     const dest = join(ATTACH_DIR, unique)
-    // (правка 350) Потоковая запись вместо Buffer.from(arrayBuffer): файл
-    // до 1 ГБ раньше буферизовался целиком в кучу Node (давил и без того
-    // тесную память рядом с ComfyUI). (правка 587) Лимит enforced ТОЛЬКО
-    // здесь, на лету (file.size из formData больше недоступен) — при
-    // превышении поток обрывается, частичный файл удаляется.
+    // (fix 350) Stream write instead of Buffer.from(arrayBuffer): files
+    // up to 1 GB previously were buffered entirely into Node heap (pressuring
+    // already tight memory next to ComfyUI). (fix 587) Limit enforced ONLY
+    // here, on the fly (file.size from formData is no longer available) — when
+    // exceeded, stream is aborted, partial file is deleted.
     let bytes = 0
     let tooLarge = false
     const guard = new Transform({
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       await fs.unlink(dest).catch(() => {})
       if (tooLarge) {
         return NextResponse.json(
-          { error: 'Файл слишком большой (лимит 1 ГБ). Уменьшите видео перед вложением.' },
+          { error: 'File is too large (1 GB limit). Reduce video size before attaching.' },
           { status: 413 },
         )
       }

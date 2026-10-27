@@ -6,58 +6,58 @@ import { llmStatus, stopLlm } from '@/lib/llm-runner'
 import { sttStatus, stopStt } from '@/lib/stt-runner'
 import { writeExtraModelPathsYaml, EXTRA_CATEGORIES } from '@/lib/extra-model-paths'
 
-/** (правка 262) Папка существует как каталог (для UI-индикатора и валидации). */
+/** (fix 262) Directory exists as folder (for UI indicator and validation). */
 function isExistingDir(p: string): boolean {
   try { return statSync(p).isDirectory() } catch { return false }
 }
 
 /**
- * (правка 308) Резолвинг «своя LLM»: значением может быть ФАЙЛ .gguf
- * (возвращаем как есть) или ПАПКА — тогда берём первый подходящий файл
- * внутри неё (дальше по коду всегда ожидается файл: llm_server.py открывает
- * путь через open('rb')). Для mmproj ищем файл с 'mmproj' в имени
- * (или расширением .mmproj); для модели — .gguf БЕЗ 'mmproj' в имени.
- * Возвращает { path } при успехе или { error } с текстом для 400.
+ * (fix 308) Resolve "custom LLM": value can be a .gguf FILE
+ * (returned as-is) or a FOLDER — in which case we take the first matching file
+ * inside it (subsequent code always expects a file: llm_server.py opens
+ * the path via open('rb')). For mmproj we look for a file with 'mmproj' in name
+ * (or .mmproj extension); for model — .gguf WITHOUT 'mmproj' in name.
+ * Returns { path } on success or { error } with text for 400.
  *
- * (релиз) Три правки:
- *  1. ПРОВЕРЯЕМ РАСШИРЕНИЕ файла. Раньше принимался ЛЮБОЙ файл — в том числе
- *     README.md или картинка: конфиг принимал значение, а ошибка всплывала
- *     уже при запуске LLM, невнятным текстом от llama.cpp.
- *  2. Ищем В ПОДПАПКАХ (2 уровня). Студия сама раскладывает LLM-модели в
- *     подпапки (llm/qwen3.5-9b/…), и папка, выбранная пользователем, почти
- *     всегда содержит модель не в корне, а во вложенной.
- *  3. Результат — АБСОЛЮТНЫЙ путь (resolve). Относительный путь из
- *     config.ini разрешался от CWD процесса и тихо ломался при переносе
- *     папки или запуске не из корня проекта.
+ * (release) Three fixes:
+ *  1. VERIFY FILE EXTENSION. Previously ANY file was accepted — including
+ *     README.md or image: config accepted value, while error surfaced
+ *     only when launching LLM, with cryptic message from llama.cpp.
+ *  2. Search IN SUBFOLDERS (2 levels). The studio organizes LLM models in
+ *     subfolders (llm/qwen3.5-9b/…), and the folder selected by user almost
+ *     always contains the model in a subfolder rather than root.
+ *  3. Result is an ABSOLUTE path (resolve). Relative path from
+ *     config.ini was resolved against process CWD and silently broke when moving
+ *     folder or starting outside project root.
  */
 function resolveGgufPath(input: string, kind: 'model' | 'mmproj'): { path: string } | { error: string } {
   const isModel = kind === 'model'
-  const label = isModel ? 'Файл модели' : 'mmproj-файл'
+  const label = isModel ? 'Model file' : 'mmproj file'
   let st
   try { st = statSync(input) } catch {
-    return { error: `${label} не найден: ${input}` }
+    return { error: `${label} not found: ${input}` }
   }
 
   if (st.isFile()) {
     const lower = input.toLowerCase()
     const isGguf = lower.endsWith('.gguf') || lower.endsWith('.mmproj')
     if (!isGguf) {
-      return { error: `${label} должен быть файлом .gguf (указано: ${basename(input)})` }
+      return { error: `${label} must be a .gguf file (specified: ${basename(input)})` }
     }
-    // Для модели: mmproj-файл — не модель. Для mmproj: расширение .gguf
-    // подходит (реальные проекторы называются mmproj-F16.gguf и т.п.).
+    // For model: mmproj file is not a model. For mmproj: .gguf extension
+    // is acceptable (actual projectors are named mmproj-F16.gguf etc.).
     if (isModel && lower.includes('mmproj')) {
-      return { error: 'Это mmproj-файл (проектор зрения), а не модель — укажите .gguf модели' }
+      return { error: 'This is an mmproj file (vision projector), not a model — specify model .gguf' }
     }
     return { path: resolve(input) }
   }
 
   if (!st.isDirectory()) {
-    return { error: `Путь не является файлом или папкой: ${input}` }
+    return { error: `Path is not a file or directory: ${input}` }
   }
 
-  // Собираем кандидатов: сначала корень папки, затем подпапки (2 уровня).
-  // Сортировка по полному пути — выбор детерминирован.
+  // Collect candidates: first folder root, then subfolders (2 levels).
+  // Sort by full path — deterministic selection.
   const candidates: string[] = []
   const collect = (dir: string, depth: number) => {
     if (depth > 2) return
@@ -85,8 +85,8 @@ function resolveGgufPath(input: string, kind: 'model' | 'mmproj'): { path: strin
   if (!match) {
     return {
       error: isModel
-        ? `В папке нет .gguf-модели: ${input}`
-        : `В папке нет mmproj-файла: ${input}`,
+        ? `No .gguf model found in folder: ${input}`
+        : `No mmproj file found in folder: ${input}`,
     }
   }
   return { path: resolve(match) }
@@ -110,24 +110,24 @@ export async function GET() {
     return NextResponse.json({
       reserve_gb: config.reserveGb,
       dynamic_vram: config.dynamicVram,
-      vram_headroom: config.vramHeadroom, // (правка 490)
+      vram_headroom: config.vramHeadroom, // (fix 490)
       llm_device: config.llmDevice,
       llm_context_size: config.llmContextSize,
       llm_max_output_tokens: config.llmMaxOutputTokens,
       comfy_dir: config.comfyRoot,
       diffusion_model: config.diffusionModel,
       llm_model: config.llmModel,
-      // (правка 136 / Bonsai) папка портативной сборки Bonsai 2 27B
+      // (fix 136 / Bonsai) portable build folder for Bonsai 2 27B
       llm_bonsai_dir: config.llmBonsaiDir,
-      // (правка 257) своя LLM (.gguf + mmproj) и внешние папки моделей
+      // (fix 257) custom LLM (.gguf + mmproj) and external model folders
       llm_custom_model: config.llmCustomModel,
       llm_custom_mmproj: config.llmCustomMmproj,
       model_extra_paths: config.modelExtraPaths.map((e) => ({ ...e, exists: isExistingDir(e.path) })),
-      // (правка 53) видение видео ассистентом — по умолчанию false
+      // (fix 53) assistant video vision — default false
       llm_video_vision: config.llmVideoVision,
-      // (правка 109) квантизация KV-кэша LLM — по умолчанию off (fp16)
+      // (fix 109) LLM KV-cache quantization — default off (fp16)
       llm_kv_cache: config.llmKvCache,
-      // (правка 135b) тонкая настройка сэмплинга LLM
+      // (fix 135b) fine-tuning LLM sampling
       llm_sampling_override: config.llmSamplingOverride,
       llm_temperature: config.llmTemperature,
       llm_top_p: config.llmTopP,
@@ -137,22 +137,22 @@ export async function GET() {
       llm_frequency_penalty: config.llmFrequencyPenalty,
       llm_repeat_penalty: config.llmRepeatPenalty,
       sound_on: config.soundOn,
-      // (правка 65) голосовой ввод — whisper STT (CPU)
+      // (fix 65) voice input — whisper STT (CPU)
       stt_enabled: config.sttEnabled,
       stt_dir: config.sttDir,
       stt_model: config.sttModel,
       stt_language: config.sttLanguage,
       stt_threads: config.sttThreads,
-      // (правка 386) формат сохранения видео ([video] в config.ini)
+      // (fix 386) video save format ([video] in config.ini)
       video_codec: config.videoCodec,
       video_crf: config.videoCrf,
       video_nvenc_bitrate: config.videoNvencBitrate,
     })
   } catch {
-    // (правка 119) дефолты: контекст 25K, KV-кэш Q4
-    // (правка 135b) сэмплинг — override выкл, значения модель-осознанные
-    // (правка 316) llm_bonsai_dir/llm_custom_*/model_extra_paths — дефолты,
-    // чтобы контракт GET при ошибке совпадал с обычным ответом.
+    // (fix 119) defaults: context 25K, KV cache Q4
+    // (fix 135b) sampling — override off, values model-aware
+    // (fix 316) llm_bonsai_dir/llm_custom_*/model_extra_paths — defaults
+    // so GET contract on error matches normal response.
     return NextResponse.json({ reserve_gb: 3, dynamic_vram: true, vram_headroom: 2, llm_device: 'auto', llm_context_size: 25600, llm_max_output_tokens: 4096, comfy_dir: '', diffusion_model: '', llm_model: '', llm_bonsai_dir: '', llm_custom_model: '', llm_custom_mmproj: '', model_extra_paths: [], llm_video_vision: true, llm_kv_cache: 'q4_0', llm_sampling_override: false, llm_temperature: 0.7, llm_top_p: 0.95, llm_top_k: 40, llm_min_p: 0.05, llm_presence_penalty: 0.0, llm_frequency_penalty: 0.0, llm_repeat_penalty: 1.0, sound_on: true, stt_enabled: true, stt_dir: '', stt_model: '', stt_language: 'ru', stt_threads: 0, video_codec: 'h264', video_crf: 12, video_nvenc_bitrate: 16 })
   }
 }
@@ -161,13 +161,13 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
 
-    // (правка 716) ВАЛИДАЦИЯ ДО ЗАПИСЕЙ. Раньше проверки выполнялись по ходу
-    // обработки, а записи в config.ini к тому моменту УЖЕ произошли. При
-    // ошибке (несуществующая папка ComfyUI/Bonsai, битый .gguf, отсутствующая
-    // папка моделей) клиент получал 400, но codec/CRF/VRAM/device/context уже
-    // были записаны — расхождение конфига без единой ошибки. Теперь все
-    // «могущие ответить 400» поля проверяются ЗАРАНЕЕ, и при любой ошибке
-    // НИ ОДНОГО значения не пишется.
+    // (fix 716) VALIDATION BEFORE WRITING. Previously checks were performed during
+    // processing, while writes to config.ini had ALREADY happened. On
+    // error (non-existent ComfyUI/Bonsai folder, corrupted .gguf, missing
+    // model folder) client received 400, but codec/CRF/VRAM/device/context were
+    // already written — config divergence without a single error. Now all
+    // "potentially returning 400" fields are checked IN ADVANCE, and on any error
+    // NOT A SINGLE value is written.
     const pre: {
       comfyDir?: string
       bonsaiDir?: string
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
       const v = body.comfy_dir.trim()
       if (v && !isExistingDir(v)) {
         return NextResponse.json(
-          { error: `Папка ComfyUI не найдена: ${v}` },
+          { error: `ComfyUI folder not found: ${v}` },
           { status: 400 },
         )
       }
@@ -192,22 +192,22 @@ export async function POST(request: Request) {
       const v = body.llm_bonsai_dir.trim()
       if (v && !isExistingDir(v)) {
         return NextResponse.json(
-          { error: `Папка Bonsai не найдена: ${v}` },
+          { error: `Bonsai folder not found: ${v}` },
           { status: 400 },
         )
       }
       pre.bonsaiDir = v
     }
 
-    // (релиз) Папка рантайма STT — тот же контракт, что у comfy_dir и
-    // llm_bonsai_dir: непустое значение = существующая папка. Раньше путь
-    // писался в конфиг как есть, и опечатка всплывала только при старте
-    // дикта («STT-сервер не запустился»), уже во время работы.
+    // (release) STT runtime folder — same contract as comfy_dir and
+    // llm_bonsai_dir: non-empty value = existing directory. Previously path
+    // was written to config as-is, and typos surfaced only when starting
+    // dictation ("STT server failed to start"), already during work.
     if (typeof body.stt_dir === 'string') {
       const v = body.stt_dir.trim()
       if (v && !isExistingDir(v)) {
         return NextResponse.json(
-          { error: `Папка голосового ввода не найдена: ${v}` },
+          { error: `Voice input folder not found: ${v}` },
           { status: 400 },
         )
       }
@@ -256,7 +256,7 @@ export async function POST(request: Request) {
         const missing = entries.filter((e) => !isExistingDir(e.path))
         if (missing.length > 0) {
           return NextResponse.json(
-            { error: `Папки не найдены: ${missing.map((e) => e.path).join(', ')}` },
+            { error: `Folders not found: ${missing.map((e) => e.path).join(', ')}` },
             { status: 400 },
           )
         }
@@ -264,9 +264,9 @@ export async function POST(request: Request) {
       pre.extraPaths = entries
     }
 
-    // (правка 386) Формат сохранения видео: применяется ко ВСЕМ новым
-    // задачам (генерация/рефайн/продление/тайлы/FPS/обрезка/склейки) без
-    // перезапуска — шаблоны читают конфиг при сборке воркфлоу.
+    // (fix 386) Video save format: applied to ALL new
+    // tasks (generation/refine/extend/tiles/FPS/trim/concat) without
+    // restart — templates read config when assembling workflow.
     if (body.video_codec !== undefined) {
       const codec = ['h264', 'h265', 'nvenc_h264', 'nvenc_h265'].includes(body.video_codec)
         ? body.video_codec
@@ -274,8 +274,8 @@ export async function POST(request: Request) {
       setConfigValue('video', 'codec', codec)
     }
     if (body.video_crf !== undefined) {
-      // (правка 556) crf=0 легитимен (0–30, меньше = лучше): parseInt()||12
-      // превращал сохранённый 0 в дефолт 12 — дефолт только для не-числа.
+      // (fix 556) crf=0 is valid (0–30, lower = better): parseInt()||12
+      // turned saved 0 into default 12 — default only for non-number.
       const parsedCrf = parseInt(body.video_crf, 10)
       const crf = Math.max(0, Math.min(30, Number.isFinite(parsedCrf) ? parsedCrf : 12))
       setConfigValue('video', 'crf', String(crf))
@@ -286,7 +286,7 @@ export async function POST(request: Request) {
     }
 
     if (body.reserve_gb !== undefined) {
-      // (правка 315) Диапазон унифицирован с UI-слайдером: 1–16 ГБ
+      // (fix 315) Range unified with UI slider: 1–16 GB
       const reserveGb = Math.max(1, Math.min(16, parseFloat(body.reserve_gb) || 3))
       setConfigValue('vram', 'reserve_gb', String(reserveGb))
     }
@@ -297,8 +297,8 @@ export async function POST(request: Request) {
       setConfigValue('vram', 'dynamic_vram', body.dynamic_vram ? '1' : '0')
     }
 
-    // (правка 490) Доп. запас свободной VRAM для DynamicVRAM
-    // (--vram-headroom в start_comfy.bat). 0 = выкл, диапазон 0–8 ГБ.
+    // (fix 490) Extra free VRAM headroom for DynamicVRAM
+    // (--vram-headroom in start_comfy.bat). 0 = off, range 0–8 GB.
     if (body.vram_headroom !== undefined) {
       const headroom = Math.max(0, Math.min(8, parseFloat(body.vram_headroom) || 0))
       setConfigValue('vram', 'vram_headroom', String(headroom))
@@ -306,9 +306,9 @@ export async function POST(request: Request) {
 
     if (body.llm_device !== undefined) {
       const dev = ['auto', 'gpu', 'cpu'].includes(body.llm_device) ? body.llm_device : 'auto'
-      // Перезапуск ТОЛЬКО при фактическом изменении: диалог всегда шлёт
-      // device/ctx/kv_cache, и «Сохранить» без правок убивало загруженную
-      // модель с холодной перезагрузкой на следующем сообщении.
+      // Restart ONLY on actual change: dialog always sends
+      // device/ctx/kv_cache, and "Save" without changes was killing the loaded
+      // model with a cold reload on the next message.
       const changed = getAppConfig().llmDevice !== dev
       setConfigValue('llm', 'device', dev)
       // Re-mode the running assistant: stop it so the next chat message
@@ -317,7 +317,7 @@ export async function POST(request: Request) {
     }
 
     if (body.llm_context_size !== undefined) {
-      // (правка 119) максимум контекста — 100K токенов, дефолт — 25K
+      // (fix 119) max context — 100K tokens, default — 25K
       const ctx = Math.max(4096, Math.min(102400, parseInt(body.llm_context_size, 10) || 25600))
       const ctxChanged = getAppConfig().llmContextSize !== ctx
       setConfigValue('llm', 'context_size', String(ctx))
@@ -331,12 +331,12 @@ export async function POST(request: Request) {
       // Applied per-request on the next chat message — no LLM restart needed.
     }
 
-    // (правка 310) comfy_dir: непустое значение должно быть СУЩЕСТВУЮЩЕЙ
-    // папкой (раньше писалось вслепую — и все файловые роуты молча ломались);
-    // пустая строка = сброс к дефолту (<проект>/ComfyUI-Easy-Install), раньше
-    // пустая строка отсекалась и сбросить путь было нельзя.
+    // (fix 310) comfy_dir: non-empty value must be an EXISTING
+    // folder (previously written blindly — and all file routes silently broke);
+    // empty string = reset to default (<project>/ComfyUI-Easy-Install), previously
+    // empty string was stripped and path could not be reset.
     if (typeof body.comfy_dir === 'string') {
-      // (правка 716) Значение уже проверено в пре-валидации (см. начало POST).
+      // (fix 716) Value already validated in pre-validation (see start of POST).
       setConfigValue('comfy', 'comfy_dir', pre.comfyDir ?? '')
     }
 
@@ -351,47 +351,47 @@ export async function POST(request: Request) {
       if (modelChanged && llmStatus().running) await stopLlm()
     }
 
-    // (правка 136 / Bonsai) папка внешней сборки Bonsai: смена пути требует
-    // перезапуска ассистента (файлы модели грузятся из этой папки).
-    // (правка 310) непустое значение — только существующая папка (400 иначе);
-    // пустая строка = сброс к дефолту (<проект>/Bonsai_2_27B).
+    // (fix 136 / Bonsai) external Bonsai build folder: path change requires
+    // assistant restart (model files are loaded from this directory).
+    // (fix 310) non-empty value — only existing folder (400 otherwise);
+    // empty string = reset to default (<project>/Bonsai_2_27B).
     if (typeof body.llm_bonsai_dir === 'string') {
-      // (правка 716) Проверено в пре-валидации.
+      // (fix 716) Checked in pre-validation.
       const v = pre.bonsaiDir ?? ''
       const dirChanged = getAppConfig().llmBonsaiDir !== v
       setConfigValue('llm', 'bonsai_dir', v)
       if (dirChanged && llmStatus().running) await stopLlm()
     }
 
-    // (правка 257) Своя LLM: пути к .gguf и mmproj. Пустая строка — валидное
-    // значение (возврат к встроенным моделям). Смена — с перезапуском LLM.
-    // (правка 262) Непустой путь — проверяем существование ДО записи в конфиг:
-    // молчание (yaml без записей / ассистент «модель не найдена») — худший
-    // исход, явная ошибка — сразу.
-    // (правка 308) Значением может быть файл ИЛИ папка (UI предлагает выбрать
-    // папку): папка резолвится в первый подходящий файл внутри неё, и в конфиг
-    // сохраняется уже конкретный ФАЙЛ — дальше по коду (llm_server.py:
-    // open(model_path,'rb')) всегда ожидается именно файл.
+    // (fix 257) Custom LLM: paths to .gguf and mmproj. Empty string is valid
+    // value (return to built-in models). Change — with LLM restart.
+    // (fix 262) Non-empty path — verify existence BEFORE writing to config:
+    // silence (yaml without entries / assistant "model not found") is the worst
+    // outcome, explicit error immediately.
+    // (fix 308) Value can be file OR folder (UI offers selecting
+    // folder): folder resolves to first matching file inside it, and config
+    // stores the specific FILE — subsequent code (llm_server.py:
+    // open(model_path,'rb')) always expects a file.
     if (typeof body.llm_custom_model === 'string') {
-      // (правка 716) Разрешённый путь уже вычислен и проверен в пре-валидации.
+      // (fix 716) Resolved path already computed and validated in pre-validation.
       const resolved = pre.customModel ?? ''
       const changed = getAppConfig().llmCustomModel !== resolved
       setConfigValue('llm', 'custom_model_path', resolved)
       if (changed && llmStatus().running) await stopLlm()
     }
     if (typeof body.llm_custom_mmproj === 'string') {
-      // (правка 716) Разрешённый путь уже вычислен и проверен в пре-валидации.
+      // (fix 716) Resolved path already computed and validated in pre-validation.
       const resolved = pre.customMmproj ?? ''
       const changed = getAppConfig().llmCustomMmproj !== resolved
       setConfigValue('llm', 'custom_mmproj_path', resolved)
       if (changed && llmStatus().running) await stopLlm()
     }
 
-    // (правка 257) Внешние папки моделей: сохраняем список + перезаписываем
-    // ComfyUI/extra_model_paths.yaml (форк читает его при старте сам).
+    // (fix 257) External model folders: save list + rewrite
+    // ComfyUI/extra_model_paths.yaml (fork reads it at startup).
     let extraPathsRestart = false
     if (Array.isArray(body.model_extra_paths)) {
-      // (правка 716) Список уже нормализован и проверен в пре-валидации.
+      // (fix 716) List already normalized and validated in pre-validation.
       const entries = pre.extraPaths ?? []
       const prev = getAppConfig().modelExtraPaths
       const same =
@@ -401,23 +401,23 @@ export async function POST(request: Request) {
       if (!same) extraPathsRestart = writeExtraModelPathsYaml(entries)
     }
 
-    // (правка 53) Видение видео ассистентом: применяется к каждому запросу
-    // чата — перезапуск LLM не нужен.
+    // (fix 53) Assistant video vision: applied to each chat
+    // request — no LLM restart needed.
     if (typeof body.llm_video_vision === 'boolean') {
       setConfigValue('llm', 'video_vision', body.llm_video_vision ? '1' : '0')
     }
 
-    // (правка 109) Квантизация KV-кэша LLM: параметр зашивается в Llama-инстанс
-    // (type_k/type_v) при создании контекста — запущенный сервер перезапускаем,
-    // новый загрузится с выбранным типом.
+    // (fix 109) LLM KV-cache quantization: parameter is baked into Llama instance
+    // (type_k/type_v) upon context creation — running server is restarted,
+    // new one loads with selected type.
     if (typeof body.llm_kv_cache === 'string' && ['off', 'q8_0', 'q5_1', 'q4_0'].includes(body.llm_kv_cache)) {
       const kvChanged = getAppConfig().llmKvCache !== body.llm_kv_cache
       setConfigValue('llm', 'kv_cache', body.llm_kv_cache)
       if (kvChanged && llmStatus().running) await stopLlm()
     }
 
-    // (правка 135b) Тонкая настройка сэмплинга LLM — применяется к каждому
-    // запросу (per-request), перезапуск LLM не нужен.
+    // (fix 135b) Fine-tuning LLM sampling — applied to each
+    // request (per-request), no LLM restart needed.
     if (typeof body.llm_sampling_override === 'boolean') {
       setConfigValue('llm', 'sampling_override', body.llm_sampling_override ? '1' : '0')
     }
@@ -447,19 +447,19 @@ export async function POST(request: Request) {
       setConfigValue('ui', 'sound_on', body.sound_on ? '1' : '0')
     }
 
-    // (правка 65) Голосовой ввод (whisper STT). Изменения применяются со
-    // следующего диктата: запущенный сервис останавливаем (перезапустится
-    // сам при первом же использовании с новыми параметрами).
+    // (fix 65) Voice input (whisper STT). Changes applied from
+    // next dictation: running service is stopped (will restart
+    // automatically upon first use with new parameters).
     let sttChanged = false
     if (typeof body.stt_enabled === 'boolean') {
       setConfigValue('stt', 'enabled', body.stt_enabled ? '1' : '0')
       sttChanged = true
     }
-    // Пустая строка — ВАЛИДНОЕ значение (сброс к дефолту <project>/stt):
-    // прежний guard `.trim()` молча съедал его, и кастомная папка переживала
-    // «Сброс настроек» и заводской сброс вопреки обещанию диалога.
+    // Empty string is a VALID value (reset to default <project>/stt):
+    // previous guard `.trim()` silently dropped it, and custom folder survived
+    // "Reset settings" and factory reset contrary to dialog promise.
     if (typeof body.stt_dir === 'string') {
-      // (релиз) Проверено в пре-валидации (существующая папка).
+      // (release) Checked in pre-validation (existing folder).
       setConfigValue('stt', 'dir', (pre.sttDir ?? '').trim())
       sttChanged = true
     }
@@ -484,7 +484,7 @@ export async function POST(request: Request) {
       ok: true,
       reserve_gb: config.reserveGb,
       dynamic_vram: config.dynamicVram,
-      vram_headroom: config.vramHeadroom, // (правка 490)
+      vram_headroom: config.vramHeadroom, // (fix 490)
       llm_device: config.llmDevice,
       llm_context_size: config.llmContextSize,
       llm_max_output_tokens: config.llmMaxOutputTokens,
@@ -494,7 +494,7 @@ export async function POST(request: Request) {
       llm_custom_model: config.llmCustomModel,
       llm_custom_mmproj: config.llmCustomMmproj,
       model_extra_paths: config.modelExtraPaths,
-      // (правка 257) yaml внешних папок изменился — нужен перезапуск start.bat
+      // (fix 257) external folders yaml changed — restart start.bat required
       restart_required: extraPathsRestart,
       llm_video_vision: config.llmVideoVision,
       llm_kv_cache: config.llmKvCache,

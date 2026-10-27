@@ -1,5 +1,5 @@
 /**
- * STT runner (правка 65) — lazy spawn/stop of the bundled speech-to-text
+ * STT runner (fix 65) — lazy spawn/stop of the bundled speech-to-text
  * service (whisper / transcribe.cpp).
  *
  * The service runs inside the ComfyUI embedded python (tools/stt_server.py,
@@ -35,18 +35,18 @@ let starting: Promise<SttStartResult> | null = null
 let lastError: string | null = null
 let startedAt = 0
 /**
- * (правка 345) pendingStop — пользователь нажал «Остановить», пока сервер
- * ещё стартует (starting-промис активен, child может ещё не существовать).
- * Раньше такой stop терялся: stopStt видел child=null и выходил, а спавн
- * продолжался. Теперь starting-ветка проверяет флаг после spawn и в healthUp.
+ * (fix 345) pendingStop — user clicked "Stop" while the server
+ * is still starting (starting-promise is active, child might not exist yet).
+ * Previously such a stop was lost: stopStt saw child=null and returned, while spawn
+ * continued. Now the starting branch checks the flag after spawn and in healthUp.
  */
 let pendingStop = false
 
-// (правка 348) Сироты: при выходе Node-процесса (закрытие студии) дочерний
-// STT-сервер оставался жить на порту 8091 до своего idle-таймаута (15 мин).
+// (fix 348) Orphans: on Node process exit (studio shutdown), the child
+// STT server remained alive on port 8091 until its idle timeout (15 min).
 const killChildSync = () => {
   if (child && child.pid && child.exitCode === null && child.signalCode === null) {
-    try { child.kill() } catch { /* уже мёртв */ }
+    try { child.kill() } catch { /* already dead */ }
   }
 }
 process.once('exit', killChildSync)
@@ -59,7 +59,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 
 export function sttStatus(): SttStatus {
   return {
-    // exitCode/signalCode — процесс мог выйти, а exit-событие ещё не обработано
+    // exitCode/signalCode — process may have exited, but exit event not handled yet
     running: !!child && !child.killed && child.exitCode === null && child.signalCode === null,
     starting: !!starting,
     error: lastError,
@@ -71,10 +71,10 @@ async function healthUp(timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   const proc = child
   while (Date.now() < deadline) {
-    // Процесс умер (упал на старте) — не поллим мёртвый порт до таймаута
+    // Process died (crashed on start) — don't poll dead port until timeout
     if (!proc || proc.killed || proc.exitCode !== null || proc.signalCode !== null) return false
     if (!child) return false
-    // (правка 345) Пользователь нажал «Остановить» во время загрузки модели.
+    // (fix 345) User clicked "Stop" during model loading.
     if (pendingStop) return false
     try {
       const r = await fetch(`http://127.0.0.1:${STT_PORT}/health`, {
@@ -92,9 +92,9 @@ async function healthUp(timeoutMs: number): Promise<boolean> {
 /** Start the STT service (idempotent). Resolves when /health answers. */
 export async function ensureStt(): Promise<SttStartResult> {
   if (child && !child.killed) {
-    // (правка 339) Процесс ВЫШЕЛ, а exit-событие ещё не обработано — это
-    // мёртвый child: чистим ссылку и проваливаемся в холодный спавн ниже,
-    // вместо 5 с поллинга заведомо мёртвого порта.
+    // (fix 339) Process EXITED, but exit event hasn't fired yet — this is
+    // a dead child: clear reference and fall through to cold spawn below,
+    // instead of 5s polling of a known dead port.
     if (child.exitCode !== null || child.signalCode !== null) {
       child = null
     } else {
@@ -103,23 +103,23 @@ export async function ensureStt(): Promise<SttStartResult> {
         lastError = null
         return { ok: true }
       }
-      // (правка 339) Полумёртвый STT: процесс ЖИВ, но /health молчит (деадлок
-      // в whisper/transcribe.dll). Это НАШ отслеживаемый child (PID известен)
-      // — убиваем и перезапускаем ниже, по образцу llm-runner (правка 259).
-      // Раньше возвращали ошибку, и КАЖДЫЙ следующий запрос платил те же 5 с
-      // без всякой попытки реанимации.
+      // (fix 339) Semi-dead STT: process is ALIVE, but /health is unresponsive (deadlock
+      // in whisper/transcribe.dll). This is OUR tracked child (PID known)
+      // — kill and restart below, following the llm-runner pattern (fix 259).
+      // Previously returned error, and EVERY subsequent request paid the same 5s
+      // without any reanimation attempt.
       if (child && child.pid) {
-        console.warn('[stt] (правка 339) процесс жив, но /health молчит 5 с — убиваю и перезапускаю')
+        console.warn('[stt] (fix 339) process alive, but /health silent for 5s — killing and restarting')
         await stopStt()
       } else {
-        lastError = 'STT-сервер не отвечает'
+        lastError = 'STT server is not responding'
         return { ok: false, error: lastError }
       }
     }
   }
   if (starting) return starting
-  // (правка 345) Новый (пере)запуск — сбрасываем флаг остановки, выставленный
-  // либо пользователем во время прошлого старта, либо внутренним stopStt выше.
+  // (fix 345) New (re)start — reset stop flag set
+  // either by user during previous start, or by internal stopStt above.
   pendingStop = false
 
   starting = (async () => {
@@ -127,11 +127,11 @@ export async function ensureStt(): Promise<SttStartResult> {
     try {
       const cfg = getAppConfig()
       if (!cfg.sttEnabled) {
-        return { ok: false, error: 'Голосовой ввод отключён в настройках' }
+        return { ok: false, error: 'Voice input is disabled in settings' }
       }
 
-      // (правка 72) STT-рантайм встроен в проект: стт-папка рядом с tools/ (stt/).
-      // Передаём явнo, чтобы не полагаться на дефолт сервера.
+      // (fix 72) STT runtime is bundled in project: stt folder next to tools/ (stt/).
+      // Pass explicitly so as not to rely on server defaults.
       const args = [
         path.join(process.cwd(), 'tools', 'stt_server.py'),
         '--stt-dir', cfg.sttDir,
@@ -157,28 +157,28 @@ export async function ensureStt(): Promise<SttStartResult> {
         }
       })
 
-      // (правка 345) Stop пришёл, пока шёл spawn (child был null) — убиваем
-      // только что созданный процесс, а не продолжаем загрузку модели.
+      // (fix 345) Stop arrived while spawn was running (child was null) — kill
+      // the freshly spawned process, rather than continuing model loading.
       if (pendingStop) {
         try { proc.kill() } catch { /* ignore */ }
         if (child === proc) child = null
-        return { ok: false, error: 'Остановлено пользователем' }
+        return { ok: false, error: 'Stopped by user' }
       }
 
       // Model load is the slow part (CPU, hundreds of MB) — allow 2 minutes.
       const up = await healthUp(120_000)
       if (!up) {
-        // (правка 345) Stop во время загрузки модели — не ошибка запуска.
+        // (fix 345) Stop during model loading — not a launch error.
         if (pendingStop) {
           try { proc.kill() } catch { /* ignore */ }
           if (child === proc) child = null
-          return { ok: false, error: 'Остановлено пользователем' }
+          return { ok: false, error: 'Stopped by user' }
         }
         // Process likely exited with an error (no model, bad DLL).
-        const err = 'STT-сервер не запустился: нет модели STT или не найдена transcribe.dll (см. консоль и настройки «Голосовой ввод»)'
+        const err = 'STT server failed to start: missing STT model or transcribe.dll not found (see console and "Voice Input" settings)'
         lastError = err
         if (child === proc) {
-          try { proc.kill() } catch { /* уже мёртв */ }
+          try { proc.kill() } catch { /* already dead */ }
           child = null
         }
         return { ok: false, error: err }
@@ -206,14 +206,14 @@ export async function ensureStt(): Promise<SttStartResult> {
  * kill() → taskkill /F /T escalation (same contract as stopLlm).
  */
 export async function stopStt(): Promise<void> {
-  // (правка 345) Флаг выставляем ДО проверки child: во время старта child
-  // может ещё не существовать, и starting-ветка увидит флаг после spawn.
+  // (fix 345) Set flag BEFORE checking child: during startup, child
+  // might not exist yet, and the starting branch will see the flag after spawn.
   pendingStop = true
   const proc = child
   if (!proc) {
     child = null
-    // (правка 355) Сбрасываем следы прошлого запуска: иначе статус после
-    // остановки показывал протухший startedAt и старую ошибку.
+    // (fix 355) Reset traces of previous run: otherwise status after
+    // stopping showed stale startedAt and old error.
     lastError = null
     startedAt = 0
     return
@@ -224,7 +224,7 @@ export async function stopStt(): Promise<void> {
       signal: AbortSignal.timeout(3000),
     })
   } catch {
-    /* сервер не отвечает — эскалация */
+    /* server not responding — escalate */
   }
   let exited = await waitForExit(proc, 8_000)
   if (!exited) {
@@ -235,14 +235,14 @@ export async function stopStt(): Promise<void> {
     try {
       await execFileAsync('taskkill', ['/F', '/T', '/PID', String(proc.pid)])
     } catch {
-      /* процесс мог уже выйти */
+      /* process may have already exited */
     }
     await waitForExit(proc, 5_000)
   }
   if (child === proc) {
     child = null
   }
-  // (правка 355) См. выше: не оставляем протухшие error/startedAt.
+  // (fix 355) See above: don't leave stale error/startedAt.
   lastError = null
   startedAt = 0
 }

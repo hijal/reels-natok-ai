@@ -6,37 +6,37 @@ import { promisify } from 'util'
 import path from 'path'
 import { writeMetaSidecar } from '@/lib/pending-meta'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { resolveFfmpeg } from '@/lib/thumb'
 import { probeVideoFile, type VideoProbe } from '@/lib/video-probe'
 import { ffmpegVideoArgs } from '@/lib/video-format'
-import { getVideoFormatSettings } from '@/lib/video-format-server' // (правка 386)
+import { getVideoFormatSettings } from '@/lib/video-format-server' // (fix 386)
 
 const execFileAsync = promisify(execFile)
 
 /**
- * POST /api/comfy/refine/stitch — финальная сшивка кусков режима
- * refine «Частями».
+ * POST /api/comfy/refine/stitch — final stitching of chunks for refine
+ * "By parts" mode.
  *
- * (правка 314) LEGACY-путь: актуальный воркфлоу «Частями» (правка 314 в
- * refine-template.ts) склеивает окна в латентном пространстве и отдаёт ОДИН
- * файл Minimax_Studio_refine_* — этот роут он НЕ вызывает (нет ни покусочных
- * refinepart_*, ни повторного h264-кодирования, мета пишется сервером через
- * recordPendingMetaRaw → /api/comfy/status). Роут сохранён для обратной
- * совместимости: клиент (refine-queue.ts) вызывает его, только если в outputs
- * джоба найдены refinepart_* (воркфлоу старого образца).
+ * (fix 314) LEGACY path: the current "By parts" workflow (fix 314 in
+ * refine-template.ts) glues windows in latent space and outputs ONE
+ * file Minimax_Studio_refine_* — it does NOT call this route (no per-chunk
+ * refinepart_*, no second h264 encoding, meta is written by server via
+ * recordPendingMetaRaw → /api/comfy/status). Route is kept for backward
+ * compatibility: client (refine-queue.ts) calls it only if refinepart_*
+ * are found in job outputs (old-style workflow).
  *
  * Body:
- *   chunkFiles — [{filename, subfolder}] куски в output (без аудио)
- *   audioSource — {filename, subfolder} исходник в output (его аудио
- *                 ложится на весь склеенный таймлайн без re-encode)
- *   overlapsSec — [число] перекрытие каждого стыка в секундах (для xfade)
- *   outSubfolder — подпапка выхода ('' = корень)
+ *   chunkFiles — [{filename, subfolder}] chunks in output (without audio)
+ *   audioSource — {filename, subfolder} source in output (its audio
+ *                 is laid onto entire stitched timeline without re-encode)
+ *   overlapsSec — [number] overlap of each seam in seconds (for xfade)
+ *   outSubfolder — output subfolder ('' = root)
  *
- * Математика xfade — как в /api/comfy/concat (правка 182): offset каждого
- * стыка считается от БЕГУЩЕЙ длительности промежуточного вывода. Куски
- * нарезаны по таймлайну исходника, поэтому склеенный видео-таймлайн
- * совпадает с исходным — аудио остаётся в синхроне без подрезок.
+ * xfade mathematics — same as in /api/comfy/concat (fix 182): offset of each
+ * seam is calculated from the RUNNING duration of intermediate output. Chunks
+ * are cut according to the source timeline, so stitched video timeline
+ * matches the original — audio stays synchronized without trimming.
  */
 export const dynamic = 'force-dynamic'
 
@@ -47,25 +47,25 @@ export async function POST(req: NextRequest) {
       audioSource?: { filename: string; subfolder?: string }
       overlapsSec?: number[]
       outSubfolder?: string
-      /** (правка 253) Латент-цепочка: куски без дублей — жёсткая склейка. */
+      /** (fix 253) Latent chain: chunks without duplicates — hard stitch. */
       hard?: boolean
-      /** (правка 260) Параметры метаданных итогового файла (с исходником). */
+      /** (fix 260) Metadata parameters of the final file (with source). */
       meta?: Record<string, unknown>
     }
     if (!body?.chunkFiles?.length || !body?.audioSource?.filename) {
-      return NextResponse.json({ error: 'chunkFiles и audioSource обязательны' }, { status: 400 })
+      return NextResponse.json({ error: 'chunkFiles and audioSource are required' }, { status: 400 })
     }
 
     const cfg = getAppConfig()
     const resolveOut = (f: { filename: string; subfolder?: string }) => {
       const safeName = path.basename(f.filename)
-      // (правка 495) subfolder — многоуровневый относительный путь ('a/b').
+      // (fix 495) subfolder — multi-level relative path ('a/b').
       const sub = f.subfolder ? sanitizeFolderPath(f.subfolder) : ''
       const p = path.join(cfg.outputDir, ...(sub ? sub.split('/') : []), safeName)
-      // (правка 716) Отсутствующий файл — 404, а не 500: тот же смысл, что
-      // в соседнем /api/comfy/trim.
+      // (fix 716) Missing file is 404, not 500: same logic as
+      // in sibling /api/comfy/trim.
       if (!existsSync(p)) {
-        const err = new Error(`Файл не найден: ${safeName}`) as Error & { status?: number }
+        const err = new Error(`File not found: ${safeName}`) as Error & { status?: number }
         err.status = 404
         throw err
       }
@@ -81,10 +81,10 @@ export async function POST(req: NextRequest) {
 
     const ffmpeg = await resolveFfmpeg()
     if (!ffmpeg) {
-      return NextResponse.json({ error: 'FFmpeg недоступен' }, { status: 500 })
+      return NextResponse.json({ error: 'FFmpeg unavailable' }, { status: 500 })
     }
 
-    // Пробы кусков: длительности для офсетов xfade, канва — из первого.
+    // Probe chunks: durations for xfade offsets, canvas from the first.
     const infos: VideoProbe[] = []
     for (const p of chunkPaths) {
       infos.push(await probeVideoFile(p))
@@ -92,14 +92,14 @@ export async function POST(req: NextRequest) {
     const W = infos[0].width % 2 === 0 ? infos[0].width : infos[0].width + 1
     const H = infos[0].height % 2 === 0 ? infos[0].height : infos[0].height + 1
 
-    // Видеоряд: приводим к канве и fps, затем цепочка xfade по стыкам.
-    // ─── (правка 272) Жёсткая склейка (схема D-версии — рабочая):
-    // латент-цепочка даёт куски без дублей (голова срезана),
-    // стыки непрерывны по построению — xfade не нужен.
-    // ─── (правка 313) Звук теперь у самих кусков (перегенерирован
-    // сэмплером, как видео, и замуксен VHS_VideoCombine): склеиваем
-    // аудио по кускам так же, как видео. Фолбэки: (1) звук из целого
-    // оригинала — поведение до правки 313; (2) видео без звука.
+    // Video stream: bring to canvas and fps, then chain of xfades across seams.
+    // ─── (fix 272) Hard stitch (D-version scheme — working):
+    // latent chain gives chunks without duplicates (head trimmed),
+    // seams are continuous by construction — xfade not needed.
+    // ─── (fix 313) Audio is now in chunks themselves (regenerated
+    // by sampler, like video, and muxed by VHS_VideoCombine): stitch
+    // audio across chunks just like video. Fallbacks: (1) audio from whole
+    // original — behavior prior to fix 313; (2) video without audio.
     if (body.hard) {
       const runFfmpeg = (args: string[]) =>
         execFileAsync(ffmpeg, ['-hide_banner', '-loglevel', 'error', ...args], {
@@ -107,12 +107,12 @@ export async function POST(req: NextRequest) {
           maxBuffer: 32 * 1024 * 1024,
         }).then(() => true).catch(() => false)
 
-      // (правка 386) кодек/качество — из [video] настроек студии
+      // (fix 386) codec/quality from studio [video] settings
       const videoEnc = ['-preset', 'fast', ...ffmpegVideoArgs(getVideoFormatSettings()), '-pix_fmt', 'yuv420p', '-movflags', '+faststart']
       const videoFilter = chunkPaths.map((_, i) => `[${i}:v]scale=${W}:${H},setsar=1,fps=24[v${i}]`).join(';')
       const concatV = chunkPaths.map((_, i) => `[v${i}]`).join('') + `concat=n=${chunkPaths.length}:v=1:a=0[vout]`
 
-      // 1) Основной: видео и аудио из самих кусков (правки 313).
+      // 1) Main: video and audio from chunks themselves (fix 313).
       const fullArgs = [
         ...chunkPaths.flatMap((q) => ['-i', q]),
         '-filter_complex',
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
         '-map', '[vout]', '-map', '[aout]',
         ...videoEnc, '-c:a', 'aac', '-b:a', '192k', '-shortest', '-y', outPath,
       ]
-      // 2) Фолбэк (до правки 313): видео кусков + звук целого оригинала.
+      // 2) Fallback (prior to fix 313): video from chunks + audio of whole original.
       const origArgs = [
         ...[...chunkPaths, audioPath].flatMap((q) => ['-i', q]),
         '-filter_complex',
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
         '-map', '[vout]', '-map', '[aout]',
         ...videoEnc, '-c:a', 'aac', '-b:a', '192k', '-shortest', '-y', outPath,
       ]
-      // 3) Последний: только видео (у исходника нет дорожки).
+      // 3) Last resort: video only (source has no audio track).
       const videoOnlyArgs = [
         ...[...chunkPaths, audioPath].flatMap((q) => ['-i', q]),
         '-filter_complex', `${videoFilter};${concatV}`,
@@ -138,12 +138,12 @@ export async function POST(req: NextRequest) {
       let ok = await runFfmpeg(fullArgs)
       if (!ok) ok = await runFfmpeg(origArgs)
       if (!ok) ok = await runFfmpeg(videoOnlyArgs)
-      if (!ok) throw new Error('FFmpeg hard-stitch failed: ни один режим склейки не удался')
-      // (правка 260) Сайдкар итога рефайна «Частями»: клиент передаёт мета
-      // с исходником; сюда добавляем только служебное.
-      // (правка 361) Пишем сайдкар итога ДО удаления кусков и удаляем
-      // сайдкары кусков только если итоговый записался (или не запрошен) —
-      // иначе при сбое записи терялась ВСЯ мета цепочки.
+      if (!ok) throw new Error('FFmpeg hard-stitch failed: no stitch mode succeeded')
+      // (fix 260) Sidecar for "By parts" refine result: client passes meta
+      // with source; add only service fields here.
+      // (fix 361) Write result sidecar BEFORE deleting chunks and delete
+      // chunk sidecars only if final was written (or not requested) —
+      // otherwise on write failure ALL chain meta was lost.
       let finalMetaOk = !body.meta || typeof body.meta !== 'object'
       if (body.meta && typeof body.meta === 'object') {
         try {
@@ -153,10 +153,10 @@ export async function POST(req: NextRequest) {
             created_at: Date.now() / 1000,
           })
           finalMetaOk = true
-        } catch { /* не критично */ }
+        } catch { /* non-critical */ }
       }
-      // (правка 260) Куски — промежуточные: удаляем вместе с их сайдкарами
-      // (их пишет pending-meta статусного роута на 'done' джоба).
+      // (fix 260) Chunks are intermediate: delete along with their sidecars
+      // (written by status route pending-meta on job 'done').
       for (const q of chunkPaths) {
         await fs.unlink(q).catch(() => {})
         if (finalMetaOk) await fs.unlink(q + '.meta.json').catch(() => {})
@@ -164,16 +164,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ filename: outName, subfolder: outSub })
     }
 
-    // ─── Расчёт стыков (правка 271) ───
-    // Куски перекрываются на CHAIN_OVERLAP (39) кадров: файл каждого окна
-    // k>0 включает голову-перекрытие (те же кадры исходника, что и хвост
-    // окна k−1). На стыке два РАЗНЫХ ре-рендера ОДНИХ И ТЕХ ЖЕ кадров
-    // (близкие, т.к. conditioning + latent-затравка одинаковы). Поэтому:
-    //  • фейд короткий — FADE_SEC (3 кадра): смешиваются ближайшие кадры
-    //    двух близких рендеров → плавный переход без двоения;
-    //  • остаток перекрытия СРЕЗАЕТСЯ с головы следующего куска (trim) —
-    //    таймлайн непрерывен: контент куска i+1 после среза начинается ровно
-    //    за fade до конца куска i. Математика: trim + fade = overlap.
+    // ─── Seam calculation (fix 271) ───
+    // Chunks overlap by CHAIN_OVERLAP (39) frames: each window file
+    // k>0 includes head overlap (same source frames as tail of
+    // window k−1). At the seam there are two DIFFERENT re-renders of the SAME frames
+    // (close, since conditioning + latent seed are identical). Therefore:
+    //  • fade is short — FADE_SEC (3 frames): blend closest frames
+    //    of two close renders → smooth transition without ghosting;
+    //  • remainder of overlap is TRIMMED from head of next chunk (trim) —
+    //    timeline is continuous: content of chunk i+1 after trim starts exactly
+    //    at fade before end of chunk i. Math: trim + fade = overlap.
     const FADE_SEC = 3 / 24
     const seams = chunkPaths.slice(1).map((_, i) => {
       const overlap = body.overlapsSec?.[i] ?? 1
@@ -187,22 +187,22 @@ export async function POST(req: NextRequest) {
     })
 
     const filter: string[] = []
-    // Кусок 0 — целиком; куски i≥1 — со срезом головы на (overlap − fade).
+    // Chunk 0 — whole; chunks i>=1 — head trimmed by (overlap - fade).
     filter.push(`[0:v]scale=${W}:${H},setsar=1,fps=24[v0]`)
     for (let i = 1; i < chunkPaths.length; i++) {
       const trim = seams[i - 1].trim
       const head = trim > 0.001 ? `trim=start=${trim.toFixed(4)},setpts=PTS-STARTPTS,` : ''
       filter.push(`[${i}:v]${head}scale=${W}:${H},setsar=1,fps=24[v${i}]`)
     }
-    // Аудио — из ЦЕЛОГО исходника (последний вход), без перекрёстных фейдов.
+    // Audio — from WHOLE source (last input), without crossfades.
     const audioIndex = chunkPaths.length
     filter.push(`[${audioIndex}:a]aresample=44100[aout]`)
 
     if (chunkPaths.length === 1) {
       filter.push(`[v0]copy[vout]`)
     } else {
-      // Бегущая длительность: срезы голов уже учтены в фактической длине
-      // кусков ПОСЛЕ trim — считаем её из проб.
+      // Running duration: head trims already accounted for in actual length
+      // of chunks AFTER trim — compute from probes.
       let running = infos[0].durationSec
       for (let i = 0; i < chunkPaths.length - 1; i++) {
         const f = seams[i].fade
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
           '-filter_complex', filter.join(';'),
           '-map', '[vout]',
           '-map', '[aout]',
-          // (правка 386) кодек/качество — из [video] настроек студии
+          // (fix 386) codec/quality from studio [video] settings
           '-preset', 'fast', ...ffmpegVideoArgs(getVideoFormatSettings()),
           '-pix_fmt', 'yuv420p',
           '-c:a', 'aac', '-b:a', '192k',
@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       const e = err as { stderr?: string; message?: string }
       const stderr = e.stderr || e.message || String(err)
-      // Фолбэк без аудио (у исходника может не быть дорожки).
+      // Fallback without audio (source may not have audio track).
       try {
         const videoOnly = filter.filter((s) => !s.startsWith(`[${audioIndex}:a`) && !s.includes('[aout]'))
         await execFileAsync(
@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
             '-filter_complex', videoOnly.join(';'),
             '-map', '[vout]',
             '-an',
-            // (правка 386) кодек/качество — из [video] настроек студии
+            // (fix 386) codec/quality from studio [video] settings
             '-preset', 'fast', ...ffmpegVideoArgs(getVideoFormatSettings()),
             '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart',
@@ -265,10 +265,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // (правка 260) Сайдкар итога (xfade-ветка) — как в hard-ветке.
-    // (правка 361) Сначала сайдкар итога, потом удаление кусков: сайдкары
-    // кусков удаляем только при успешной записи итогового (или если мета
-    // не запрошена) — не теряем всю мету цепочки при сбое записи.
+    // (fix 260) Result sidecar (xfade branch) — same as in hard branch.
+    // (fix 361) First result sidecar, then delete chunks: delete chunk
+    // sidecars only upon successful writing of final (or if meta
+    // not requested) — do not lose all chain meta on write failure.
     let finalMetaOk = !body.meta || typeof body.meta !== 'object'
     if (body.meta && typeof body.meta === 'object') {
       try {
@@ -278,11 +278,11 @@ export async function POST(req: NextRequest) {
           created_at: Date.now() / 1000,
         })
         finalMetaOk = true
-      } catch { /* не критично */ }
+      } catch { /* non-critical */ }
     }
 
-    // Куски — расходный материал: убираем после успешной склейки
-    // (правка 260) вместе с их сайдкарами от pending-meta.
+    // Chunks are consumable: remove after successful stitch
+    // (fix 260) along with their sidecars from pending-meta.
     for (const p of chunkPaths) {
       await fs.unlink(p).catch(() => {})
       if (finalMetaOk) await fs.unlink(p + '.meta.json').catch(() => {})
@@ -291,7 +291,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ filename: outName, subfolder: outSub })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    // (правка 716) Статус из ошибки (404 для «файл не найден»), иначе 500.
+    // (fix 716) Status from error (404 for "file not found"), otherwise 500.
     const status = (err as { status?: number })?.status
     return NextResponse.json({ error: msg }, { status: typeof status === 'number' ? status : 500 })
   }

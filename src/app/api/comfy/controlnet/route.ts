@@ -23,34 +23,34 @@ import { enabledCustomLoras, loraTriggerSuffix } from '@/lib/loras-config'
 import { videoSamplerStages, type MiniMaxH3Params } from '@/lib/comfy/minimax-h3-template'
 
 /**
- * POST /api/comfy/controlnet — генерация H3 по контрольному видео
- * (depth/canny → стандартный References-воркфлоу).
+ * POST /api/comfy/controlnet — H3 generation from control video
+ * (depth/canny → standard References workflow).
  *
  * Body:
- *   sourceFilename  — имя файла в папке output ComfyUI (или inputSource)
- *   sourceSubfolder — подпапка output (вложенные — 'a/b')
- *   inputSource?    — имя файла уже в ComfyUI input/ (файл с диска)
+ *   sourceFilename  — file name in ComfyUI output folder (or inputSource)
+ *   sourceSubfolder — output subfolder (nested — 'a/b')
+ *   inputSource?    — file name already in ComfyUI input/ (disk file)
  *   prompt?         — caption
  *   seed?           — (-1/undefined = random)
- *   duration?       — секунды (default 5; клампится к длине исходника)
- *   targetShortSide?— короткая сторона генерации, px (default 720)
+ *   duration?       — seconds (default 5; clamped to source length)
+ *   targetShortSide?— short side of generation, px (default 720)
  *   controlType?    — 'depth' (default) | 'canny'
- *   refImages?      — картинки-референсы (имена файлов в input/, до 9)
- *   refImageSize?   — 'match' | 'max' (default 'max', правка 511)
- *   preprocessOnly? — true = только карта (depth/canny видео без генерации)
- *   compress?       — сжать контрольное видео до 480p (все режимы)
+ *   refImages?      — reference images (filenames in input/, up to 9)
+ *   refImageSize?   — 'match' | 'max' (default 'max', fix 511)
+ *   preprocessOnly? — true = map only (depth/canny video without generation)
+ *   compress?       — compress control video to 480p (all modes)
  *   pipeline?       — 'draft' | 'full'
- *   lowResMP?       — канва pass 1 (только pipeline='full')
- *   firstSamplerSteps? — эффективные шаги pass 1 (SplitSigmas split, default 6)
- *   firstSamplerTotalSteps? — всего шагов в расписании pass 1 (default: = split, «6 из 6»)
- *   draftSteps?     — шаги единственного прохода (draft, default 4)
- *   pass1Sampler?   — сэмплер pass 1 (default 'euler')
- *   pass1Scheduler? — планировщик pass 1 (default 'simple')
- *   pass2Sampler?   — сэмплер pass 2 (default 'euler')
- *   sigmaVariant?   — sigma-профиль pass 2 (default '3step')
+ *   lowResMP?       — canvas pass 1 (pipeline='full' only)
+ *   firstSamplerSteps? — effective steps pass 1 (SplitSigmas split, default 6)
+ *   firstSamplerTotalSteps? — total schedule steps pass 1 (default: = split, "6 of 6")
+ *   draftSteps?     — single pass steps (draft, default 4)
+ *   pass1Sampler?   — pass 1 sampler (default 'euler')
+ *   pass1Scheduler? — pass 1 scheduler (default 'simple')
+ *   pass2Sampler?   — pass 2 sampler (default 'euler')
+ *   sigmaVariant?   — pass 2 sigma profile (default '3step')
  *
- * Pipeline: копия output → input (или реюз inputSource), ffprobe,
- * сборка workflow (preprocess + standard references) и отправка.
+ * Pipeline: copy output → input (or reuse inputSource), ffprobe,
+ * build workflow (preprocess + standard references) and dispatch.
  */
 export const dynamic = 'force-dynamic'
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       sourceFilename?: string
       sourceSubfolder?: string
-      /** (правка 727) Папка результата ('' = общая). Не задана — папка исходника. */
+      /** (fix 727) Output folder ('' = common). If not set — source folder. */
       outputSubfolder?: string
       inputSource?: string
       prompt?: string
@@ -74,14 +74,14 @@ export async function POST(req: NextRequest) {
       pipeline?: 'draft' | 'full'
       lowResMP?: number
       firstSamplerSteps?: number
-      /** Всего шагов в расписании pass 1 (default: = split, «6 из 6»). */
+      /** Total schedule steps pass 1 (default: = split, "6 of 6"). */
       firstSamplerTotalSteps?: number
       draftSteps?: number
       pass1Sampler?: string
       pass1Scheduler?: string
       pass2Sampler?: string
       sigmaVariant?: string
-      // (правка 512) Veda/Sparse/lowVRAM — из настроек приложения
+      // (fix 512) Veda/Sparse/lowVRAM — from app settings
       sparseAttention?: boolean
       sparseTau?: number
       sparseStartPercent?: number
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!body?.sourceFilename && !body?.inputSource) {
-      return NextResponse.json({ error: 'sourceFilename (или inputSource) обязателен' }, { status: 400 })
+      return NextResponse.json({ error: 'sourceFilename (or inputSource) is required' }, { status: 400 })
     }
 
     const quickBlock = assertGenerationAllowed()
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     const cfg = getAppConfig()
 
-    // Пользовательские LoRA из настроек
+    // Custom LoRAs from settings
     const customLoraEntries = enabledCustomLoras()
     const customLoras = customLoraEntries.length > 0
       ? customLoraEntries.map((e) => ({ name: e.name, strength: e.strength }))
@@ -123,13 +123,13 @@ export async function POST(req: NextRequest) {
       return base ? `${base} ${loraSuffix}` : loraSuffix
     }
 
-    const controlType: ControlNetType = body.controlType === 'canny' ? 'canny' : (body.controlType === 'direct' ? 'direct' : (body.controlType === 'pose' ? 'pose' : 'depth')) // (правка 512)
+    const controlType: ControlNetType = body.controlType === 'canny' ? 'canny' : (body.controlType === 'direct' ? 'direct' : (body.controlType === 'pose' ? 'pose' : 'depth')) // (fix 512)
     const userPrompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
 
-    // (правка 722) Параметры пайплайна ControlNet — в сайдкар. Раньше в
-    // метаданных ControlNet-генерации были только разрешение/кадры/режим —
-    // ни шагов, ни сэмплеров, ни настроек внимания, ни фактически применённых
-    // LoRA. По сайдкару результата нельзя было понять, как он считался.
+    // (fix 722) ControlNet pipeline parameters into sidecar. Previously
+    // ControlNet generation metadata only included resolution/frames/mode —
+    // neither steps, nor samplers, nor attention settings, nor actually applied
+    // LoRAs. From the result sidecar it was impossible to tell how it was computed.
     const cnPipeline = body.pipeline === 'full' ? 'full' : 'draft'
     const cnCommonMeta = {
       pipeline: cnPipeline,
@@ -167,13 +167,13 @@ export async function POST(req: NextRequest) {
       ...(customLoras ? { lora: customLoras.map((l) => l.name).join(', ') } : {}),
     }
 
-    // Картинки-референсы: basename + проверка существования в input/
+    // Reference images: basename + check existence in input/
     const refImages: string[] = []
     for (const raw of (body.refImages ?? []).slice(0, 9)) {
       const name = path.basename(String(raw ?? ''))
       if (!name) continue
       if (!existsSync(path.join(cfg.inputDir, name))) {
-        return NextResponse.json({ error: `Референс не найден в input: ${name}` }, { status: 404 })
+        return NextResponse.json({ error: `Reference not found in input: ${name}` }, { status: 404 })
       }
       refImages.push(name)
     }
@@ -183,10 +183,10 @@ export async function POST(req: NextRequest) {
       inputPath: string
       gallerySub: string | null
       galleryName: string | null
-      /** (правка 727) Куда класть результат; null — папка исходника. */
+      /** (fix 727) Where to place result; null — source folder. */
       outSub?: string | null
     }) => {
-      // Сжать видео (если запрошено)
+      // Compress video (if requested)
       let inputName = opts.inputName
       let inputPath = opts.inputPath
       if (body.compress) {
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
           return {
             run: {
               ok: false as const,
-              error: `Не удалось сжать видео: ${e instanceof Error ? e.message : String(e)}`,
+              error: `Failed to compress video: ${e instanceof Error ? e.message : String(e)}`,
               status: 500,
             },
           }
@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
         return {
           run: {
             ok: false as const,
-            error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}`,
+            error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}`,
             status: 400,
           },
         }
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
         : controlNetFrames(body.duration ?? 5, probe.frames)
       const size = controlNetSize(probe.width, probe.height, body.targetShortSide ?? 720)
 
-      // Промпт: пользовательский > цепочка из меты исходника (галерея)
+      // Prompt: user > chain from source meta (gallery)
       const draftPrompt = !userPrompt && opts.galleryName
         ? readPromptChain(opts.gallerySub ?? '', opts.galleryName)
         : null
@@ -232,11 +232,11 @@ export async function POST(req: NextRequest) {
 
       let workflow: Record<string, unknown>
       let stages: string[][]
-      // (правка 716) Префикс временной карты референса — уникален на задачу.
+      // (fix 716) Temporary reference map prefix — unique per task.
       const cnRefPrefix = `Minimax_Studio_cnref_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
       if (preprocessOnly) {
-        // Режим «Карта»: только препроцессинг
+        // "Map" mode: preprocessing only
         workflow = buildControlNetPreprocessWorkflow({
           sourceVideo: inputName,
           sourceWidth: probe.width,
@@ -248,9 +248,9 @@ export async function POST(req: NextRequest) {
           outputSubfolder: opts.outSub ?? opts.gallerySub ?? '',
           videoFormat: getVideoFormatSettings(),
         })
-        stages = [] // (правка 520) VHS_VideoCombine не шлёт progress-события — стадия без смысла, трекер не регистрируем
+        stages = [] // (fix 520) VHS_VideoCombine does not send progress events — meaningless stage, do not register tracker
       } else {
-        // Режим генерации: препроцессинг + стандартный References
+        // Generation mode: preprocessing + standard References
         workflow = buildControlNetWorkflow({
           sourceVideo: inputName,
           diffusionModel: cfg.diffusionModel || undefined,
@@ -260,9 +260,9 @@ export async function POST(req: NextRequest) {
           controlType,
           duration: body.duration,
           targetShortSide: body.targetShortSide,
-          // (правка 716) Уникальный префикс временной карты референса:
-          // cleanup будет удалять только карты ЭТОГО джоба (параллельные
-              // ControlNet-задачи больше не теряют свои карты).
+          // (fix 716) Unique prefix for temporary reference map:
+          // cleanup will delete only maps for THIS job (parallel
+          // ControlNet tasks no longer lose their maps).
           cnRefPrefix: cnRefPrefix,
           prompt: promptWithTriggers(resolvedPrompt),
           seed: body.seed,
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
           pipeline: body.pipeline === 'full' ? 'full' : 'draft',
           lowResMP: body.lowResMP,
           firstSamplerSteps: body.firstSamplerSteps,
-          // Всего шагов в расписании pass 1 (default: = split, «6 из 6»).
+          // Total schedule steps pass 1 (default: = split, "6 of 6").
           firstSamplerTotalSteps: body.firstSamplerTotalSteps ?? body.firstSamplerSteps ?? 6,
           draftSteps: body.draftSteps,
           pass1Sampler: body.pass1Sampler,
@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
           customLoras,
           outputSubfolder: opts.outSub ?? opts.gallerySub ?? '',
           videoFormat: getVideoFormatSettings(),
-          // (правка 512) Veda/Sparse/lowVRAM — как на вкладке «Генерация»
+          // (fix 512) Veda/Sparse/lowVRAM — same as "Generation" tab
           sparseAttention: body.sparseAttention,
           sparseTau: body.sparseTau,
           sparseStartPercent: body.sparseStartPercent,
@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
           chunkFFChunks: body.chunkFFChunks,
           chunkFFThreshold: body.chunkFFThreshold,
         })
-        // Стадии прогресса — как у стандартного ref-воркфлоу
+        // Progress stages — same as standard ref workflow
         const stdParams: MiniMaxH3Params = {
           mode: 'ref',
           pipeline: body.pipeline === 'full' ? 'full' : 'draft',
@@ -334,14 +334,14 @@ export async function POST(req: NextRequest) {
             workflow: 'controlnet-preprocess',
             generation_mode: 'controlnet',
             preprocess_only: true,
-            // (правка 716) Префикс временной карты — для точечного cleanup.
+            // (fix 716) Temporary map prefix — for pinpoint cleanup.
             cn_ref_prefix: cnRefPrefix,
             control_type: controlType,
             resolution: `${size.width}x${size.height}`,
             video_length: frames,
             duration_seconds: frames / 24,
             fps: 24,
-            ...cnCommonMeta, // (правка 722) параметры пайплайна
+            ...cnCommonMeta, // (fix 722) pipeline parameters
             source_video: opts.galleryName
               ? { filename: opts.galleryName, subfolder: opts.gallerySub ?? '' }
               : { filename: opts.inputName, subfolder: 'input' },
@@ -367,7 +367,7 @@ export async function POST(req: NextRequest) {
           model_type: 'minimax_h3_ref2va',
           workflow: 'controlnet-std-refs',
           generation_mode: 'controlnet',
-          // (правка 716) Префикс временной карты — для точечного cleanup.
+          // (fix 716) Temporary map prefix — for pinpoint cleanup.
           cn_ref_prefix: cnRefPrefix,
           resolution: `${size.width}x${size.height}`,
           video_length: frames,
@@ -376,7 +376,7 @@ export async function POST(req: NextRequest) {
           control_type: controlType,
           target_short_side: body.targetShortSide ?? 720,
           minimax_h3_reference_detail: body.refImageSize ?? 'match',
-          ...cnCommonMeta, // (правка 722) параметры пайплайна
+          ...cnCommonMeta, // (fix 722) pipeline parameters
           ...(body.compress === true && { compress_source: true }),
           source_video: opts.galleryName
             ? { filename: opts.galleryName, subfolder: opts.gallerySub ?? '' }
@@ -403,25 +403,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // (правка 727) Папка результата: выбранная в UI (может быть '' — общая)
-    // важнее папки исходника; не задана — кладём рядом с исходником.
+    // (fix 727) Result folder: selected in UI (can be '' — common)
+    // takes priority over source folder; not specified — place next to source.
     const outSub = typeof body.outputSubfolder === 'string'
       ? sanitizeFolderPath(body.outputSubfolder)
       : null
 
-    // ─── Файл с диска (inputSource) ───
+    // ─── File from disk (inputSource) ───
     if (body.inputSource) {
       const inName = path.basename(body.inputSource)
       const inPath = path.join(cfg.inputDir, inName)
       if (!existsSync(inPath)) {
-        return NextResponse.json({ error: `Файл не найден в input: ${inName}` }, { status: 404 })
+        return NextResponse.json({ error: `File not found in input: ${inName}` }, { status: 404 })
       }
       const r = await submit({ inputName: inName, inputPath: inPath, gallerySub: null, galleryName: null, outSub: outSub ?? '' })
       if ('response' in r && r.response) return NextResponse.json(r.response)
       return NextResponse.json({ error: r.run.error }, { status: r.run.status })
     }
 
-    // ─── Файл из галереи (output) ───
+    // ─── File from gallery (output) ───
     const sub = sanitizeFolderPath(body.sourceSubfolder || '')
     const safeName = path.basename(body.sourceFilename ?? '')
     const sourcePath = path.join(cfg.outputDir, sub, safeName)
@@ -430,7 +430,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
     }
     if (!existsSync(sourcePath)) {
-      return NextResponse.json({ error: `Файл не найден: ${safeName}` }, { status: 404 })
+      return NextResponse.json({ error: `File not found: ${safeName}` }, { status: 404 })
     }
 
     await fs.mkdir(cfg.inputDir, { recursive: true })

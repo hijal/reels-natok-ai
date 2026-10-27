@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MiniMax Studio — Upscale bridge (правка 74).
+MiniMax Studio — Upscale bridge (fix 74).
 
 Headless JSON-over-HTTP bridge over the DLSS 5 Visual Enhancer pipelines
 (Neural Rendering, RTX Video Super Resolution, Frame Interpolation).
@@ -73,8 +73,8 @@ def log(msg: str) -> None:
         _LOG_LINES.append(line)
         if len(_LOG_LINES) > 400:
             del _LOG_LINES[:200]
-    # Консоль Windows может быть в cp866: символы вроде "→" не энкодятся и
-    # print() бросает UnicodeEncodeError. Лог не должен уметь убить воркер рендера.
+    # Windows console may use cp866: symbols like "→" cannot be encoded and
+    # print() raises UnicodeEncodeError. Logging must not kill the render worker.
     try:
         enc = getattr(sys.stdout, "encoding", None) or "utf-8"
         sys.stdout.write(line.encode(enc, "replace").decode(enc, "replace") + "\n")
@@ -95,7 +95,7 @@ READY = False
 READY_ERROR: str | None = None
 GPUS: list[dict[str, Any]] = []
 
-# Возможности Frame Interpolation (DLSSG) — проба в фоне после готовности рантайма.
+# Frame Interpolation (DLSSG) capabilities — background probe after runtime is ready.
 FI_CAPS: dict[str, Any] | None = None
 
 
@@ -112,18 +112,18 @@ def _probe_fi_capabilities() -> None:
             "hags_enabled": bool(caps.hags_enabled),
             "detail": str(caps.detail or ""),
         }
-        state = "доступна" if caps.available else "НЕдоступна"
-        log(f"Frame Interpolation (DLSSG): {state}; HAGS вкл: {caps.hags_enabled}; {caps.detail}")
+        state = "available" if caps.available else "UNavailable"
+        log(f"Frame Interpolation (DLSSG): {state}; HAGS on: {caps.hags_enabled}; {caps.detail}")
     except Exception as exc:  # noqa: BLE001
         FI_CAPS = {"available": False, "detail": f"{type(exc).__name__}: {exc}"}
-        log(f"Frame Interpolation (DLSSG): проверка не удалась: {exc}")
+        log(f"Frame Interpolation (DLSSG): probe failed: {exc}")
 
 
 def _prepare_runtime() -> None:
     """Validate DLSS runtime files, detect GPUs, warm mappings, init color mgmt."""
     global READY, READY_ERROR, GPUS
     t0 = time.time()
-    log("Подготовка DLSS-рантайма (валидация DLL, GPU, прогрев файлов)…")
+    log("Preparing DLSS runtime (DLL validation, GPU, file warm-up)…")
     try:
         from src.core.gpu_selection import gpu_choice_label
         from src.core.runtime import prepare_runtime
@@ -143,13 +143,13 @@ def _prepare_runtime() -> None:
             )
         GPUS = gpus
         READY = True
-        log(f"Рантайм готов за {time.time() - t0:.1f} c; GPU: {len(gpus)}")
+        log(f"Runtime ready in {time.time() - t0:.1f} s; GPU: {len(gpus)}")
         threading.Thread(
             target=_probe_fi_capabilities, name="upscale-fi-probe", daemon=True,
         ).start()
     except BaseException as exc:  # noqa: BLE001 — report anything to the UI
         READY_ERROR = f"{type(exc).__name__}: {exc}"
-        log(f"Подготовка рантайма НЕ удалась: {READY_ERROR}")
+        log(f"Runtime preparation FAILED: {READY_ERROR}")
         log(traceback.format_exc(limit=8))
 
 
@@ -180,13 +180,13 @@ def _build_options(defn: FeatureDef, raw: dict[str, Any]):
     """
     allowed = {f.name for f in dataclasses.fields(defn.options_cls)}
     clean = {k: v for k, v in (raw or {}).items() if k in allowed}
-    # (правка 162) scale_factor приходит из UI-селекта как строка "1.5";
-    # validate() требует number — кастим сюда, иначе падает ValueError.
+    # (fix 162) scale_factor comes from UI select as string "1.5";
+    # validate() requires number — cast here, otherwise raises ValueError.
     if 'scale_factor' in clean and isinstance(clean['scale_factor'], str):
         try:
             clean['scale_factor'] = float(clean['scale_factor'])
         except (ValueError, TypeError):
-            pass  # validate() отловит нечисловое значение
+            pass  # validate() will catch non-numeric value
     return defn.options_cls(**clean)
 
 
@@ -254,13 +254,13 @@ def _register_features() -> None:
             path, options, progress, output_dir=str(OUTPUT_DIR), controller=kw.get("controller"),
         )
 
-    FEATURES["nr-image"] = FeatureDef("nr-image", "Neural Rendering — изображение", "image",
+    FEATURES["nr-image"] = FeatureDef("nr-image", "Neural Rendering — Image", "image",
                                       ImageConversionOptions, _run_nr_image)
-    FEATURES["nr-video"] = FeatureDef("nr-video", "Neural Rendering — видео", "video",
+    FEATURES["nr-video"] = FeatureDef("nr-video", "Neural Rendering — Video", "video",
                                       ConversionOptions, _run_nr_video)
-    FEATURES["vsr-image"] = FeatureDef("vsr-image", "RTX Video Super Resolution — изображение", "image",
+    FEATURES["vsr-image"] = FeatureDef("vsr-image", "RTX Video Super Resolution — Image", "image",
                                        ImageUpscaleOptions, _run_vsr_image)
-    FEATURES["vsr-video"] = FeatureDef("vsr-video", "RTX Video Super Resolution — видео", "video",
+    FEATURES["vsr-video"] = FeatureDef("vsr-video", "RTX Video Super Resolution — Video", "video",
                                        UpscaleOptions, _run_vsr_video)
     FEATURES["fi-video"] = FeatureDef("fi-video", "Frame Interpolation (DLSSG)", "video",
                                       FrameInterpolationOptions, _run_fi_video)
@@ -299,8 +299,8 @@ def _register_features() -> None:
     SCHEMA["features"]["vsr-image"]["choices"] = {
         "vsr_quality": [[label, value] for label, value in VSR_QUALITIES],
         "size_mode": list(SIZE_MODES),
-        # (правка 162) pairs [label, value] — как vsr_quality; UI itemsFrom
-        # берёт v[1] = number, и scale_factor уходит в bridge как число.
+        # (fix 162) pairs [label, value] — like vsr_quality; UI itemsFrom
+        # takes v[1] = number, and scale_factor goes to bridge as number.
         "scale_factor": [[label, value] for label, value in SCALE_FACTORS],
         "output_format": list(IMAGE_FORMATS),
         "rename_mode": ["Auto", "Custom"],
@@ -340,7 +340,7 @@ class Job:
         self.controller = None  # JobController; set by the worker before the pipeline starts
         self.status = "queued"
         self.progress = 0.0
-        self.message = "Ожидание GPU"
+        self.message = "Waiting for GPU"
         self.error: str | None = None
         self.output: dict[str, Any] | None = None
         self.created = time.time()
@@ -374,16 +374,16 @@ def _job_list_payload() -> list[dict[str, Any]]:
 
 def _worker(job: Job) -> None:
     global RENDER_BUSY
-    # (правка 716) Импорт — ВНУТРИ защитного блока: раньше он стоял выше
-    # try/finally, и сбой импорта (или любое BaseException) оставлял
-    # RENDER_BUSY во True навсегда — мост переставал принимать задачи.
+    # (fix 716) Import — INSIDE guard block: previously it was above
+    # try/finally, and an import failure (or any BaseException) left
+    # RENDER_BUSY True forever — bridge stopped accepting jobs.
     try:
         from src.core.jobs import Cancelled, JobController
     except BaseException:
-        log(f"job {job.id} [{job.feature}] не удалось импортировать src.core.jobs:")
+        log(f"job {job.id} [{job.feature}] failed to import src.core.jobs:")
         log(traceback.format_exc(limit=6))
         job.status = "error"
-        job.error = "Не удалось запустить обработку"
+        job.error = "Failed to start processing"
         with RENDER_BUSY_LOCK:
             RENDER_BUSY = False
         return
@@ -391,16 +391,16 @@ def _worker(job: Job) -> None:
     defn = FEATURES.get(job.feature)
     if defn is None:
         job.status = "error"
-        job.error = f"Неизвестная функция: {job.feature}"
-        # (правка 356) RENDER_BUSY сбрасываем под локом, как в finally ниже —
-        # без лока возможна гонка с одновременным POST /render (проверка +
-        # установка в do_POST тоже под RENDER_BUSY_LOCK).
+        job.error = f"Unknown feature: {job.feature}"
+        # (fix 356) Reset RENDER_BUSY under lock, as in finally below —
+        # without lock a race is possible with concurrent POST /render (check +
+        # set in do_POST is also under RENDER_BUSY_LOCK).
         with RENDER_BUSY_LOCK:
             RENDER_BUSY = False
         return
 
     job.status = "running"
-    job.message = "Запуск…"
+    job.message = "Starting…"
 
     def progress_cb(value: Any, message: str = "") -> None:
         try:
@@ -414,11 +414,11 @@ def _worker(job: Job) -> None:
 
     try:
         controller = job.controller
-        if controller is None:  # защита от Job, созданных до правки
+        if controller is None:  # guard against Jobs created before fix
             controller = JobController()
             job.controller = controller
-        # Отмена могла прийти в окне queued→running (контроллер создаётся
-        # теперь синхронно в _start_job) — не стартуем пайплайн зря.
+        # Cancellation could arrive during queued→running window (controller is now
+        # created synchronously in _start_job) — do not start pipeline in vain.
         if controller.cancel.is_set():
             raise Cancelled()
         options_obj = _build_options(defn, job.options_raw)
@@ -430,30 +430,30 @@ def _worker(job: Job) -> None:
             job.output = asdict(result)
         else:
             job.output = {"output_path": str(result)}
-        # (правка 716) Порядок важен: прогресс и сообщение выставляются
-        # ДО статуса. Раньше статус ставился первым, и HTTP-опрос /jobs
-        # (другой поток) мог увидеть status="done" при progress=0.4 —
-        # UI показывал «готово» с неполным прогрессом.
+        # (fix 716) Order is important: progress and message are set
+        # BEFORE status. Previously status was set first, and HTTP poll of /jobs
+        # (another thread) could observe status="done" with progress=0.4 —
+        # UI showed "ready" with incomplete progress.
         job.progress = 1.0
-        job.message = "Готово"
+        job.message = "Done"
         job.status = "done"
         out = job.output.get("output_path") if isinstance(job.output, dict) else None
-        log(f"job {job.id} [{job.feature}] готово: {out}")
+        log(f"job {job.id} [{job.feature}] done: {out}")
     except Cancelled:
         job.status = "cancelled"
-        job.message = "Отменено пользователем"
-        log(f"job {job.id} [{job.feature}] отменён")
+        job.message = "Cancelled by user"
+        log(f"job {job.id} [{job.feature}] cancelled")
     except Exception as exc:  # noqa: BLE001 — surface to the UI verbatim
         job.status = "error"
         job.error = f"{type(exc).__name__}: {exc}"
         if job.feature == "fi-video" and "Frame Generation is unavailable" in str(exc):
             job.error = (
-                "DLSS Frame Generation (DLSSG) недоступна на этой системе. Функция требует "
-                "GPU RTX 40-й серии (или новее) и включённое Hardware-Accelerated GPU Scheduling "
-                "(Параметры Windows → Дисплей → Графика → «Аппаратное ускорение планирования GPU» → Вкл → перезагрузка). "
-                "Neural Rendering и Upscale (VSR) на этом GPU работают. Подробности: " + str(exc)
+                "DLSS Frame Generation (DLSSG) is unavailable on this system. Feature requires "
+                "RTX 40-series GPU (or newer) and enabled Hardware-Accelerated GPU Scheduling "
+                "(Windows Settings → Display → Graphics → 'Hardware-accelerated GPU scheduling' → On → restart). "
+                "Neural Rendering and Upscale (VSR) work on this GPU. Details: " + str(exc)
             )
-        log(f"job {job.id} [{job.feature}] ошибка: {job.error}")
+        log(f"job {job.id} [{job.feature}] error: {job.error}")
         log(traceback.format_exc(limit=6))
     finally:
         with RENDER_BUSY_LOCK:
@@ -466,16 +466,16 @@ def _start_job(feature: str, input_path: str, options_raw: dict[str, Any]) -> Jo
         if RENDER_BUSY:
             raise BusyRender()
         RENDER_BUSY = True
-    # (правка 716) Создание job'а и запуск потока — ПОД try/except.
-    # Раньше RENDER_BUSY=True ставился ДО этих строк, а сбрасывался только в
-    # finally потока _worker. Любое исключение здесь (ошибка импорта
-    # JobController, «не удалось создать поток» под нагрузкой) оставляло флаг
-    # во True НАВСЕГДА: мост навсегда отдавал 409 «GPU занята» даже при свободной
-    # GPU, и сбросить флаг было нечем.
+    # (fix 716) Job creation and thread launch — UNDER try/except.
+    # Previously RENDER_BUSY=True was set BEFORE these lines, and only reset in
+    # _worker thread's finally. Any exception here (JobController import error,
+    # "can't start new thread" under load) left the flag
+    # True FOREVER: bridge gave 409 "GPU busy" forever even when GPU was free,
+    # with no way to reset the flag.
     try:
         job = Job(feature, input_path, options_raw)
-        # Контроллер — сразу при создании job: отмена в окне queued→running
-        # (поток ещё не дошёл до пайплайна) раньше терялась молча.
+        # Controller — immediately upon job creation: cancellation in queued→running
+        # window (thread hasn't reached pipeline yet) was previously silently lost.
         from src.core.jobs import JobController
 
         job.controller = JobController()
@@ -488,7 +488,7 @@ def _start_job(feature: str, input_path: str, options_raw: dict[str, Any]) -> Jo
         threading.Thread(target=_worker, args=(job,), daemon=True, name=f"upscale-{job.id}").start()
         return job
     except BaseException:
-        # Поток не стартовал → его finally не сработает → сбрасываем флаг сами.
+        # Thread didn't start → its finally won't run → reset flag ourselves.
         with RENDER_BUSY_LOCK:
             RENDER_BUSY = False
         raise
@@ -511,7 +511,7 @@ _VIDEO_EXTS = {
 def _probe(input_path: str) -> dict[str, Any]:
     path = Path(input_path)
     if not path.is_file():
-        raise ValueError(f"Файл не найден: {input_path}")
+        raise ValueError(f"File not found: {input_path}")
     size = path.stat().st_size
     out: dict[str, Any] = {"input": str(path), "size_bytes": size, "name": path.name}
     suffix = path.suffix.lower()
@@ -552,13 +552,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
-        # (правка 716) Убрано 'Access-Control-Allow-Origin: *'. Мост слушает
-        # 127.0.0.1 и обращается к нему ТОЛЬКО серверная часть студии
-        # (src/lib/upscale-runner.ts) — браузер к этому порту не ходит.
-        # С '*' любой открытый сайт мог прочитать /probe и /jobs (абсолютные
-        # локальные пути, имена файлов) и запускать рендеры на машине
-        # пользователя (простой запрос с Content-Type: text/plain обходит
-        # preflight). Ответы моста теперь читает только свой origin.
+        # (fix 716) Removed 'Access-Control-Allow-Origin: *'. The bridge listens on
+        # 127.0.0.1 and is accessed ONLY by the studio server backend
+        # (src/lib/upscale-runner.ts) — browser never visits this port.
+        # With '*' any open website could read /probe and /jobs (absolute
+        # local paths, filenames) and trigger renders on the user's machine
+        # (simple request with Content-Type: text/plain bypasses preflight).
+        # Bridge responses are now read only by its own origin.
         self.end_headers()
         try:
             self.wfile.write(payload)
@@ -566,12 +566,12 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def _origin_rejected(self) -> bool:
-        """(правка 716) Отклонить запрос, пришедший из браузера.
+        """(fix 716) Reject request coming from a browser.
 
-        Браузер всегда присылает Origin для cross-origin запросов; серверная
-        часть студии (Node fetch) Origin не шлёт. Поэтому наличие Origin
-        означает «это веб-страница», а не студия → 403. Закрывает и CSRF,
-        и DNS-rebinding с чтением метаданных локальных файлов."""
+        Browsers always send Origin for cross-origin requests; studio backend
+        (Node fetch) does not send Origin. Therefore presence of Origin
+        indicates "this is a web page", not the studio → 403. Closes both CSRF
+        and DNS-rebinding with reading local file metadata."""
         origin = self.headers.get("Origin")
         if not origin:
             return False
@@ -588,12 +588,12 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             return {}
         if length > limit:
-            raise ValueError("Слишком большой запрос")
+            raise ValueError("Request too large")
         raw = self.rfile.read(length)
         text = raw.decode("utf-8", "replace").strip() or "{}"
         data = json.loads(text)
         if not isinstance(data, dict):
-            raise ValueError("Ожидался JSON-объект")
+            raise ValueError("Expected a JSON object")
         return data
 
     def _path(self) -> str:
@@ -604,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self._path()
         try:
             if self._origin_rejected():
-                self._send_json(403, {"error": "Cross-origin запрос запрещён"})
+                self._send_json(403, {"error": "Cross-origin request forbidden"})
                 return
             if path in ("/", "/health"):
                 self._send_json(200, {
@@ -630,11 +630,11 @@ class Handler(BaseHTTPRequestHandler):
                 with JOBS_LOCK:
                     job = JOBS.get(job_id)
                 if job is None:
-                    self._send_json(404, {"error": "Job не найден"})
+                    self._send_json(404, {"error": "Job not found"})
                     return
                 self._send_json(200, job.payload())
                 return
-            self._send_json(404, {"error": f"Неизвестный путь: {path}"})
+            self._send_json(404, {"error": f"Unknown path: {path}"})
         except Exception as exc:  # noqa: BLE001
             self._send_json(500, {"error": f"{type(exc).__name__}: {exc}"})
 
@@ -643,23 +643,23 @@ class Handler(BaseHTTPRequestHandler):
         path = self._path()
         try:
             if self._origin_rejected():
-                self._send_json(403, {"error": "Cross-origin запрос запрещён"})
+                self._send_json(403, {"error": "Cross-origin request forbidden"})
                 return
             body = self._read_json_body()
             if path == "/render":
                 feature = str(body.get("feature") or "")
                 input_path = str(body.get("input") or "")
                 if feature not in FEATURES:
-                    self._send_json(400, {"error": f"Неизвестная функция: {feature!r}. "
-                                                   f"Доступно: {', '.join(sorted(FEATURES))}"})
+                    self._send_json(400, {"error": f"Unknown feature: {feature!r}. "
+                                                   f"Available: {', '.join(sorted(FEATURES))}"})
                     return
                 if not input_path:
-                    self._send_json(400, {"error": "Не указан входной файл (input)"})
+                    self._send_json(400, {"error": "No input file specified (input)"})
                     return
                 try:
                     job = _start_job(feature, input_path, body.get("options") or {})
                 except BusyRender:
-                    self._send_json(409, {"error": "GPU занята: уже идёт другой рендер. Дождитесь завершения."})
+                    self._send_json(409, {"error": "GPU is busy: another render is already running. Please wait for completion."})
                     return
                 self._send_json(202, {"ok": True, "jobId": job.id})
                 return
@@ -670,19 +670,19 @@ class Handler(BaseHTTPRequestHandler):
                 with JOBS_LOCK:
                     job = JOBS.get(job_id)
                 if job is None:
-                    self._send_json(404, {"ok": False, "error": "Job не найден"})
+                    self._send_json(404, {"ok": False, "error": "Job not found"})
                     return
-                # Если пайплайн ещё не захватил слот, останавливаем его
-                # контроллер напрямую (cancel_active_job видит только активный слот).
+                # If pipeline hasn't acquired slot yet, stop its controller directly
+                # (cancel_active_job only sees active slot).
                 controller = getattr(job, "controller", None)
                 if controller is not None:
                     try:
                         controller.stop()
                     except Exception:  # noqa: BLE001
                         pass
-                # Гасим активный рендер ТОЛЬКО если этот job им является:
-                # раньше безусловный cancel_active_job() останавливал ЧУЖУЮ
-                # задачу (cancel старого завершённого job убивал текущий рендер).
+                # Cancel active render ONLY if this job is the active one:
+                # previously unconditional cancel_active_job() stopped SOMEONE ELSE'S
+                # task (cancelling old completed job killed current render).
                 if controller is not None and is_active_job(controller):
                     message = cancel_active_job()
                 else:
@@ -692,11 +692,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/probe":
                 input_path = str(body.get("input") or "")
                 if not input_path:
-                    self._send_json(400, {"error": "Не указан файл (input)"})
+                    self._send_json(400, {"error": "No file specified (input)"})
                     return
                 self._send_json(200, _probe(input_path))
                 return
-            self._send_json(404, {"error": f"Неизвестный путь: {path}"})
+            self._send_json(404, {"error": f"Unknown path: {path}"})
         except ValueError as exc:
             self._send_json(400, {"error": str(exc)})
         except Exception as exc:  # noqa: BLE001
@@ -704,12 +704,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    log(f"Upscale bridge: порт {PORT}, вывод в {OUTPUT_DIR}")
+    log(f"Upscale bridge: port {PORT}, output in {OUTPUT_DIR}")
     try:
         _register_features()
-        log(f"Функции зарегистрированы: {', '.join(sorted(FEATURES))}")
+        log(f"Features registered: {', '.join(sorted(FEATURES))}")
     except Exception as exc:  # noqa: BLE001
-        log(f"НЕ удалось инициализировать каталог функций: {type(exc).__name__}: {exc}")
+        log(f"FAILED to initialize features catalog: {type(exc).__name__}: {exc}")
         log(traceback.format_exc(limit=8))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     _start_prepare_thread()
@@ -721,7 +721,7 @@ def main() -> None:
         pass
     finally:
         server.server_close()
-        log("Bridge остановлен")
+        log("Bridge stopped")
 
 
 if __name__ == "__main__":

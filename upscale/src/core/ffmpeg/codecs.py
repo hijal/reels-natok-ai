@@ -53,9 +53,9 @@ AUTO_BITRATE_DIVISORS = {
     "AV1": 414_720,
 }
 
-# (правка 716) Верхняя граница автоматического битрейта (кбит/с).
-# Практический потолок кодировщиков: выше него ffmpeg/x264 отклоняет
-# значение («bitrate exceeds maximum allowed bitrate»).
+# (fix 716) Upper bound for automatic bitrate (kbps).
+# Practical encoder ceiling: above this ffmpeg/x264 rejects
+# the value ("bitrate exceeds maximum allowed bitrate").
 MAX_AUTO_BITRATE_KBPS = 250_000
 
 # HDR Mode is only meaningful for 10-bit capable codecs. H.264 (both CPU/NVENC) stays 8-bit SDR.
@@ -180,9 +180,9 @@ def calculate_auto_bitrate_kbps(
         raise ValueError("Automatic bitrate requires positive dimensions, frame rate, and bit depth.")
     value = width * height * fps * bit_depth * 2 / divisor
     result = max(1, int(math.floor(value + 0.5)))
-    # (правка 716) Верхняя граница: 8K@120 по этой формуле даёт сотни Мбит/с,
-    # что за пределами практического лимита кодировщика (и ffmpeg падает с
-    # «bitrate ... exceeds maximum allowed bitrate»).
+    # (fix 716) Upper bound: 8K@120 yields hundreds of Mbps by this formula,
+    # which is beyond the practical encoder limit (and ffmpeg crashes with
+    # "bitrate ... exceeds maximum allowed bitrate").
     return min(result, MAX_AUTO_BITRATE_KBPS)
 
 

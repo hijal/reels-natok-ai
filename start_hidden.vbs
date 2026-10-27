@@ -1,37 +1,37 @@
 ' ============================================================
-' (правка 570) Скрытый запуск start.bat
+' (fix 570) Hidden launch of start.bat
 '
-' WshShell.Run: не блокирующий запуск процесса.
-' 0 = HideWindow (окно не появляется ни в таскбаре, ни на экране)
-' False = не ждать завершения (VBS сразу завершается, cmd живёт в фоне)
+' WshShell.Run: non-blocking process launch.
+' 0 = HideWindow (window does not appear in taskbar or screen)
+' False = do not wait for completion (VBS exits immediately, cmd runs in background)
 '
-' При закрытии Electron-окна — electron/main.js убивает родительский
-' cmd-процесс через taskkill (PID родителя = process.ppid в Node.js).
+' When Electron window is closed, electron/main.js kills parent
+' cmd process via taskkill (parent PID = process.ppid in Node.js).
 '
-' Запуск: cscript //nologo start_hidden.vbs
+' Launch: cscript //nologo start_hidden.vbs
 ' ============================================================
 
 Option Explicit
 
-' (правка 580) Диалог ошибок VBS при запуске — иначе ошибка скрывается
-' и пользователь видит только пустой вывод start.bat.
+' (fix 580) VBS error dialog on startup — otherwise errors are hidden
+' and the user only sees empty start.bat output.
 On Error Resume Next
 
 Dim shell
 Set shell = CreateObject("WScript.Shell")
-' (правка 587) Echo-строки — ASCII: файл в UTF-8, а cscript читает VBS
-' как ANSI, кириллица в Echo стала бы кракозябрами.
+' (fix 587) Echo strings are ASCII: file is UTF-8, but cscript reads VBS
+' as ANSI, so non-ASCII in Echo would become garbled.
 If Err.Number <> 0 Then
   WScript.Echo "[start_hidden.vbs] Failed to create WshShell: " & Err.Description
   Err.Clear
   WScript.Quit 1
 End If
 
-' Путь к start.bat — в той же папке, что и этот VBS-скрипт
-' (правка 574) WScript.ScriptFolder не работает в cscript — используем FSO
-' (правка 716) Ошибки создания FSO/получения папки ПРОВЕРЯЮТСЯ. Раньше
-' On Error Resume Next глушил их, и скрипт завершался с кодом 0, ничего не
-' запустив (пользователь не видел ничего).
+' Path to start.bat — in the same folder as this VBS script
+' (fix 574) WScript.ScriptFolder does not work in cscript — use FSO
+' (fix 716) Errors during FSO creation/folder resolution ARE CHECKED. Previously
+' On Error Resume Next suppressed them, and script exited with code 0 without
+' launching anything (user saw nothing).
 Dim fso, scriptDir, batPath
 Set fso = CreateObject("Scripting.FileSystemObject")
 If Err.Number <> 0 Then
@@ -51,9 +51,9 @@ If Len(scriptDir) = 0 Then
 End If
 batPath = scriptDir & "\start.bat"
 
-' Запуск: 0 = скрытое окно, False = не блокировать
-' (правка 570) cmd /c call "...\start.bat" :hidden — bat получит :hidden как $1.
-' Кавычки через Chr(34) сохраняют пути с пробелами; VBS завершается сразу.
+' Launch: 0 = hidden window, False = non-blocking
+' (fix 570) cmd /c call "...\start.bat" :hidden — bat will receive :hidden as $1.
+' Quotes via Chr(34) preserve paths with spaces; VBS exits immediately.
 shell.Run "cmd /c call " & Chr(34) & batPath & Chr(34) & " :hidden", 0, False
 If Err.Number <> 0 Then
   WScript.Echo "[start_hidden.vbs] Failed to run start.bat: " & Err.Description
@@ -61,6 +61,6 @@ If Err.Number <> 0 Then
   WScript.Quit 1
 End If
 
-' VBS завершается — cmd (скрытое окно) живёт дальше, Electron внутри него.
-' При закрытии Electron-окна main.js убьёт родителя (cmd.exe) через taskkill.
+' VBS exits — cmd (hidden window) continues running with Electron inside.
+' When Electron window is closed, main.js will kill parent (cmd.exe) via taskkill.
 WScript.Quit 0

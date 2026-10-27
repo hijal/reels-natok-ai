@@ -24,11 +24,11 @@ const MIME: Record<string, string> = {
 }
 
 /**
- * (правка 716) Путь внутри одного из корней?
+ * (fix 716) Is the path inside one of the roots?
  *
- * Проверка ПО СЕГМЕНТАМ, а не префиксом строки: прежний тест
- * `!rel.startsWith('..')` отвергал легитимный файл «..foo.mp4» внутри
- * разрешённой папки (rel === '..foo.mp4' начинается с '..').
+ * Check BY SEGMENTS, not by string prefix: previous test
+ * `!rel.startsWith('..')` rejected legitimate file "..foo.mp4" inside
+ * allowed folder (rel === '..foo.mp4' starts with '..').
  */
 export function isPathInsideRoots(resolved: string, roots: string[]): boolean {
   const target = path.resolve(resolved)
@@ -118,12 +118,12 @@ export async function serveLocalFile(
     return null
   }
 
-  // (правка 351) Имя без точки: lastIndexOf=-1 давал slice(-1) — «расширение»
-  // из последнего символа имени (могло случайно совпасть с MIME-ключом).
+  // (fix 351) Name without dot: lastIndexOf=-1 gave slice(-1) — "extension"
+  // from the last character of the name (could accidentally match a MIME key).
   const dotIdx = filename.lastIndexOf('.')
   const mime = (dotIdx >= 0 ? MIME[filename.slice(dotIdx).toLowerCase()] : undefined) || 'application/octet-stream'
-  // encodeURIComponent обязателен: имена с кириллицей не входят в ByteString,
-  // и Response() кидал бы TypeError на отдаче файла
+  // encodeURIComponent is required: non-ASCII / Cyrillic names are not in ByteString,
+  // and Response() would throw TypeError when serving the file
   const etag = `"local-${encodeURIComponent(filename)}-${size}-${mtime}"`
   const baseHeaders: Record<string, string> = {
     'Content-Type': mime,

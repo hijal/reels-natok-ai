@@ -6,7 +6,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom' // (правка 692) портал меню в body — поверх всех элементов UI
+import { createPortal } from 'react-dom' // (fix 692) menu portal in body — above all UI elements
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DownloadIcon,
@@ -32,7 +32,7 @@ import {
 import { cn } from '@/lib/utils'
 import { MetaDialog } from './meta-dialog'
 import { VideoTrimDialog } from './video-trim-dialog'
-// (правка 729) Полноэкранное сравнение двух видео «до/после».
+// (fix 729) Fullscreen comparison of two videos "before/after".
 import { VideoCompareDialog } from './video-compare-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,13 +49,13 @@ import { restoreFromMeta } from '@/lib/restore-from-meta'
 import { useUpscaleTarget } from '@/lib/upscale-target-store'
 import { useRefineTarget } from '@/lib/refine-target-store'
 import { useTileUpscaleTarget } from '@/lib/tile-upscale-target-store'
-import { useControlNetTarget } from '@/lib/controlnet-target-store' // (правка 497)
+import { useControlNetTarget } from '@/lib/controlnet-target-store' // (fix 497)
 import { useFpsTarget } from '@/lib/fps-store'
 import { useExtendTarget } from '@/lib/extend-target-store'
 import { useFaceRefineTarget } from '@/lib/face-refine-target-store'
 
 
-/** Custom MIME для drag&drop видео из галереи в поле загрузки Upscale. */
+/** Custom MIME for gallery video drag&drop into Upscale drop zone. */
 export const H3_VIDEO_DND_MIME = 'application/x-h3-video'
 
 /** Thumbnail width for gallery cards (server-side sharp/ffmpeg resize). */
@@ -67,9 +67,9 @@ export interface VideoGalleryFile {
   subfolder: string
   size?: number
   mtime?: number
-  /** Время генерации (секунды) из .meta.json sidecar — показывается на бейдже. */
+  /** Generation time (seconds) from .meta.json sidecar — shown on badge. */
   generationTime?: number | null
-  /** (правка 313) 'draft' → красный бейдж «Draft» на превью. */
+  /** (fix 313) 'draft' → red "Draft" badge on preview. */
   pipeline?: 'draft' | 'full' | null
 }
 
@@ -82,55 +82,55 @@ interface VideoGalleryGridProps {
 }
 
 /**
- * (правка 78) Пометки источников видео в галерее:
- * - «DLSS 5» — вывод neural-rendering моста (DLSS 5 Visual Enhancer):
- *   «<исходное>_DLSS5_<YYYYMMDD-HHMMSS-NNNNNN>.ext»
+ * (fix 78) Gallery video source markers:
+ * - "DLSS 5" — neural-rendering bridge output (DLSS 5 Visual Enhancer):
+ *   "<original>_DLSS5_<YYYYMMDD-HHMMSS-NNNNNN>.ext"
  *   (upscale/src/…/processor.py + core/naming.py, rename_mode=Auto);
- * - «Upscale» — вывод настоящего апскейла (RTX Video SDK, вкладка
- *   «Upscale»): «<исходное>_RTXVIDEO[_PREVIEW]_<stamp>-<uuid8>.ext»
+ * - "Upscale" — real upscale output (RTX Video SDK, "Upscale" tab):
+ *   "<original>_RTXVIDEO[_PREVIEW]_<stamp>-<uuid8>.ext"
  *   (upscale/src/upscale/video/processor.py:67-69).
- * Minimax-генерации так не называются — это надёжные маркеры.
- * (правка 233) «Extended» — вывод вкладки «Продление»:
- *   «Minimax_Studio_extclip_<i>_<stamp>.ext» (каждый клип) и
- *   «Minimax_Studio_combined*.mp4» (финальная склейка оригинала + клипы).
- * Маркеры уникальны и не пересекаются с обычными генерациями
- * (Minimax_Studio_<stamp>.mp4 — без подстроки extclip/combined).
- * (правка 312) «FPS» — вывод вкладки «FPS» (вставка кадров):
- *   «Minimax_Studio_fps_<stamp>.ext» (filename_prefix в fps-template.ts).
+ * Minimax generations are never named like this — these are reliable markers.
+ * (fix 233) "Extended" — "Extend" tab output:
+ *   "Minimax_Studio_extclip_<i>_<stamp>.ext" (each clip) and
+ *   "Minimax_Studio_combined*.mp4" (final stitch of original + clips).
+ * Markers are unique and don't clash with regular generations
+ * (Minimax_Studio_<stamp>.mp4 — without extclip/combined substring).
+ * (fix 312) "FPS" — "FPS" tab output (frame interpolation):
+ *   "Minimax_Studio_fps_<stamp>.ext" (filename_prefix in fps-template.ts).
  */
 export type VideoSourceBadge = 'dlss5' | 'upscale' | 'extended' | 'refined' | 'tileupscale' | 'fps' | 'edited' | 'controlnet' | 'facerefine' | 'draft'
 
 export function videoSourceBadge(file: Pick<VideoGalleryFile, 'filename'>): VideoSourceBadge | null {
-  // (правка 306) "Edited" — самый приоритетный: обрезанный файл всегда обрезанный,
-  // независимо от того, что в base name (combined, fps, refine и т.д.)
+  // (fix 306) "Edited" — highest priority: trimmed file is always trimmed,
+  // regardless of base name (combined, fps, refine, etc.)
   if (/_trim_\d/.test(file.filename)) return 'edited'
   if (/_DLSS5_\d{8}-\d{6}-\d{6}/.test(file.filename)) return 'dlss5'
   if (/_RTXVIDEO(?:_PREVIEW)?_\d{8}-\d{6}-[0-9a-f]{8}/.test(file.filename)) return 'upscale'
   if (/Minimax_Studio_extclip_\d+/i.test(file.filename) || /Minimax_Studio_combined/i.test(file.filename)) return 'extended'
   if (/Minimax_Studio_tileupscale/i.test(file.filename)) return 'tileupscale'
-  // (правка 497) «ControlNet» — вывод вкладки «ControlNet» (Fun ControlNet).
+  // (fix 497) "ControlNet" — "ControlNet" tab output (Fun ControlNet).
   if (/Minimax_Studio_controlnet/i.test(file.filename)) return 'controlnet'
-  // (правка 722) «Face Refine» — вывод вкладки «Face Refine».
+  // (fix 722) "Face Refine" — "Face Refine" tab output.
   if (/Minimax_Studio_facerefine/i.test(file.filename)) return 'facerefine'
   if (/Minimax_Studio_refine/i.test(file.filename)) return 'refined'
-  // (правка 312) «FPS» — вывод вкладки «FPS»: Minimax_Studio_fps_<stamp>.mp4.
+  // (fix 312) "FPS" — "FPS" tab output: Minimax_Studio_fps_<stamp>.mp4.
   if (/Minimax_Studio_fps/i.test(file.filename)) return 'fps'
   return null
 }
 
 /**
- * (правка 722) ЕДИНЫЙ бейдж на карточку.
+ * (fix 722) SINGLE badge per card.
  *
- * Раньше бейдж «Draft» рисовался ОТДЕЛЬНО от бейджа источника, оба в одной
- * точке (top-left). Для обрезанного драфта (`X_trim_0-2.mp4`) сайдкар
- * наследует `pipeline: 'draft'` от исходника, поэтому на превью висели
- * ДВА бейджа: жёлтый «Edited» и красный «Draft» — второй перекрывал первый,
- * и пользователь видел «Draft» вместо «Edited».
+ * Previously the "Draft" badge was drawn SEPARATELY from the source badge, both in one
+ * place (top-left). For a trimmed draft (`X_trim_0-2.mp4`), sidecar
+ * inherits `pipeline: 'draft'` from source, so on preview there were
+ * TWO badges: yellow "Edited" and red "Draft" — the second covered the first,
+ * and user saw "Draft" instead of "Edited".
  *
- * Теперь метка одна, с приоритетом источника: обрезка > DLSS > Upscale >
- * Extend > Tile > ControlNet > Refine > FPS > Draft. «Draft» показывается
- * ТОЛЬКО когда никакой другой источник не распознан (обычная генерация в
- * режиме «Драфт»). Тот же принцип, что у правки 508 для ControlNet.
+ * Now there is a single badge with source priority: trim > DLSS > Upscale >
+ * Extend > Tile > ControlNet > Refine > FPS > Draft. "Draft" is shown
+ * ONLY when no other source is identified (regular generation in
+ * "Draft" mode). Same principle as fix 508 for ControlNet.
  */
 export function videoGalleryBadge(
   file: Pick<VideoGalleryFile, 'filename' | 'pipeline'>,
@@ -162,24 +162,24 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
   loading = false,
   onRefresh,
   onDeleteFile,
-  emptyHint = 'Пока нет видео',
+  emptyHint = 'No videos yet',
 }: VideoGalleryGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [metaIndex, setMetaIndex] = useState<number | null>(null)
-  /** Удаление, ожидающее подтверждения (диалог «Удалить видео?»). */
+  /** Deletion awaiting confirmation ("Delete video?" dialog). */
   const [pendingDelete, setPendingDelete] = useState<{ filename: string; subfolder: string } | null>(null)
-  // (правка 272) Индекс карточки, у которой открыто меню действий (MoreVertical)
+  // (fix 272) Index of card whose action menu (MoreVertical) is open
   const [actionsOpenIndex, setActionsOpenIndex] = useState<number | null>(null)
-  // (правка 305) Мини-видеоредактор: файл для обрезки
+  // (fix 305) Mini video editor: file for trimming
   const [trimFile, setTrimFile] = useState<VideoGalleryFile | null>(null)
   const [trimOpen, setTrimOpen] = useState(false)
-  // (правка 729) Сравнение двух видео: ключи выбранных карточек (Ctrl+клик)
-  // и пара файлов, открытая в полноэкранном диалоге.
+  // (fix 729) Two-video comparison: keys of selected cards (Ctrl+click)
+  // and file pair open in fullscreen dialog.
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [compare, setCompare] = useState<{ a: VideoGalleryFile; b: VideoGalleryFile } | null>(null)
 
-  /** Ctrl+клик (⌘ на Mac): выбрать/снять. Больше двух не держим — третий
-   *  вытесняет самый первый (FIFO), чтобы не блокировать выбор на полпути. */
+  /** Ctrl+click (⌘ on Mac): select/unselect. Hold at most two — third
+   *  replaces the first (FIFO) so selection is never stuck. */
   const toggleSelect = useCallback((file: VideoGalleryFile) => {
     const key = `${file.subfolder}/${file.filename}`
     setSelectedKeys((prev) => {
@@ -189,7 +189,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
     })
   }, [])
 
-  /** Выбранные файлы могли исчезнуть (удаление/обновление списка) — чистим. */
+  /** Selected files may have disappeared (deleted/list updated) — prune. */
   useEffect(() => {
     setSelectedKeys((prev) => {
       const next = prev.filter((k) => files.some((f) => `${f.subfolder}/${f.filename}` === k))
@@ -205,8 +205,8 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
     setCompare({ a, b })
   }, [selectedKeys, files])
 
-  /* (правка 730) Esc — снять выделение, Enter (при двух выбранных) — сравнение.
-     Пока открыт какой-нибудь диалог, клавиши не трогаем: ими управляет диалог. */
+  /* (fix 730) Esc — clear selection, Enter (when two selected) — compare.
+     While any dialog is open, do not touch keys: handled by dialog. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (compare || pendingDelete || trimOpen) return
@@ -221,7 +221,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [compare, pendingDelete, trimOpen, selectedKeys, openCompare])
-  // (правка 272) Клик вне меню → закрыть (глобальный listener на document)
+  // (fix 272) Click outside menu -> close (global listener on document)
   useEffect(() => {
     if (actionsOpenIndex === null) return
     const onDocClick = (e: MouseEvent) => {
@@ -233,11 +233,11 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [actionsOpenIndex])
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
-  // (правка 692) Ref к кнопке «⋮» каждой карточки — для позиционирования portaled-меню.
+  // (fix 692) Ref to each card's "⋮" button — for positioning portaled menu.
   const actionBtnRefs = useRef<(HTMLButtonElement | null)[]>([])
-  // (правка 353) При смене списка обрезаем/сбрасываем ref-массив: stale-
-  // элементы удалённых карточек продолжали жить в videoRefs и на hover
-  // по старому индексу мог проигрываться чужой <video>.
+  // (fix 353) Truncate/reset ref array when list changes: stale elements
+  // of deleted cards remained in videoRefs and on hover on old index
+  // another video could play.
   useEffect(() => {
     videoRefs.current.length = files.length
   }, [files])
@@ -257,51 +257,51 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
     return byName
   }, [durations])
 
-  /* ── «Отправить на апскейл»: кладём цель в store и переключаем вкладку.
-   *    UpscaleView заберёт её и импортирует видео через сервер
-   *    (/api/upscale/import) — браузер в цикле не участвует. ── */
+  /* ── "Send to Upscale": put target in store and switch tab.
+   *    UpscaleView will pick it up and import video via server
+   *    (/api/upscale/import) — browser is not in loop. ── */
   const sendToUpscale = useCallback((file: VideoGalleryFile) => {
     useUpscaleTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-upscale'))
   }, [])
 
-  /* ── «В Refine»: генеративный v2v-апскейл — тот же паттерн. ── */
+  /* ── "To Refine": generative v2v upscale — same pattern. ── */
   const sendToRefine = useCallback((file: VideoGalleryFile) => {
     useRefineTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-refine'))
   }, [])
 
-  /* ── «Tile Upscale»: tiled latent upscale — кладём цель в store + переключаем вкладку. ── */
+  /* ── "Tile Upscale": tiled latent upscale — target into store + switch tab. ── */
   const sendToTileUpscale = useCallback((file: VideoGalleryFile) => {
     useTileUpscaleTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-tile-upscale'))
   }, [])
 
-  /* ── «Face Refine»: перерисовка мелких лиц — кладём цель в store + переключаем вкладку. ── */
+  /* ── "Face Refine": redraw small faces — target into store + switch tab. ── */
   const sendToFaceRefine = useCallback((file: VideoGalleryFile) => {
     useFaceRefineTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-face-refine'))
   }, [])
 
-  /* ── (правка 497) «ControlNet»: видео как контрольный ролик (движение) — тот же паттерн. ── */
+  /* ── (fix 497) "ControlNet": video as control clip (motion) — same pattern. ── */
   const sendToControlNet = useCallback((file: VideoGalleryFile) => {
     useControlNetTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-controlnet'))
   }, [])
 
-  /* ── «FPS»: frame interpolation (RIFE/FILM VFI) — кладём цель в store + переключаем вкладку. ── */
+  /* ── "FPS": frame interpolation (RIFE/FILM VFI) — target into store + switch tab. ── */
   const sendToFps = useCallback((file: VideoGalleryFile) => {
     useFpsTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-fps'))
   }, [])
 
-  /* ── (правка 369) «Продлить»: источник для вкладки «Продление» — тот же паттерн. ── */
+  /* ── (fix 369) "Extend": source for "Extend" tab — same pattern. ── */
   const sendToExtend = useCallback((file: VideoGalleryFile) => {
     useExtendTarget.getState().setTarget({ filename: file.filename, subfolder: file.subfolder })
     window.dispatchEvent(new CustomEvent('h3:goto-extend'))
   }, [])
 
-  /* ── Delete handler (оптимистичное обновление в useVideoGallery) ── */
+  /* ── Delete handler (optimistic update in useVideoGallery) ── */
   const handleDelete = useCallback(
     async (filename: string, subfolder: string) => {
       if (!onDeleteFile) return
@@ -310,7 +310,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
     [onDeleteFile],
   )
 
-  /** Подтвердить отложенное удаление (кнопка «Удалить» или Enter). */
+  /** Confirm pending deletion ("Delete" button or Enter). */
   const confirmPendingDelete = useCallback(async () => {
     if (!pendingDelete) return
     const { filename, subfolder } = pendingDelete
@@ -348,39 +348,39 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <Badge variant="secondary" className="text-xs shrink-0">
-            {files.length} видео
+            {files.length} {files.length === 1 ? 'video' : 'videos'}
           </Badge>
-          {/* (правка 729) Подсказка о сравнении: Ctrl+клик по двум карточкам */}
+          {/* (fix 729) Comparison hint: Ctrl+click two cards */}
           {selectedKeys.length === 0 ? (
             <span className="hidden sm:inline text-[10px] text-muted-foreground/70 truncate">
-              Ctrl+клик по двум видео — сравнить
+              Ctrl+click two videos to compare
             </span>
           ) : (
             <span className="text-[10px] text-muted-foreground truncate">
               {selectedKeys.length === 1
-                ? 'Выбрано 1 из 2 — выберите ещё одно'
-                : 'Можно сравнить'}
+                ? '1 of 2 selected — select one more'
+                : 'Ready to compare'}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* (правка 729) Кнопка «Сравнить» появляется, когда выбраны ровно два видео */}
+          {/* (fix 729) "Compare" button appears when exactly two videos are selected */}
           {selectedKeys.length === 2 && (
             <Button
               size="sm"
               onClick={openCompare}
               className="h-7 gap-1.5 px-2.5 text-xs bg-cyan-500 hover:bg-cyan-400 text-black font-semibold"
-              title="Открыть сравнение до/после (Enter)"
+              title="Open before/after comparison (Enter)"
             >
               <ArrowLeftRightIcon className="w-3.5 h-3.5" />
-              Сравнить
+              Compare
             </Button>
           )}
           {selectedKeys.length > 0 && (
             <button
               onClick={() => setSelectedKeys([])}
               className="p-1.5 rounded-lg hover:bg-[var(--surface-3)] text-muted-foreground transition-colors"
-              title="Сбросить выбор (Esc)"
+              title="Clear selection (Esc)"
             >
               <XIcon className="w-3.5 h-3.5" />
             </button>
@@ -389,7 +389,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
             <button
               onClick={() => onRefresh()}
               className="p-1.5 rounded-lg hover:bg-[var(--surface-3)] text-muted-foreground transition-colors"
-              title="Обновить"
+              title="Refresh"
             >
               <RefreshCcwIcon className="w-3.5 h-3.5" />
             </button>
@@ -408,12 +408,12 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
               exit={{ opacity: 0, scale: 0.9 }}
               className={cn(
                 'group relative aspect-video rounded-lg border border-border bg-[var(--surface-2)] cursor-pointer transition-shadow',
-                // (правка 729) Подсветка выбранных для сравнения
+                // (fix 729) Highlight selected for comparison
                 selectedKeys.includes(`${file.subfolder}/${file.filename}`) &&
                   'ring-2 ring-cyan-400 border-cyan-400/60 shadow-[0_0_14px_rgba(34,211,238,0.35)]',
               )}
               onClick={(e) => {
-                // (правка 729) Ctrl/⌘+клик — выбор для сравнения, обычный клик — лайтбокс.
+                // (fix 729) Ctrl/⌘+click — select for comparison, normal click — lightbox.
                 if (e.ctrlKey || e.metaKey) {
                   e.preventDefault()
                   toggleSelect(file)
@@ -421,18 +421,18 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                 }
                 setLightboxIndex(index)
               }}
-              // (правка 388) draggable потерялся при рефакторинге меню (272/379):
-              // без атрибута браузер вообще не стартует HTML5-DnD, и ломался
-              // drag&drop карточек ВО ВСЕ цели (Upscale/Refine/FPS/Tile/Продление/
-              // папки галереи). Обработчик ниже лишь заполняет dataTransfer.
+              // (fix 388) draggable lost during menu refactoring (272/379):
+              // without attribute browser does not start HTML5 DnD at all, breaking
+              // drag&drop of cards TO ALL targets (Upscale/Refine/FPS/Tile/Extend/
+              // gallery folders). Handler below just populates dataTransfer.
               draggable
               onDragStartCapture={(e) => {
-                // Drag&drop в поле загрузки Upscale: отдаём имя файла из
-                // общей папки output (а не локальный File) — upscale-view
-                // импортирует его на сервере (/api/upscale/import).
-                // (правка 93) 'copyMove': цель в галерее папок объявляет
-                // dropEffect 'move' — при effectAllowed 'copy' браузер
-                // считает их несовместимыми и событие drop НЕ наступает.
+                // Drag&drop to Upscale drop zone: send filename from
+                // common output folder (not local File) — upscale-view
+                // imports it on server (/api/upscale/import).
+                // (fix 93) 'copyMove': target in folder gallery declares
+                // dropEffect 'move' — with effectAllowed 'copy' browser
+                // considers them incompatible and drop event does NOT fire.
                 e.dataTransfer.setData(
                   H3_VIDEO_DND_MIME,
                   JSON.stringify({ filename: file.filename, subfolder: file.subfolder }),
@@ -458,9 +458,9 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                 onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0; }}
               />
 
-              {/* (правка 729) Метка выбранного для сравнения: A — «до», B — «после».
-                  Порядок выбора задаёт сторону (первый = A), поэтому метка
-                  подписана буквой, а не просто галочкой. */}
+              {/* (fix 729) Comparison selection marker: A — "before", B — "after".
+                  Selection order determines side (first = A), so label
+                  shows letter rather than just checkmark. */}
               {selectedKeys.includes(`${file.subfolder}/${file.filename}`) && (() => {
                 const selIndex = selectedKeys.indexOf(`${file.subfolder}/${file.filename}`)
                 return (
@@ -472,7 +472,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                           ? 'bg-cyan-500/85 text-black border-cyan-100/80'
                           : 'bg-fuchsia-500/85 text-black border-fuchsia-100/80',
                       )}
-                      title={selIndex === 0 ? 'A — «до» (слева)' : 'B — «после» (справа)'}
+                      title={selIndex === 0 ? 'A — "before" (left)' : 'B — "after" (right)'}
                     >
                       {selIndex === 0 ? 'A' : 'B'}
                     </span>
@@ -480,11 +480,11 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                 )
               })()}
 
-              {/* (правка 272) Одна кнопка в правом верхнем углу → меню действий.
-                  Hover-оверлей больше не перекрывает всё превью: превью видно
-                  полностью, а действия открываются по клику на «⋮».
-                  (правка 379) Открытое меню НЕ гасим вместе с hover-обёрткой:
-                  раньше уход курсора с карточки делал opacity-0 и самому меню. */}
+              {/* (fix 272) Single button in top-right corner -> actions menu.
+                  Hover overlay no longer covers whole preview: preview is
+                  fully visible, actions opened by clicking "⋮".
+                  (fix 379) Open menu is NOT faded with hover wrapper:
+                  previously mouse leaving card gave opacity-0 to menu as well. */}
               <div
                 data-video-actions-menu
                 className={`absolute top-1.5 right-1.5 transition-opacity z-10 ${
@@ -501,31 +501,30 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     setActionsOpenIndex((prev) => (prev === index ? null : index))
                   }}
                   className="p-1.5 rounded-lg bg-black/60 backdrop-blur-sm hover:bg-black/80 text-white transition-colors"
-                  title="Действия"
+                  title="Actions"
                 >
                   <MoreVerticalIcon className="w-4 h-4" />
                 </button>
                 {(actionsOpenIndex === index && actionBtnRefs.current[index]) && (() => {
-                  /* (правка 692, доп. правка 700) Меню действий через createPortal в
-                     document.body. Portal + fixed + z-[300] — поверх UI по z-индексу.
+                  /* (fix 692, add. fix 700) Action menu via createPortal in
+                     document.body. Portal + fixed + z-[300] — above UI by z-index.
 
-                     (правка 700) РЕАЛЬНАЯ причина перекрытия: position:fixed-потомок
-                     ОБРЕЗАЕТСЯ stacking-context предка — а AnimatePresence mode="popLayout"
-                     ставит transform на обёртку грида (создаёт stacking context). Поэтому
-                     левая панель (сосед по DOM) рисовалась ПОВЕРХ меню при любом z-index.
-                     Решение независимо от z: открываем меню НАЛЕВО (якорь — правый край
-                     кнопки). Кнопка «⋮» сидит в правом верхнем углу карточки, так что
-                     меню целиком остаётся в правой зоне галереи и физически НЕ МОЖЕТ
-                     залезть под левую панель при любом размере окна. top/left клампим
-                     к вьюпорту, чтобы не вылезло за нижний/левый край. */
+                     (fix 700) REAL cause of overlap: position:fixed child
+                     is CLIPPED by ancestor stacking context — AnimatePresence mode="popLayout"
+                     sets transform on grid wrapper (creates stacking context). Hence
+                     left panel (DOM sibling) was drawn ON TOP OF menu regardless of z-index.
+                     Solution independent of z: open menu to the LEFT (anchor is right edge
+                     of button). Button "⋮" is in top right corner of card, so menu
+                     remains entirely in right zone of gallery and cannot physically
+                     slip under left panel at any window size. Clamped top/left to viewport. */
                   const _btn = actionBtnRefs.current[index]!
                   const _rect = _btn.getBoundingClientRect()
                   const _MENU_W = 224 // 14rem
-                  const _MENU_H = 560 // запас: реальный рост ~470px, кламп влезает
+                  const _MENU_H = 560 // safety margin: real height ~470px
                   const _top = Math.max(4, Math.min(_rect.bottom + 4, window.innerHeight - _MENU_H - 4))
-                  // Меню занимает [left .. left+_MENU_W]; правый край = правый край кнопки.
+                  // Menu occupies [left .. left+_MENU_W]; right edge = right edge of button.
                   let _left = _rect.right - _MENU_W
-                  if (_left < 4) _left = Math.max(4, _rect.left) // слишком узко — сдвигаем вправо
+                  if (_left < 4) _left = Math.max(4, _rect.left) // too narrow — shift right
                   return createPortal(
                   <div
                     data-video-actions-menu
@@ -537,75 +536,69 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* (правка 371 сделала меню сеткой 5×2 из иконок — на практике
-                       оно схлопывалось в крошечный штраф (abspos shrink-to-fit
-                       зажимался шириной обёртки кнопки «⋮», колонки
-                       minmax(0,1fr) схлопываются в ноль) и значки не читались.
-                       (правка 380) ОТКАТ к версии с надписями: вертикальный
-                       список «иконка + подпись», явная ширина w-56 — не зависит
-                       от контекста позиционирования. Тултипы не нужны: подпись
-                       видна всегда.
-                       (правка 717) Комментарий стоял ГОЛЫМ блок-комментарием —
-                       в JSX это не комментарий, а текст: он печатался в меню
-                       поверх пунктов. В JSX комментарий оборачивается в
-                       фигурные скобки. */}
+                    {/* (fix 371 made menu 5×2 icon grid — in practice
+                       it collapsed to tiny width and icons were unreadable.
+                       (fix 380) REVERT to version with labels: vertical
+                       list "icon + label", explicit width w-56 — independent
+                       of positioning context. Tooltips not needed: label always visible.
+                       (fix 717) Comment was bare block comment in JSX. */}
                     <a
                       href={file.url}
                       download={file.filename}
                       onClick={(e) => { e.stopPropagation(); setActionsOpenIndex(null) }}
-                      title="Скачать"
+                      title="Download"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors"
                     >
                       <DownloadIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
-                      Скачать
+                      Download
                     </a>
                     <button
                       onClick={() => { setMetaIndex(index); setActionsOpenIndex(null) }}
-                      title="Метаданные"
+                      title="Metadata"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <InfoIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
-                      Метаданные
+                      Metadata
                     </button>
                     <button
                       onClick={() => {
                         void restoreFromMeta(`${file.subfolder}/${file.filename}`)
                         setActionsOpenIndex(null)
                       }}
-                      title="Повторить генерацию"
+                      title="Rerun generation"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <RotateCcwIcon className="w-4 h-4 shrink-0 text-cyan-400" />
-                      Повторить генерацию
+                      Rerun generation
                     </button>
                     <button
                       onClick={() => {
                         sendToUpscale(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="Отправить на апскейл (DLSS 5)"
+                      title="Send to upscale (DLSS 5)"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <SparklesIcon className="w-4 h-4 shrink-0 text-violet-400" />
-                      Апскейл (DLSS 5)
+                      Upscale (DLSS 5)
                     </button>
                     <button
                       onClick={() => {
                         sendToRefine(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="В Refine (v2v-апскейл)"
+                      title="To Refine (v2v upscale)"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <Wand2Icon className="w-4 h-4 shrink-0 text-emerald-400" />
-                      Рефайн (v2v)
+                      Refine (v2v)
                     </button>
                     <button
                       onClick={() => {
                         sendToTileUpscale(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="В Tile Upscale"
+                      title="To Tile Upscale"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <Grid3x3Icon className="w-4 h-4 shrink-0 text-pink-400" />
@@ -616,7 +609,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                         sendToFaceRefine(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="Перерисовать лица (вкладка «Face Refine»)"
+                      title="Redraw faces ('Face Refine' tab)"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <ScanFaceIcon className="w-4 h-4 shrink-0 text-lime-400" />
@@ -627,33 +620,33 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                         sendToControlNet(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="Использовать как контрольное видео (вкладка «ControlNet»)"
+                      title="Use as control video ('ControlNet' tab)"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <WaypointsIcon className="w-4 h-4 shrink-0 text-orange-400" />
-                      ControlNet (движение)
+                      ControlNet (motion)
                     </button>
                     <button
                       onClick={() => {
                         sendToFps(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="Увеличить FPS"
+                      title="Increase FPS"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <GaugeIcon className="w-4 h-4 shrink-0 text-cyan-400" />
-                      Увеличить FPS
+                      Increase FPS
                     </button>
                     <button
                       onClick={() => {
                         sendToExtend(file)
                         setActionsOpenIndex(null)
                       }}
-                      title="Продлить"
+                      title="Extend"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <FilmIcon className="w-4 h-4 shrink-0 text-cyan-400" />
-                      Продлить
+                      Extend
                     </button>
                     <button
                       onClick={() => {
@@ -661,11 +654,11 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                         setTrimOpen(true)
                         setActionsOpenIndex(null)
                       }}
-                      title="Обрезать"
+                      title="Trim"
                       className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-foreground hover:bg-[var(--surface-3)] transition-colors text-left"
                     >
                       <ScissorsIcon className="w-4 h-4 shrink-0 text-amber-400" />
-                      Обрезать
+                      Trim
                     </button>
                     {onDeleteFile && (
                       <button
@@ -673,21 +666,21 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                           setPendingDelete({ filename: file.filename, subfolder: file.subfolder })
                           setActionsOpenIndex(null)
                         }}
-                        title="Удалить"
+                        title="Delete"
                         className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs text-red-400 hover:bg-red-500/10 transition-colors text-left"
                       >
                         <Trash2Icon className="w-4 h-4 shrink-0" />
-                        Удалить
+                        Delete
                       </button>
                     )}
                   </div>, document.body)
                   })()}
               </div>
 
-              {/* (правки 78, 233) Пометка источника — результат DLSS 5 / апскейла
-                  / продления. Всегда видна, не только при наведении.
-                  (правка 722) Метка ОДНА: videoGalleryBadge отдаёт источник
-                  с приоритетом, «Draft» — только если другого источника нет. */}
+              {/* (fixes 78, 233) Source marker — result of DLSS 5 / upscale
+                  / extension. Always visible, not just on hover.
+                  (fix 722) SINGLE badge: videoGalleryBadge returns source
+                  by priority, "Draft" only if no other source exists. */}
               {(() => {
                 const badge = videoGalleryBadge(file)
                 if (!badge) return null
@@ -695,7 +688,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300 border border-cyan-400/40"
-                      title="Результат апскейла (RTX Video SDK, вкладка «Upscale»)"
+                      title="Upscale result (RTX Video SDK, 'Upscale' tab)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Maximize2Icon className="w-2.5 h-2.5" />
@@ -707,7 +700,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300 border border-fuchsia-400/40"
-                      title="Результат апскейла (вкладка «Upscale»)"
+                      title="Upscale result ('Upscale' tab)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <SparklesIcon className="w-2.5 h-2.5" />
@@ -715,13 +708,13 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // «Refined» — генеративный апскейл вкладки «Refine»:
+                // "Refined" — generative upscale of "Refine" tab:
                 // Minimax_Studio_refine_<stamp>.mp4.
                 if (badge === 'refined') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300 border border-emerald-400/40"
-                      title="Генеративный апскейл (вкладка «Refine», v2v)"
+                      title="Generative upscale ('Refine' tab, v2v)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Wand2Icon className="w-2.5 h-2.5" />
@@ -729,12 +722,12 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // «TileUpscale» — tiled latent upscale (вкладка «Tile Upscale»).
+                // "TileUpscale" — tiled latent upscale ("Tile Upscale" tab).
                 if (badge === 'tileupscale') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-pink-300 border border-pink-400/40"
-                      title="Tiled latent upscale (вкладка «Tile Upscale»)"
+                      title="Tiled latent upscale ('Tile Upscale' tab)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Grid3x3Icon className="w-2.5 h-2.5" />
@@ -742,18 +735,18 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // (правка 497) «ControlNet» — генерация по контрольному видео
-                // (вкладка «ControlNet»): Minimax_Studio_controlnet_<stamp>.mp4.
-                // (правка 508) Двухпроходный режим (pipeline='full' в мете) —
-                // бейдж «ControlNet x2».
+                // (fix 497) "ControlNet" — generation using control video
+                // ("ControlNet" tab): Minimax_Studio_controlnet_<stamp>.mp4.
+                // (fix 508) Two-pass mode (pipeline='full' in meta) —
+                // badge "ControlNet x2".
                 if (badge === 'controlnet') {
                   const twoPass = file.pipeline === 'full'
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-orange-300 border border-orange-400/40"
                       title={twoPass
-                        ? 'Генерация по контрольному видео, два прохода (вкладка «ControlNet»)'
-                        : 'Генерация по контрольному видео (вкладка «ControlNet»)'}
+                        ? 'Generation using control video, two passes ("ControlNet" tab)'
+                        : 'Generation using control video ("ControlNet" tab)'}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <WaypointsIcon className="w-2.5 h-2.5" />
@@ -761,14 +754,14 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // (правка 312) «FPS» — вывод вкладки «FPS»:
-                // Minimax_Studio_fps_<stamp>.mp4 (RIFE/FILM VFI, вставка кадров).
-                // Фиолетовый — чтобы не путать с cyan-маркерами Upscale/Extended.
+                // (fix 312) "FPS" — "FPS" tab output:
+                // Minimax_Studio_fps_<stamp>.mp4 (RIFE/FILM VFI, frame interpolation).
+                // Violet — not to confuse with cyan Upscale/Extended markers.
                 if (badge === 'fps') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-violet-300 border border-violet-400/40"
-                      title="Увеличение FPS (вкладка «FPS», вставка кадров)"
+                      title="FPS boost ('FPS' tab, frame interpolation)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <GaugeIcon className="w-2.5 h-2.5" />
@@ -776,13 +769,13 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // (правка 233) «Extended» — вывод вкладки «Продление»:
-                // Minimax_Studio_extclip_<i> (клип) / Minimax_Studio_combined (склейка).
+                // (fix 233) "Extended" — "Extend" tab output:
+                // Minimax_Studio_extclip_<i> (clip) / Minimax_Studio_combined (stitch).
                 if (badge === 'extended') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300 border border-cyan-400/40"
-                      title="Результат продления (вкладка «Продление»)"
+                      title="Extension result ('Extend' tab)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <FilmIcon className="w-2.5 h-2.5" />
@@ -790,13 +783,13 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // (правка 722) «Face Refine» — вывод вкладки «Face Refine»:
+                // (fix 722) "Face Refine" — "Face Refine" tab output:
                 // Minimax_Studio_facerefine_<stamp>.mp4.
                 if (badge === 'facerefine') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-lime-300 border border-lime-400/40"
-                      title="Перерисованные лица (вкладка «Face Refine»)"
+                      title="Redrawn faces ('Face Refine' tab)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <ScanFaceIcon className="w-2.5 h-2.5" />
@@ -804,12 +797,12 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // (правка 305) «Edited» — результат обрезки видео.
+                // (fix 305) "Edited" — video trim result.
                 if (badge === 'edited') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-400/40"
-                      title="Отредактировано (обрезка)"
+                      title="Edited (trim)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <ScissorsIcon className="w-2.5 h-2.5" />
@@ -817,16 +810,16 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     </span>
                   )
                 }
-                // (правка 313) Красный бейдж «Draft» — однопроходная генерация
-                // (pipeline='draft' в .meta.json). Показывается ТОЛЬКО когда
-                // другого источника нет (videoGalleryBadge): у обрезанного
-                // драфта приоритет у «Edited», у ControlNet — у «ControlNet»
-                // (правка 508), у Refine/FPS/Extend/Tile — у их бейджей.
+                // (fix 313) Red badge "Draft" — single-pass generation
+                // (pipeline='draft' in .meta.json). Shown ONLY when
+                // no other source is detected (videoGalleryBadge): trimmed
+                // draft prefers "Edited", ControlNet prefers "ControlNet"
+                // (fix 508), Refine/FPS/Extend/Tile prefer their own badges.
                 if (badge === 'draft') {
                   return (
                     <span
                       className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-semibold text-red-300 border border-red-400/40"
-                      title="Драфт: один проход в черновом разрешении (апгрейд — вкладка «Refine»)"
+                      title="Draft: single pass in draft resolution (upgrade in 'Refine' tab)"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <ZapIcon className="w-2.5 h-2.5" />
@@ -837,18 +830,17 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
               })()}
 
               {/* Filename + duration badge.
-                  (правка 522) Убран градиент-затемнение снизу — пользователь
-                  просил убрать во всех режимах. Текст остаётся на тонком
-                  полупрозрачном фоне без градиента. */}
+                  (fix 522) Bottom dark gradient removed by user request
+                  in all modes. Text stays on subtle semi-transparent background. */}
               <div className="absolute bottom-0 left-0 right-0 rounded-b-lg p-1.5">
                 <div className="flex items-center justify-between gap-1">
                   <p className="text-[10px] text-white/70 truncate font-mono">
                     {String(files.length - index).padStart(3, '0')}
                   </p>
                   {(() => {
-                    // Время генерации: приоритет — значение из метаданных
-                    // (.meta.json → generation_time, то же, что в диалоге
-                    // метаданных); фолбэк — клиентская оценка useGenDurations.
+                    // Generation time: priority — value from metadata
+                    // (.meta.json → generation_time, same as in metadata dialog);
+                    // fallback — client-side estimation useGenDurations.
                     const metaSec = typeof file.generationTime === 'number' && file.generationTime > 0
                       ? file.generationTime
                       : null
@@ -862,7 +854,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
                     return (
                       <span
                         className="text-[10px] text-cyan-300/80 font-medium shrink-0"
-                        title="Время генерации (из метаданных)"
+                        title="Generation time (from metadata)"
                       >
                         {label}
                       </span>
@@ -875,9 +867,9 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
         </AnimatePresence>
       </div>
 
-      {/* Lightbox: onDelete вызывает удаление напрямую — у лайтбокса есть
-          собственное inline-подтверждение, второй диалог здесь не нужен
-          (раньше было двойное подтверждение). */}
+      {/* Lightbox: onDelete triggers deletion directly — lightbox has
+          its own inline confirmation, no second dialog needed here
+          (previously had double confirmation). */}
       {lightboxIndex !== null && (
         <VideoLightbox
           files={files.map((f) => ({ url: f.url, filename: f.filename, subfolder: f.subfolder }))}
@@ -896,7 +888,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
         />
       )}
 
-      {/* (правка 305) Мини-видеоредактор — обрезка видео */}
+      {/* (fix 305) Mini video editor — video trimming */}
       <VideoTrimDialog
         file={trimFile}
         open={trimOpen}
@@ -904,7 +896,7 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
         onDone={() => onRefresh?.()}
       />
 
-      {/* (правка 729) Полноэкранное сравнение двух выбранных видео */}
+      {/* (fix 729) Fullscreen comparison of two selected videos */}
       {compare && (
         <VideoCompareDialog
           a={compare.a}
@@ -927,16 +919,15 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Trash2Icon className="w-4 h-4 text-red-400" />
-              Удалить видео?
+              Delete video?
             </DialogTitle>
             <DialogDescription>
-              Файл «{pendingDelete?.filename}» и его метаданные будут удалены
-              безвозвратно. Это действие нельзя отменить.
+              File &quot;{pendingDelete?.filename}&quot; and its metadata will be permanently deleted. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 mt-1">
             <Button variant="outline" size="sm" onClick={() => setPendingDelete(null)}>
-              Отмена
+              Cancel
             </Button>
             <Button
               variant="destructive"
@@ -945,11 +936,11 @@ export const VideoGalleryGrid = memo(function VideoGalleryGrid({
               onClick={() => void confirmPendingDelete()}
             >
               <Trash2Icon className="w-3.5 h-3.5" />
-              Удалить
+              Delete
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground/50 text-right -mt-1">
-            Enter — удалить · Esc — отмена
+            Enter — delete · Esc — cancel
           </p>
         </DialogContent>
       </Dialog>

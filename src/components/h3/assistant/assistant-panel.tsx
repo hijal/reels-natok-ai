@@ -1,18 +1,18 @@
 'use client'
 
 /**
- * AssistantPanel — правая боковая панель ассистента (правка 442).
+ * AssistantPanel — right sidebar for the assistant (edit 442).
  *
- * Монтируется на вкладках «Генерация» и «Продление» (режим чатов жёстко
- * привязан к вкладке через проп panelMode у AssistantView). Ширина
- * тянется за левую границу (persist), кнопка в шапке чата сворачивает
- * панель в узкий рейл с вертикальной подписью.
+ * Mounted on the "Generate" and "Extend" tabs (chat mode is strictly
+ * bound to the tab via the panelMode prop of AssistantView). Width
+ * can be dragged by the left border (persist), button in the chat header collapses
+ * the panel into a narrow rail with a vertical label.
  *
- * В свёрнутом состоянии AssistantView НЕ монтируется: его эффекты
- * (poll /api/llm/status) не работают зря, а стрим и черновик ввода живут
- * вне React (assistant-stream.ts / assistant-draft-store) и переживают
- * сворачивание. «Улучшить промпт» разворачивает панель через стор
- * до монтирования — pendingImprove подхватывается эффектом view.
+ * In the collapsed state, AssistantView is NOT mounted: its effects
+ * (poll /api/llm/status) do not run unnecessarily, while the stream and input draft live
+ * outside React (assistant-stream.ts / assistant-draft-store) and survive
+ * collapsing. "Enhance prompt" expands the panel via the store
+ * prior to mounting — pendingImprove is picked up by the view's effect.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { ChevronLeftIcon } from 'lucide-react'
@@ -26,12 +26,12 @@ export function AssistantPanel({ mode }: { mode: AssistantChatMode }) {
   const setWidth = useAssistantPanel((s) => s.setWidth)
   const setCollapsed = useAssistantPanel((s) => s.setCollapsed)
 
-  // Persist-стор (width/collapsed) отличается между SSR и первым клиентским
-  // рендером — до монтирования рисуем нейтральную заглушку дефолтной ширины.
+  // Persist store (width/collapsed) differs between SSR and initial client
+  // render — render a neutral default-width placeholder until mounted.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
-  /** Resize за левую границу: ширина = innerWidth − clientX (панель у правого края). */
+  /** Resize via left border: width = innerWidth − clientX (panel at right edge). */
   const onResizeStart = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
@@ -65,7 +65,7 @@ export function AssistantPanel({ mode }: { mode: AssistantChatMode }) {
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          title="Развернуть ассистента"
+          title="Expand assistant"
           className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-amber-300 hover:bg-[var(--surface-2)] transition-colors"
         >
           <ChevronLeftIcon className="w-4 h-4" />
@@ -74,7 +74,7 @@ export function AssistantPanel({ mode }: { mode: AssistantChatMode }) {
           className="text-[10px] tracking-[0.12em] uppercase text-muted-foreground/60 select-none"
           style={{ writingMode: 'vertical-rl' }}
         >
-          Ассистент
+          Assistant
         </span>
       </div>
     )
@@ -85,10 +85,10 @@ export function AssistantPanel({ mode }: { mode: AssistantChatMode }) {
       className="relative shrink-0 border-l border-border bg-[var(--surface-1)] flex flex-col min-h-0"
       style={{ width }}
     >
-      {/* Resize-ручка: полоса у левой границы, подсвечивается при hover/drag */}
+      {/* Resize handle: strip on left border, highlighted on hover/drag */}
       <div
         onMouseDown={onResizeStart}
-        title="Тяните, чтобы изменить ширину панели"
+        title="Drag to resize panel"
         className="absolute -left-1 top-0 bottom-0 w-2 cursor-col-resize z-20 group"
       >
         <div className="absolute left-[3px] top-0 bottom-0 w-[2px] rounded-full bg-transparent group-hover:bg-amber-500/50 group-active:bg-amber-500/70 transition-colors" />

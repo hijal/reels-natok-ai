@@ -21,9 +21,9 @@ yarn-error.log*
 # env files - keep .env (portable config), uncomment to ignore:
 # .env
 
-# (правка 587) Файл «nul» — ловушка Git Bash: `2>nul` в bash создаёт
-# literal-файл с зарезервированным именем Windows. Плюс журнал скрытых
-# ошибок запуска и локальный бэкап правок.
+# (fix 587) The "nul" file is a Git Bash trap: `2>nul` in bash creates
+# a literal file with a Windows reserved name. Plus hidden startup
+# error log and local backup of changes.
 nul
 start_error.log
 /.backup-before-fixes/
@@ -35,16 +35,16 @@ next-env.d.ts
 # logs
 *.log
 
-# installer cache (скачанные архивы установщика)
+# installer cache (downloaded installer archives)
 /.install-cache/
 
 # ComfyUI portable install (copied separately, huge)
 /ComfyUI-Easy-Install
 
-# LLM-ассистент Bonsai 2 27B (докачивается на месте, huge)
+# LLM Assistant Bonsai 2 27B (downloaded on demand, huge)
 /Bonsai_2_27B
 
-# рабочие данные DLSS-моста (job-логи, артефакты рендера)
+# DLSS bridge working data (job logs, render artifacts)
 /upscale/jobs/
 /upscale/logs/
 
@@ -54,25 +54,25 @@ next-env.d.ts
 # python bytecode cache
 __pycache__/
 
-# bundled runtimes and binaries (hundreds of MB, не для git: GitHub не принимает файлы >100 МБ)
+# bundled runtimes and binaries (hundreds of MB, not for git: GitHub rejects files >100 MB)
 /runtime/
 /stt/
 /upscale/bin/
 /tools/ck_pkg/
 
-# рабочие данные пользователя (загруженные видео, вложения чата)
+# user working data (uploaded videos, chat attachments)
 /data/upscale-input/
 /data/upscale-output/
 /data/chat-attachments/
 /data/assistant-ref-cache/
 
-# пользовательское состояние (история чатов, незавершённые генерации, настройки LoRA)
+# user state (chat history, unfinished generations, LoRA settings)
 /data/assistant-chats.json
 /data/inflight-generate.json
 /data/loras.json
 
-# внутренние документы разработки — в GitHub не публикуются
+# internal development docs - not published to GitHub
 /docs/
 
-# релизная инструкция в корне — в git не идёт
-/КАК_ЗАПУСТИТЬ.txt
+# release instructions in root - not tracked in git
+/HOW_TO_RUN.txt

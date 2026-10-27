@@ -102,11 +102,11 @@ def convert_video(
                 return
             try:
                 v = float(value)
-                # (правка 716) Clamp применяется к ИТОГОВОМУ v. Раньше в ветке
-                # else значение пересчитывалось из сырого `value`, т.е. clamp
-                # отменялся — и на старте/финише рендера (v <= 0.01 / v >= 0.99)
-                # в прогресс-бар уходили значения вне [0, 1]. Близкий двойник
-                # frame_interpolation/processor.py такой ошибки не содержит.
+                # (fix 716) Clamp is applied to the FINAL v. Previously in the
+                # else branch the value was recalculated from raw `value`, i.e. clamp
+                # was undone — and at render start/finish (v <= 0.01 / v >= 0.99)
+                # values outside [0, 1] were sent to the progress bar. The close twin
+                # frame_interpolation/processor.py does not have this bug.
                 v = 0.0 if v < 0 else (1.0 if v > 1 else v)
                 elapsed = time.perf_counter() - started
                 if 0.01 < v < 0.99 and elapsed > 0.5:

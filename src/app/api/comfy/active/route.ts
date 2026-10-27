@@ -3,28 +3,28 @@ import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 /**
- * GET /api/comfy/active — состояние активных генераций в ComfyUI.
+ * GET /api/comfy/active — active generation state in ComfyUI.
  *
- * (правка 718) Нужен для сверки при старте приложения: стор gen-progress
- * персистится в localStorage и при перезапуске восстанавливает фазу
- * «running» — даже если генерации давно нет (ComfyUI был перезапущен, задача
- * упала, компьютер перезагрузили). Без сверки карточка «Генерация идёт»
- * висела бы после каждого запуска приложения.
+ * (fix 718) Needed for reconciliation at app start: the gen-progress store
+ * persists in localStorage and restores the "running" phase on restart —
+ * even if generation finished long ago (ComfyUI was restarted, task
+ * crashed, computer was rebooted). Without reconciliation, the "Generation in progress" card
+ * would hang after every app launch.
  *
  * Query:
- *   ?check=id1,id2 — prompt_id, состояние которых нужно уточнить
- *                     (не в очереди, но ещё живые в истории).
+ *   ?check=id1,id2 — prompt_ids whose state needs verification
+ *                     (not in queue, but still alive in history).
  *
- * Ответ:
+ * Response:
  *   {
- *     ok: true,          // ComfyUI ответил — можно сверять
- *     active: boolean,   // есть ли вообще активные генерации
- *     prompts: string[], // prompt_id в queue_running + queue_pending
+ *     ok: true,          // ComfyUI responded — safe to reconcile
+ *     active: boolean,   // whether there are active generations at all
+ *     prompts: string[], // prompt_ids in queue_running + queue_pending
  *     states: { [id]: 'alive' | 'done' | 'gone' }
  *   }
  *   { ok: false, active: false, prompts: [], states: {} }
- *                      // ComfyUI недоступен (ещё поднимается): сверять НЕЛЬЗЯ,
- *                        // клиент не должен сбрасывать состояние.
+ *                      // ComfyUI unavailable (still booting): CANNOT reconcile,
+ *                        // client must not reset state.
  */
 export async function GET(req: Request) {
   const COMFY_URL = process.env.COMFY_URL || 'http://127.0.0.1:8188'
@@ -47,9 +47,9 @@ export async function GET(req: Request) {
       queue_running?: unknown[]
       queue_pending?: unknown[]
     }
-    // Формат очереди ComfyUI: [[number, prompt_id, prompt, ...], ...]
-    // (item[0] — номер в очереди, item[1] — prompt_id). На всякий случай
-    // поддержан и объектный вид.
+    // ComfyUI queue format: [[number, prompt_id, prompt, ...], ...]
+    // (item[0] is the index in queue, item[1] is prompt_id). Just in case,
+    // object format is also supported.
     const idOf = (p: unknown): string => {
       if (Array.isArray(p)) return String(p[1] ?? '')
       if (p && typeof p === 'object') {
@@ -63,9 +63,9 @@ export async function GET(req: Request) {
       .filter(Boolean)
     const alive = new Set(prompts)
 
-    // Для промптов, которых нет в очереди, уточняем: знает ли ComfyUI о них
-    // вообще (история) — иначе нельзя отличить «только что завершилась» от
-    // «перезапустили ComfyUI, задачи не существует».
+    // For prompts not in queue, check whether ComfyUI knows about them
+    // at all (history) — otherwise we cannot distinguish "just finished" from
+    // "ComfyUI was restarted, task does not exist".
     const states: Record<string, 'alive' | 'done' | 'gone'> = {}
     for (const id of check) {
       if (alive.has(id)) {
@@ -77,12 +77,12 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ ok: true, active: prompts.length > 0, prompts, states })
   } catch {
-    // ComfyUI ещё поднимается или упал — НЕ утверждаем, что генераций нет.
+    // ComfyUI is still starting or crashed — do NOT assert that there are no generations.
     return NextResponse.json({ ok: false, active: false, prompts: [], states: {} })
   }
 }
 
-/** Знает ли ComfyUI о таком prompt_id (запись в истории)? */
+/** Does ComfyUI know about this prompt_id (entry in history)? */
 async function isKnownToComfy(comfyUrl: string, promptId: string): Promise<boolean> {
   try {
     const res = await fetch(`${comfyUrl}/history/${encodeURIComponent(promptId)}`, {

@@ -1,93 +1,93 @@
 /**
- * Инструкции ассистента (правка 717) — КОМПАКТНАЯ версия.
+ * Assistant instructions (fix 717) — COMPACT version.
  *
- * Зачем переписано: студия рассчитана на средние и слабые ПК, где LLM
- * крутится на CPU. Системный промпт уходит в модель КАЖДЫМ запросом, и
- * его длина — это не «бумага», а:
- *   • время префилла (первый токен ответа) — на CPU растёт линейно;
- *   • расход окна контекста и KV-кэша (на 8 ГБ VRAM это десятки МБ);
- *   • риск, что модель на 9B «размазывает» правила в длинном контексте.
+ * Why rewritten: the studio is designed for mid and lower-end PCs where LLM
+ * runs on CPU. The system prompt is sent to the model with EVERY request, and
+ * its length is not just "paper", but:
+ *   • prefill time (first token of response) — grows linearly on CPU;
+ *   • context window and KV-cache usage (on 8 GB VRAM this is tens of MB);
+ *   • risk that a 9B model "dilutes" rules in a long context.
  *
- * До правки промпты были ~7.1k (generate) / ~8.9k (extend) / ~6.2k
- * (controlnet) токенов, причём одни и те же правила повторялись 3-4 раза
- * («метки запрещены», «аудио не слышно», «текущий список рефов — истина»),
- * а блок Ref2VA-гайда (6 секций) попадал и в extend, где он не нужен
- * (extend пишет только integrated_multimodal_description).
+ * Before this fix, prompts were ~7.1k (generate) / ~8.9k (extend) / ~6.2k
+ * (controlnet) tokens, with the same rules repeated 3-4 times
+ * ("labels forbidden", "audio is inaudible", "current reference list is ground truth"),
+ * and the Ref2VA guide block (6 sections) ended up in extend as well, where it is not needed
+ * (extend only writes integrated_multimodal_description).
  *
- * Теперь:
- *   • H3_SPEC_A — для text-to-video (t2v/flf) и продления;
- *   • H3_SPEC_B — для Ref2VA (референсы, ControlNet): добавляется
- *     официальный гайд prompt-guide.md (отдельным файлом — его можно
- *     править руками, не трогая код).
+ * Now:
+ *   • H3_SPEC_A — for text-to-video (t2v/flf) and extend;
+ *   • H3_SPEC_B — for Ref2VA (references, ControlNet): adds
+ *     official guide prompt-guide.md (as a separate file — can be
+ *     edited manually without touching code).
  *
- * ЧТО СОХРАНЕНО БЕЗ ИЗМЕНЕНИЙ (это поведение, а не текст):
- *   • имена полей H3 (subject_definitions, overall_soundscape, …) —
- *     их разбирает refine-meta.ts (sanitizeDraftPrompt) и assistant-fence.ts;
- *   • теги <Picture N>/<Video N>/<Audio N>/<Subject N> и их нумерация;
- *   • требование code fence (UI рисует промпт карточкой только из fence);
- *   • маркер `clip: N` первой строкой fence в режиме продления.
+ * WHAT IS PRESERVED WITHOUT CHANGES (behavior, not text):
+ *   • H3 field names (subject_definitions, overall_soundscape, …) —
+ *     parsed by refine-meta.ts (sanitizeDraftPrompt) and assistant-fence.ts;
+ *   • tags <Picture N>/<Video N>/<Audio N>/<Subject N> and their numbering;
+ *   • code fence requirement (UI renders prompt as card only from fence);
+ *   • `clip: N` marker as first line of fence in extend mode.
  */
 import promptGuide from './prompt-guide.md'
 
-/** Роль и язык — общее для всех режимов. */
-const ROLE = `Ты — помощник по написанию промптов для видео-модели MiniMax H3 (видео + синхронный звук, клипы до 30 с).
-Отвечай пользователю по-русски. Готовый промпт пиши на английском (кроме реплик в <d> и видимого в кадре текста).`
+/** Role and language — common to all modes. */
+const ROLE = `You are an assistant for writing prompts for the MiniMax H3 video model (video + synchronized audio, clips up to 30s).
+Answer the user in English. Write the finalized prompt in English (except for dialogue lines in <d> and on-screen visible text).`
 
-/** ФОРМАТ A — text-to-video: три поля, без референсных тегов. */
+/** FORMAT A — text-to-video: three fields, no reference tags. */
 const FORMAT_A = `
-=== ФОРМАТ A (text-to-video) ===
-Три поля, в этом порядке:
+=== FORMAT A (text-to-video) ===
+Three fields, in this order:
 integrated_multimodal_description: [Shot 1] ...
 overall_soundscape: ...
-non_diegetic_music: ... (или "N/A")
-Метки <Picture N>/<Video N>/<Subject N> ЗАПРЕЩЕНЫ. <Audio N> — только если аудио-реф прикреплён.`
+non_diegetic_music: ... (or "N/A")
+Tags <Picture N>/<Video N>/<Subject N> are FORBIDDEN. <Audio N> — only if audio reference is attached.`
 
-/** Что описывать в кадре — общий вариант (генерация, референсы, ControlNet). */
+/** What to describe in shot — general version (generation, references, ControlNet). */
 const DETAIL = `
-=== ЧТО ОПИСЫВАТЬ В КАДРЕ ===
-Каждый кадр ([Shot N]) — 3-5 предложений, тем подробнее, чем длиннее клип (для клипа до 5 с хватит 3-4 предложений).
-Обязательно: КАМЕРА (тип, движение, ракурс) · ПЕРСОНАЖ (внешность, одежда, конкретное действие) · СРЕДА (материалы, цвета, состояние) · СВЕТ (источник, характер, эффект) · АТМОСФЕРА (настроение, стиль) · ЗВУК (источники, интенсивность, пространство).
-Не экономь на конкретике: «weathered wooden pier with peeling blue paint», а не «wooden pier».`
+=== WHAT TO DESCRIBE IN SHOT ===
+Each shot ([Shot N]) — 3-5 sentences, the longer the clip, the more detail (for clips up to 5s, 3-4 sentences is enough).
+Mandatory: CAMERA (type, motion, angle) · CHARACTER (appearance, clothing, specific action) · ENVIRONMENT (materials, colors, condition) · LIGHTING (source, quality, effect) · ATMOSPHERE (mood, style) · AUDIO (sources, intensity, space).
+Do not skimp on specifics: "weathered wooden pier with peeling blue paint", not "wooden pier".`
 
 /**
- * Вариант для продления: детализация сцены там ВРЕДНА — модель H3 и так
- * видит хвост предыдущего видео и референсы, и переписанная внешность
- * перетягивает conditioning (сдвигает сцену). Описывается только НОВОЕ.
+ * Variant for extend: scene detailing here is HARMFUL — H3 model already
+ * sees the tail of the previous video and references, and rewriting appearance
+ * skews conditioning (drifts the scene). Describe only what is NEW.
  */
 const DETAIL_ACTION = `
-=== ЧТО ОПИСЫВАТЬ В КАДРЕ ===
-Описывай НОВОЕ действие/движение/событие кадра (3-5 предложений, тем подробнее, чем длиннее клип).
-НЕ переписывай то, что уже видно: внешность, одежду, локацию, свет — они продолжаются сами. Упоминай их, только если меняются в этом клипе.
-Обязательно: ДВИЖЕНИЕ КАМЕРЫ · ДЕЙСТВИЕ (кто, что, куда, с какой скоростью) · ЗВУК.`
+=== WHAT TO DESCRIBE IN SHOT ===
+Describe the NEW action/movement/event of the shot (3-5 sentences, the longer the clip, the more detail).
+Do NOT rewrite what is already visible: appearance, clothing, location, lighting — they continue on their own. Mention them only if they change in this clip.
+Mandatory: CAMERA MOVEMENT · ACTION (who, what, where, at what speed) · AUDIO.`
 
-/** Правило code fence — UI показывает промпт копируемой карточкой только из fence. */
+/** Code fence rule — UI displays prompt as a copyable card only from fence. */
 const FENCE = `
-=== ФОРМАТ ОТВЕТА ===
-Готовый промпт — ВСЕГДА в markdown code fence: открывающая строка ровно ${'```'}text, первая строка внутри — первое поле промпта, закрывающая — ровно ${'```'}.
-Внутри fence — ТОЛЬКО поля промпта. Короткое пояснение по-русски — ДО fence. Промпт обычным текстом — НИКОГДА.`
+=== RESPONSE FORMAT ===
+Finalized prompt — ALWAYS in markdown code fence: opening line exactly ${'```'}text, first line inside — first field of prompt, closing line — exactly ${'```'}.
+Inside fence — ONLY prompt fields. Brief explanation in English — BEFORE the fence. Prompt in plain text — NEVER.`
 
-/** Правила диалога — как отвечать, когда промпт не просили. */
+/** Dialogue rules — how to respond when a prompt was not requested. */
 const DIALOG = `
-=== ПРАВИЛА ДИАЛОГА ===
-- Обычный вопрос или small talk — краткий ответ по-русски, БЕЗ fence.
-- Короткий ответ («3», «да», «нет») — в контексте предыдущей беседы: «3» = сделай третий вариант из твоего списка, «да» = продолжай, «нет» = перепиши. Если пользователь ответил номером N из предыдущего списка — сразу выдай ТОЛЬКО промпт варианта N, не повторяя список и не пересказывая референсы.
-- Всегда отвечай на ПОСЛЕДНЕЕ сообщение пользователя и НЕ повторяй свой прошлый ответ.`
+=== DIALOGUE RULES ===
+- General question or small talk — brief answer in English, WITHOUT fence.
+- Short answer ("3", "yes", "no") — in context of previous conversation: "3" = make option 3 from your list, "yes" = proceed, "no" = rewrite. If the user answered with option number N from previous list — immediately output ONLY the prompt for option N, without repeating the list or reiterating references.
+- Always respond to the user's LATEST message and do NOT repeat your previous response.`
 
-/** Спека для FORMAT A (text-to-video и продление) — без Ref2VA-гайда. */
+/** Spec for FORMAT A (text-to-video and extend) — without Ref2VA guide. */
 export const H3_SPEC_A = `${ROLE}
 ${FORMAT_A}
 ${DETAIL}
 ${FENCE}
 ${DIALOG}`
 
-/** Спека для FORMAT B (Ref2VA) — с официальным гайдом. */
+/** Spec for FORMAT B (Ref2VA) — with official guide. */
 export const H3_SPEC_B = `${ROLE}
 ${promptGuide.trim()}
 ${DETAIL}
 ${FENCE}
 ${DIALOG}`
 
-/** Спека для продления: FORMAT A + правило «описывать только новое». */
+/** Spec for extend: FORMAT A + rule "describe only what is new". */
 export const H3_SPEC_EXTEND = `${ROLE}
 ${FORMAT_A}
 ${DETAIL_ACTION}
@@ -95,7 +95,7 @@ ${FENCE}
 ${DIALOG}`
 
 /**
- * @deprecated (правка 717) Использовать H3_SPEC_A / H3_SPEC_B / H3_SPEC_EXTEND.
- * Оставлен для совместимости: раньше был единственным экспортом.
+ * @deprecated (fix 717) Use H3_SPEC_A / H3_SPEC_B / H3_SPEC_EXTEND.
+ * Preserved for compatibility: previously was the only export.
  */
 export const H3_OFFICIAL_PROMPT_SPEC = H3_SPEC_B

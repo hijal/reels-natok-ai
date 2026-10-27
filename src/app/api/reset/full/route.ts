@@ -11,39 +11,39 @@ import { stopStt } from '@/lib/stt-runner'
 export const dynamic = 'force-dynamic'
 
 /**
- * POST /api/reset/full — полный сброс «как с завода» (серверная часть).
+ * POST /api/reset/full — factory reset (server part).
  *
- * (полный сброс) Удаляет ВСЁ, что создал пользователь:
- *   • ComfyUI/input          — референсы, кадры, загрузки
- *   • ComfyUI/output         — сгенерированные видео и .meta.json
- *   • ComfyUI/temp           — временные файлы ComfyUI
- *   • data/chat-attachments  — вложения чатов ассистента
- *   • data/upscale-*         — входы/выходы апскейла
- *   • upscale/outputs|jobs|logs — результаты и журналы апскейла
- *   • .local-input           — офлайн-загрузки
- *   • data/assistant-chats.json, data/inflight-generate.json — чаты и журнал задач
- *   • ComfyUI/user         — логи ComfyUI (содержат промпты), comfyui.db,
- *                            воркфлоу, кэш менеджера (занятые файлы
- *                            обнуляются — см. purgeComfyUserDir)
- *   • start_error.log        — лог запуска (может содержать текст промптов)
- *   • data/loras.json        — настройки LoRA → заводские
- *   • ComfyUI/extra_model_paths.yaml — внешние папки моделей → пусто
- *   • config/config.ini      — настройки → заводские
+ * (factory reset) Deletes EVERYTHING created by the user:
+ *   • ComfyUI/input          — references, frames, uploads
+ *   • ComfyUI/output         — generated videos and .meta.json
+ *   • ComfyUI/temp           — temporary ComfyUI files
+ *   • data/chat-attachments  — assistant chat attachments
+ *   • data/upscale-*         — upscale inputs/outputs
+ *   • upscale/outputs|jobs|logs — upscale results and logs
+ *   • .local-input           — offline uploads
+ *   • data/assistant-chats.json, data/inflight-generate.json — chats and task journal
+ *   • ComfyUI/user         — ComfyUI logs (contain prompts), comfyui.db,
+ *                            workflows, node manager cache (locked files
+ *                            are truncated — see purgeComfyUserDir)
+ *   • start_error.log        — startup log (may contain prompt text)
+ *   • data/loras.json        — LoRA settings → defaults
+ *   • ComfyUI/extra_model_paths.yaml — external model folders → empty
+ *   • config/config.ini      — settings → factory defaults
  *
- * Сами каталоги сохраняются (удаляется только содержимое), поэтому
- * ComfyUI и приложение продолжают работать без переустановки.
- * Модели, custom_nodes и код программы НЕ трогаются.
+ * Directories themselves are preserved (only contents are deleted), so
+ * ComfyUI and the app continue working without reinstalling.
+ * Models, custom_nodes, and program code are NOT touched.
  *
- * Клиентская часть (localStorage, Zustand-сторы, очередь ComfyUI)
- * очищается в settings-dialog.tsx.
+ * Client part (localStorage, Zustand stores, ComfyUI queue)
+ * is cleared in settings-dialog.tsx.
  */
 
-/** Рекурсивно очищает содержимое каталога. Возвращает число удалённых элементов. */
+/** Recursively cleans directory contents. Returns number of deleted items. */
 async function cleanDirectory(dir: string): Promise<{ deleted: number; error?: string }> {
   try {
     await fs.stat(dir)
   } catch {
-    return { deleted: 0 } // каталога нет — уже пусто
+    return { deleted: 0 } // directory does not exist — already empty
   }
 
   let entries
@@ -68,12 +68,12 @@ async function cleanDirectory(dir: string): Promise<{ deleted: number; error?: s
 }
 
 /**
- * (полный сброс) ComfyUI/user — внутренние данные ComfyUI: логи (содержат
- * тексты промптов пользователя), comfyui.db, сохранённые воркфлоу, кэш
- * менеджера нод. Активный лог и БД заперты работающим ComfyUI — удаляем всё,
- * что не занято, а занятые ФАЙЛЫ обнуляем (truncate работает даже у открытых
- * на запись логов): тексты промптов исчезают, ComfyUI пересоздаёт файлы
- * в полном виде после перезапуска программы.
+ * (factory reset) ComfyUI/user — internal ComfyUI data: logs (contain
+ * user prompt text), comfyui.db, saved workflows, node manager
+ * cache. Active log and DB are locked by running ComfyUI — delete everything
+ * not locked, and truncate locked FILES (truncate works even on logs open
+ * for writing): prompt texts disappear, ComfyUI recreates files
+ * in full form after program restart.
  */
 async function purgeComfyUserDir(
   dir: string,
@@ -84,7 +84,7 @@ async function purgeComfyUserDir(
     await fs.stat(dir)
     entries = await fs.readdir(dir, { withFileTypes: true })
   } catch {
-    return out // каталога нет — уже пусто
+    return out // directory does not exist — already empty
   }
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
@@ -97,7 +97,7 @@ async function purgeComfyUserDir(
           await fs.writeFile(full, '')
           out.truncated++
           continue
-        } catch { /* ниже — в failed */ }
+        } catch { /* below — added to failed */ }
       }
       out.failed.push(entry.name)
     }
@@ -105,7 +105,7 @@ async function purgeComfyUserDir(
   return out
 }
 
-/** Удаляет файл, если он есть. Возвращает 1 при удалении, иначе 0. */
+/** Deletes file if it exists. Returns 1 if deleted, otherwise 0. */
 async function removeFile(file: string): Promise<number> {
   try {
     await fs.unlink(file)
@@ -117,19 +117,19 @@ async function removeFile(file: string): Promise<number> {
 
 export async function POST() {
   const cwd = process.cwd()
-  // Конфиг читаем ДО сброса: пути input/output берутся из текущего backend,
-  // а не из заводского (у пользователя может быть своя папка ComfyUI).
+  // Read config BEFORE reset: input/output paths are taken from current backend,
+  // not from defaults (the user may have custom ComfyUI directory).
   const cfg = getAppConfig()
 
-  // errors — то, из-за чего сброс нельзя считать полным (остались файлы);
-  // warnings — некритичные сбои (сервис не остановился, YAML не переписался).
+  // errors — reasons why reset cannot be considered full (files remain);
+  // warnings — non-critical issues (service did not stop, YAML rewrite failed).
   const errors: string[] = []
   const warnings: string[] = []
   const details: Record<string, number> = {}
   let deleted = 0
 
-  // 1) Останавливаем локальные модели, чтобы отпустили файлы и VRAM.
-  //    Ошибки не фатальны: сброс данных важнее.
+  // 1) Stop local models so they release files and VRAM.
+  //    Errors are non-fatal: data reset takes priority.
   try {
     await stopLlm()
   } catch (e) {
@@ -141,7 +141,7 @@ export async function POST() {
     warnings.push(`STT: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  // 2) Каталоги с пользовательским контентом.
+  // 2) Directories with user content.
   const dirs: Array<[string, string]> = [
     ['ComfyUI/input', cfg.inputDir],
     ['ComfyUI/output', cfg.outputDir],
@@ -161,21 +161,21 @@ export async function POST() {
     if (r.error) errors.push(`${label}: ${r.error}`)
   }
 
-  // 2.5) ComfyUI/user — логи с промптами пользователя, comfyui.db,
-  //      воркфлоу, кэш менеджера. Занятые файлы обнуляются, а не удаляются
-  //      (см. purgeComfyUserDir): сбои идут в warnings, а не errors — сброс
-  //      не считается неполным из-за работающего ComfyUI; после перезапуска
-  //      программы папка пересоздаётся чистой.
+  // 2.5) ComfyUI/user — logs with user prompts, comfyui.db,
+  //      workflows, node manager cache. Locked files are truncated rather than deleted
+  //      (see purgeComfyUserDir): failures go to warnings, not errors — reset
+  //      is not considered incomplete due to running ComfyUI; after restarting
+  //      the program the folder will be cleanly recreated.
   const user = await purgeComfyUserDir(path.join(cfg.comfyRoot, 'ComfyUI', 'user'))
   deleted += user.deleted + user.truncated
   details['ComfyUI/user'] = user.deleted + user.truncated
   if (user.failed.length) {
     warnings.push(
-      `ComfyUI/user (заняты работающим ComfyUI, обнулятся после перезапуска): ${user.failed.join(', ')}`,
+      `ComfyUI/user (locked by running ComfyUI, will truncate after restart): ${user.failed.join(', ')}`,
     )
   }
 
-  // 3) Файлы с пользовательскими данными.
+  // 3) Files with user data.
   const files = [
     path.join(cwd, 'data', 'assistant-chats.json'),
     path.join(cwd, 'data', 'assistant-chats.json.tmp'),
@@ -185,11 +185,11 @@ export async function POST() {
   for (const f of files) {
     deleted += await removeFile(f)
   }
-  // Журнал inflight мог быть пересоздан параллельным запросом — чистим ещё раз.
+  // Inflight journal might have been recreated by a concurrent request — clean again.
   clearInflight()
 
-  // 4) LoRA и внешние папки моделей → заводские (до сброса config.ini,
-  //    чтобы пути брались из фактического backend).
+  // 4) LoRAs and external model folders → defaults (before resetting config.ini,
+  //    so paths are resolved from the active backend).
   try {
     resetLorasToDefaults()
   } catch (e) {
@@ -201,7 +201,7 @@ export async function POST() {
     warnings.push(`extra_model_paths: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  // 5) Настройки → заводские.
+  // 5) Settings → defaults.
   try {
     resetConfigToDefaults()
   } catch (e) {

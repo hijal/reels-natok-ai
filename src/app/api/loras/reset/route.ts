@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server'
 import { resetLorasToDefaults } from '@/lib/loras-config'
 
 /**
- * POST /api/loras/reset — (правка 130) Заводской сброс настроек LoRA.
+ * POST /api/loras/reset — (fix 130) Factory reset for LoRA settings.
  *
- * Все лоры выключаются (enabled=false), сила сбрасывается к 1.0,
- * триггеры очищаются. Файл data/loras.json перезаписывается «чистым»
- * состоянием. Вызывается из «Заводской сброс» в настройках.
+ * All LoRAs are disabled (enabled=false), strength reset to 1.0,
+ * triggers cleared. File data/loras.json is rewritten with "clean"
+ * state. Called from "Factory reset" in settings.
  */
 export async function POST() {
   try {
@@ -14,12 +14,12 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       count: defaults.length,
-      message: `Настройки LoRA сброшены (лоров: ${defaults.length})`,
+      message: `LoRA settings reset (${defaults.length} LoRAs)`,
     })
   } catch (e) {
     console.error('[loras/reset] error:', e)
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : 'Ошибка сброса LoRA' },
+      { ok: false, error: e instanceof Error ? e.message : 'Failed to reset LoRA settings' },
       { status: 500 },
     )
   }

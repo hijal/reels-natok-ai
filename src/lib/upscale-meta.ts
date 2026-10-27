@@ -1,18 +1,18 @@
 /**
- * Метаданные результатов апскейла (правка 94).
+ * Upscale results metadata (edit 94).
  *
- * Видео, созданные DLSS-мостом (нейрорендеринг «…_DLSS5_…») и настоящим
- * апскейлом (RTX Video SDK «…_RTXVIDEO_…»), падают в общий output ComfyUI
- * напрямую из bridge — сайдкар .meta.json для них никто не пишет, поэтому
- * в галерее у них нет «инфо о файле» (диалог метаданных пуст).
+ * Videos created by the DLSS bridge (neural rendering "..._DLSS5_...") and
+ * real upscaling (RTX Video SDK "..._RTXVIDEO_...") land in ComfyUI's shared
+ * output directly from the bridge — no one writes a .meta.json sidecar for
+ * them, so in the gallery they lack "file info" (the metadata dialog is empty).
  *
- * Здесь: ffprobe (тот же бинарник, что и для превью) достаёт разрешение,
- * длительность, fps и размер — и пишет плоский сайдкар рядом с файлом,
- * в той же схеме, что читает MetaDialog.
+ * Here: ffprobe (the same binary as for previews) extracts resolution,
+ * duration, fps, and size — and writes a flat sidecar next to the file,
+ * in the same schema read by MetaDialog.
  *
- * (правка 265) Если известен исходник (sourceHint от bridge) и рядом с ним
- * в output есть сайдкар — наследуем цепочку промптов (prompt, включая
- * extend-цепочки через promptChainFromMeta) и image-референсы (references).
+ * (edit 265) If the source is known (sourceHint from bridge) and a sidecar
+ * exists next to it in output — inherit the prompt chain (prompt, including
+ * extend chains via promptChainFromMeta) and image references (references).
  */
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -23,18 +23,18 @@ import { promptChainFromMeta } from './refine-meta'
 
 const execFileAsync = promisify(execFile)
 
-/** Определить «инструмент» по имени файла (маркеры те же, что в галерее). */
+/** Determine "tool" by filename (using the same markers as the gallery). */
 export function upscaleToolFor(filename: string): string {
   if (/_RTXVIDEO(?:_PREVIEW)?_\d{8}-\d{6}/i.test(filename)) {
-    return 'RTX Video Super Resolution (апскейл)'
+    return 'RTX Video Super Resolution (upscale)'
   }
   if (/_DLSS5_\d{8}-\d{6}/i.test(filename)) {
-    return 'DLSS 5 Visual Enhancer (нейрорендеринг)'
+    return 'DLSS 5 Visual Enhancer (neural rendering)'
   }
-  return 'Upscale (DLSS-мост)'
+  return 'Upscale (DLSS bridge)'
 }
 
-/* ── ffprobe: тот же порядок поиска, что у ffmpeg в thumb.ts ── */
+/* ── ffprobe: same lookup order as ffmpeg in thumb.ts ── */
 
 let ffprobeBin: string | null = null
 
@@ -56,8 +56,8 @@ async function resolveFfprobe(): Promise<string> {
   if (ffprobeBin !== null) return ffprobeBin
   const bin = resolveFfprobeSync()
   if (!bin) {
-    // (правка 587) «не найден» НЕ кэшируем (как resolveFfmpeg, правка 355):
-    // ffprobe могли подложить в runtime/ позже — повторяем поиск.
+    // (edit 587) DO NOT cache "not found" (like resolveFfmpeg, edit 355):
+    // ffprobe could be placed into runtime/ later — retry lookup.
     return ''
   }
   try {
@@ -65,7 +65,7 @@ async function resolveFfprobe(): Promise<string> {
     ffprobeBin = bin
     return bin
   } catch {
-    return '' // (правка 587) неудача не кэшируется
+    return '' // (edit 587) failure is not cached
   }
 }
 
@@ -74,7 +74,7 @@ interface ProbeResult {
   height?: number
   fps?: number
   duration?: number
-  /** (правка 722) Число кадров — из nb_frames (fallback: fps × duration). */
+  /** (edit 722) Frame count — from nb_frames (fallback: fps × duration). */
   frames?: number
 }
 
@@ -112,7 +112,7 @@ async function probeVideo(file: string): Promise<ProbeResult> {
     }
     const dur = Number(j.format?.duration)
     if (Number.isFinite(dur) && dur > 0) out.duration = Math.round(dur * 100) / 100
-    // (правка 722) Число кадров: nb_frames (точнее) → fps × duration.
+    // (edit 722) Frame count: nb_frames (more accurate) → fps × duration.
     const nb = Number(s?.nb_frames)
     if (Number.isFinite(nb) && nb > 0) {
       out.frames = Math.round(nb)
@@ -126,9 +126,9 @@ async function probeVideo(file: string): Promise<ProbeResult> {
 }
 
 /**
- * Написать .meta.json для результата апскейла, если его ещё нет.
- * Идемпотентно: bridge может отдавать 'done' несколько поллов подряд.
- * Возвращает true, если сайдкар записан (или уже существовал).
+ * Write .meta.json for upscale result if it doesn't exist yet.
+ * Idempotent: bridge may return 'done' for several polls in a row.
+ * Returns true if sidecar was written (or already existed).
  */
 export async function ensureUpscaleMeta(
   outputPath: string,
@@ -138,10 +138,10 @@ export async function ensureUpscaleMeta(
   try {
     const OUTPUT_DIR = path.resolve(getAppConfig().outputDir)
     const file = path.resolve(outputPath)
-    // (правка 587) как правка 348 (latent-file.ts): на win32 сравнение
-    // регистронезависимое — мост (python) может отдать путь в другом регистре.
+    // (edit 587) like edit 348 (latent-file.ts): case-insensitive on win32 —
+    // the bridge (python) may return path in different casing.
     const normPath = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
-    if (!normPath(file).startsWith(normPath(OUTPUT_DIR) + path.sep)) return false // чужой путь
+    if (!normPath(file).startsWith(normPath(OUTPUT_DIR) + path.sep)) return false // alien path
     if (!existsSync(file)) return false
 
     const metaFile = file + '.meta.json'
@@ -158,19 +158,19 @@ export async function ensureUpscaleMeta(
 
     const probe = await probeVideo(file)
 
-    // Исходник: bridge кладёт в output разные поля — берём любое строковое
-    // поле с путём, кроме самого результата (best effort).
+    // Source: bridge puts different fields in output — take any string
+    // path field other than the result itself (best effort).
     let sourceFile: string | null = null
     if (typeof sourceHint === 'string' && sourceHint && sourceHint !== outputPath) {
       sourceFile = path.basename(sourceHint)
     }
 
-    // (правка 265) Наследование от сайдкара исходника: цепочка промптов
-    // (promptChainFromMeta: source_prompt → prompt → extend_prompts — та же
-    // логика, что у рефайна; refine-meta импортирует только app-config,
-    // циклической зависимости нет) и image-референсы. sourceHint — полный
-    // путь или имя; сайдкар ищем строго внутри outputDir: сначала по пути
-    // относительно корня, затем basename в корне и подпапках 1-го уровня.
+    // (edit 265) Inheritance from source sidecar: prompt chain
+    // (promptChainFromMeta: source_prompt → prompt → extend_prompts — same
+    // logic as refine; refine-meta only imports app-config,
+    // so no circular dependency) and image references. sourceHint is full
+    // path or name; search sidecar strictly inside outputDir: first relative
+    // to root, then basename in root and 1st-level subfolders.
     let srcMeta: Record<string, unknown> | null = null
     if (typeof sourceHint === 'string' && sourceHint) {
       const candidates: string[] = []
@@ -189,7 +189,7 @@ export async function ensureUpscaleMeta(
         if (!existsSync(c)) continue
         try {
           srcMeta = JSON.parse(readFileSync(c, 'utf-8')) as Record<string, unknown>
-        } catch { /* битый сайдкар — без наследования */ }
+        } catch { /* corrupted sidecar — skip inheritance */ }
         break
       }
     }
@@ -206,10 +206,10 @@ export async function ensureUpscaleMeta(
     const meta: Record<string, unknown> = {
       job_id: jobId,
       tool: upscaleToolFor(name),
-      // (правка 722) Единая схема сайдкара: как у всех остальных режимов
-      // студии. Раньше здесь были только tool/generation_mode/created_at/
-      // file_size — из-за этого в диалоге метаданных апскейла половина полей
-      // пустая, а режим не опознавался ни одним общим полем.
+      // (edit 722) Unified sidecar schema: same as all other studio modes.
+      // Previously only tool/generation_mode/created_at/file_size were here —
+      // which left half the fields empty in upscale metadata dialog, and the
+      // mode was not recognized by any common field.
       workflow: 'upscale-dlss5',
       model_type: 'minimax_h3_upscale',
       generation_mode: 'upscale',
@@ -220,13 +220,13 @@ export async function ensureUpscaleMeta(
     if (probe.width && probe.height) meta.resolution = `${probe.width}x${probe.height}`
     if (probe.duration !== undefined) meta.duration_seconds = probe.duration
     if (probe.fps !== undefined) meta.fps = probe.fps
-    // (правка 722) Число кадров — как у всех прочих режимов.
+    // (edit 722) Frame count — same as all other modes.
     if (probe.frames !== undefined) meta.video_length = probe.frames
     if (sourceFile) meta.source_file = sourceFile
-    // (правка 722) Исходник — объектом { filename, subfolder }, как в
-    // остальных режимах (у рефайна/FPS/Tile/ControlNet).
+    // (edit 722) Source video — as an object { filename, subfolder }, like in
+    // other modes (refine/FPS/Tile/ControlNet).
     if (sourceFile) meta.source_video = { filename: sourceFile, subfolder: '' }
-    // (правка 265) наследованные поля — только если реально нашлись
+    // (edit 265) inherited fields — only if actually found
     if (inheritedPrompt) meta.prompt = inheritedPrompt
     if (inheritedRefs.length > 0) meta.references = inheritedRefs
 
@@ -238,8 +238,8 @@ export async function ensureUpscaleMeta(
 }
 
 /**
- * (правка 264) Дописать generation_time + настройки DLSS в существующий
- * сайдкар апскейла. Идемпотентно: поля, которые уже стоят, не перезаписываются.
+ * (edit 264) Append generation_time + DLSS settings into existing upscale
+ * sidecar. Idempotent: existing fields are not overwritten.
  */
 export function setUpscaleMetaGenerationTime(
   outputPath: string,
@@ -251,12 +251,12 @@ export function setUpscaleMetaGenerationTime(
     if (!Number.isFinite(generationTimeSec) || generationTimeSec <= 0) return false
     const OUTPUT_DIR = path.resolve(getAppConfig().outputDir)
     const file = path.resolve(outputPath)
-    // (правка 587) как правка 348: регистронезависимое сравнение на win32.
+    // (edit 587) like edit 348: case-insensitive comparison on win32.
     const normPath = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
-    if (!normPath(file).startsWith(normPath(OUTPUT_DIR) + path.sep)) return false // чужой путь
+    if (!normPath(file).startsWith(normPath(OUTPUT_DIR) + path.sep)) return false // alien path
 
     const metaFile = file + '.meta.json'
-    if (!existsSync(metaFile)) return false // нет ещё — пусть его создаст ensureUpscaleMeta
+    if (!existsSync(metaFile)) return false // not yet — let ensureUpscaleMeta create it
 
     const meta = JSON.parse(readFileSync(metaFile, 'utf-8')) as Record<string, unknown>
     let changed = false
@@ -265,7 +265,7 @@ export function setUpscaleMetaGenerationTime(
       meta.generation_time = Math.round(generationTimeSec)
       changed = true
     }
-    // (правка 550) generation_mode + DLSS-настройки — если ещё не записаны
+    // (edit 550) generation_mode + DLSS settings — if not yet written
     if (!meta.generation_mode) {
       meta.generation_mode = 'upscale'
       changed = true

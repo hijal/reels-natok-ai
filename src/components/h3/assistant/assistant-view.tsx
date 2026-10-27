@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * AssistantView — local LLM chat tab (правка 24; multi-chat in правка 30).
+ * AssistantView — local LLM chat tab (edit 24; multi-chat in edit 30).
  *
  * Runs Gemma 4 12B (GGUF Q4, multimodal) through the ComfyUI embedded python
  * (llama-cpp-python) — see tools/llm_server.py and src/lib/llm-runner.ts.
@@ -9,8 +9,8 @@
  * in src/lib/h3-prompt-spec.ts, sourced from src/lib/prompt-guide.md),
  * enriched with live session context (loaded references with their numbers),
  * so the assistant can emit correct <Picture N> tags automatically — no
- * manual binding (правка 168). The prompt draft is NOT injected into the
- * system prompt: it was the cross-chat topic leak; «Улучшить мой промпт»
+ * manual binding (edit 168). The prompt draft is NOT injected into the
+ * system prompt: it was the cross-chat topic leak; "Enhance my prompt"
  * quotes the draft in the user's message explicitly when wanted.
  *
  * Chats live in the persisted assistant-chats store: multiple named
@@ -45,7 +45,7 @@ import { Button } from '@/components/ui/button'
 import { getClipboardImageFiles, hasClipboardImage } from '@/lib/paste-utils'
 import { useGenStore } from '@/lib/gen-store'
 import { useAssistantChats, type AssistantChatMessage, type AssistantChatMode } from '@/lib/assistant-chats-store'
-import { useControlNetTarget } from '@/lib/controlnet-target-store' // (правка 502)
+import { useControlNetTarget } from '@/lib/controlnet-target-store' // (edit 502)
 import {
   useAssistantStream,
   runAssistantCompletion,
@@ -58,14 +58,14 @@ import {
 import { uploadChatAttachment } from '@/lib/upload'
 import { MentionTagWithPreview } from '@/components/h3/mention-preview'
 import { VoiceInputButton } from '@/components/h3/voice-input-button'
-// (правка 719) Превью вложения с полноэкранным просмотром — как на «Генерации».
+// (edit 719) Attachment preview with full-screen viewer — matching "Generate".
 import { RefPreviewThumb } from '@/components/h3/ref-preview-thumb'
 import { parseAllFences, parseClipMarker, stripClipMarker, hasH3Field, extractInsertablePrompt } from '@/lib/assistant-fence'
 import { MarkdownText } from '@/components/h3/assistant/markdown-text'
-// (правка 719) Просмотр референса по клику на тег — как на «Генерации».
+// (edit 719) Reference viewer on tag click — matching "Generate".
 import { RefViewerDialog, type RefViewerData } from '@/components/h3/ref-viewer-dialog'
 import { useAssistantDraft } from '@/lib/assistant-draft-store'
-import { DEFAULT_LLM_MODEL_ID } from '@/components/h3/llm-model-selector' // (правка 268)
+import { DEFAULT_LLM_MODEL_ID } from '@/components/h3/llm-model-selector' // (edit 268)
 import { MODELS } from '@/lib/models-config'
 
 /** Live download state derived from /api/models/status. */
@@ -78,12 +78,12 @@ interface DlInfo {
 }
 
 /**
- * Имя модели ассистента для подписей — из конфига моделей по modelId
- * статуса, с fallback на стандартную Qwen3.5 9B.
- * Своя модель ('llm_custom') — по имени файла из статуса.
+ * Assistant model name for labels — from models config by status modelId,
+ * falling back to default Qwen3.5 9B.
+ * Custom model ('llm_custom') — by filename from status.
  */
 function llmDisplayName(modelId?: string | null, modelName?: string | null): string {
-  if (modelId === 'llm_custom') return modelName ? `своя: ${modelName}` : 'своя модель (GGUF)'
+  if (modelId === 'llm_custom') return modelName ? `custom: ${modelName}` : 'custom model (GGUF)'
   if (modelId === 'llm_assistant_bonsai') return 'Bonsai 2 27B'
   if (modelId === 'llm_assistant_bonsai_light') return 'Bonsai 2 27B (PTQ1_0)'
   if (modelId) {
@@ -98,114 +98,114 @@ function llmDisplayName(modelId?: string | null, modelName?: string | null): str
     if (/qwen/i.test(modelName)) return 'Qwen3.5 9B'
     return modelName
   }
-  return 'Qwen3.5 9B (по умолчанию)'
+  return 'Qwen3.5 9B (default)'
 }
 
 export function AssistantView({
   panelMode,
   onCollapse,
 }: {
-  /** (правка 442) Панельный режим: режим чатов жёстко привязан к вкладке
-   *  ('generate'/'extend'), переключатель режима в списке чатов скрыт,
-   *  шапка компактная, список чатов — выдвижной поверх чата. */
+  /** (edit 442) Panel mode: chat mode is strictly bound to tab
+   *  ('generate'/'extend'), mode switch in chat list is hidden,
+   *  header is compact, chat list is a slide-out overlay over chat. */
   panelMode?: AssistantChatMode
-  /** (правка 442) Кнопка сворачивания панели в узкий рейл (в шапке). */
+  /** (edit 442) Button to collapse panel into narrow rail (in header). */
   onCollapse?: () => void
 } = {}) {
   const inPanel = panelMode !== undefined
-  // (правка 442) Список чатов в панели — выдвижной поверх чата (места мало).
+  // (edit 442) Chat list in panel is a slide-out overlay over chat (space is constrained).
   const [chatListOpen, setChatListOpen] = useState(false)
   /* ── chats (persisted store; hydrated on mount to stay SSR-safe) ── */
   const chats = useAssistantChats((s) => s.chats)
-  // (правка 266) Реактивная подписка на pendingImprove: если вкладка уже
-  // смонтирована, ни streaming, ни activeId не меняются — без подписки эффект
-  // автозапуска не перезапускался и запрос висел бессрочно.
+  // (edit 266) Reactive subscription to pendingImprove: if tab is already
+  // mounted, neither streaming nor activeId change — without subscription the auto-start
+  // effect would not re-run and the request would hang indefinitely.
   const pendingImprove = useAssistantChats((s) => s.pendingImprove)
-  // (правка 427) Режим-фильтр списка чатов: «Генерация» / «Продление».
+  // (edit 427) Chat list mode filter: "Generate" / "Extend".
   const assistantMode = useAssistantChats((s) => s.assistantMode)
   const [activeId, setActiveId] = useState<string | null>(null)
-  // (правка 427) Режим АКТИВНОГО чата: от него зависят превью тегов
-  // (<Picture N> → extendImageRefs в extend-чатах, refImages вкладки
-  // ControlNet в controlnet-чатах (правка 502)), подписи карточек fence
-  // и набор кнопок вставки («В промпт» vs «В клип N»).
+  // (edit 427) ACTIVE chat mode: determines tag previews
+  // (<Picture N> -> extendImageRefs in extend chats, refImages of
+  // ControlNet tab in controlnet chats (edit 502)), fence card labels,
+  // and insert button set ("To prompt" vs "To clip N").
   const activeChatMode: AssistantChatMode =
     chats.find((c) => c.id === activeId)?.mode ?? 'generate'
   const isExtendChat = activeChatMode === 'extend'
-  // (правка 502)
+  // (edit 502)
   const isControlNetChat = activeChatMode === 'controlnet'
-  // (правка 540) guide3d убран — перенос движения через вкладку ControlNet
+  // (edit 540) guide3d removed — motion transfer via ControlNet tab
 
-  // (правка 256) Черновик ввода/вложения — в стиле-сторе, а не useState:
-  // вкладки размонтируются (AnimatePresence key={activeTab}) и локальный
-  // стейт терялся при переключении «Ассистент → Генерация → обратно».
+  // (edit 256) Input/attachment draft in style store, not useState:
+  // tabs unmount (AnimatePresence key={activeTab}) and local
+  // state was lost when switching "Assistant -> Generate -> back".
   const input = useAssistantDraft((s) => s.input)
   const setInput = useAssistantDraft((s) => s.setInput)
   const [status, setStatus] = useState<LlmStatusResp | null>(null)
   const [dl, setDl] = useState<DlInfo>({ active: false, received: 0, total: null, speed: 0, error: null })
-  // (правка 83) Фактический размер выбранной LLM-модели (из /api/models/status)
-  // вместо хардкода «~5.7 ГБ» (у Qwen ~5.7 ГБ, у других квантов — свой размер).
+  // (edit 83) Actual size of selected LLM model (from /api/models/status)
+  // instead of hardcoded "~5.7 GB" (Qwen ~5.7 GB, other quants have their own size).
   const [sizeLabel, setSizeLabel] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  // (правка 267) «Прилип к низу»: автопрокрутка только пока пользователь у низа
-  // (<80px от дна); прокрутил вверх — стрим его не сбрасывает. См. onScroll
-  // контейнера и эффект ниже.
+  // (edit 267) Stick to bottom: autoscroll only while user is near bottom
+  // (<80px from bottom); scrolled up — stream does not reset it. See onScroll
+  // of container and effect below.
   const stickToBottomRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null)
 
-  /* ── (правка 86) Вложение к сообщению чата (изображение / видео) ── */
+  /* ── (edit 86) Attachment to chat message (image / video) ── */
   const attachment = useAssistantDraft((s) => s.attachment)
   const setAttachment = useAssistantDraft((s) => s.setAttachment)
   const [attUploading, setAttUploading] = useState(false)
   const attFileRef = useRef<HTMLInputElement>(null)
   /**
-   * (правка 717) Флаг «отправка уже идёт». isStreamActive() не помогает в
-   * окне загрузки вложения (поток ещё не стартовал), и быстрые кнопки/Enter
-   * могли запустить второй send() — сообщение дописывалось дважды, а второй
-   * запрос молча отбрасывался по `if (running) return`.
+   * (edit 717) Flag "sending in progress". isStreamActive() does not help in
+   * attachment upload window (stream has not started), and fast buttons/Enter
+   * could trigger a second send() — message was appended twice, while second
+   * request was silently dropped by `if (running) return`.
    */
   const sendingRef = useRef(false)
 
-  /* ── In-flight reply (правка 31: движок живёт на уровне модуля) ──
-   * Стрим выполняется в src/lib/assistant-stream.ts и переживает
-   * размонтирование этой вкладки (AnimatePresence). Здесь только
-   * «переподключаемся»: пока ответ идёт в этом чате — рендерим живой
-   * хвост; завершённый ответ появляется сам, т.к. сообщения ниже
-   * выводятся реактивно из персист-стора чатов. */
+  /* ── In-flight reply (edit 31: engine lives at module level) ──
+   * Stream runs in src/lib/assistant-stream.ts and survives
+   * unmounting of this tab (AnimatePresence). Here we only
+   * "reconnect": while reply is in-flight in this chat — render live
+   * tail; completed reply appears on its own, as messages below
+   * are rendered reactively from persisted chats store. */
   const streamChatId = useAssistantStream((s) => s.chatId)
   const streamText = useAssistantStream((s) => s.text)
   const streaming = streamChatId !== null
   const streamingHere = streamChatId === activeId
 
-  // (правка 719) Просмотр референса по клику на тег <Picture N>/<Video N>
-  // в ответе ассистента — как на вкладке «Генерация».
+  // (edit 719) Preview reference on click on <Picture N>/<Video N> tag
+  // in assistant reply — matching "Generate" tab.
   const [viewingRef, setViewingRef] = useState<RefViewerData | null>(null)
 
   // Live references (for hover previews on <Picture N>/<Video N> tags).
   const refs = useGenStore((s) => s.video.refs)
-  // (правка 587) Подписка на непустоту промпта: ярлык кнопки «Исправить мой
-  // промпт / Предложить идеи» раньше читал getState() в рендере — нереактивно,
-  // метка оставалась старой до чужого ре-рендера.
+  // (edit 587) Subscribe to non-empty prompt: button label "Refine my
+  // prompt / Suggest ideas" previously read getState() during render — non-reactive,
+  // label remained stale until an unrelated re-render.
   const hasPrompt = useGenStore((s) => s.video.prompt.trim().length > 0)
-  // (правка 427) Extend-режим: референсы и клипы вкладки «Продление» —
-  // <Picture N> в extend-чатах нумеруются по extendImageRefs, а кнопки
-  // «В клип N» — по числу extendClips.
+  // (edit 427) Extend mode: references and clips of "Extend" tab —
+  // <Picture N> in extend chats are numbered by extendImageRefs, and buttons
+  // "To clip N" — by extendClips count.
   const extendRefs = useGenStore((s) => s.video.extendImageRefs)
   const extendClipsCount = useGenStore((s) => s.video.extendClips.length)
-  // (правка 502) ControlNet-режим: <Picture N> нумеруются по refImages
-  // вкладки «ControlNet» (controlnet-target-store).
+  // (edit 502) ControlNet mode: <Picture N> are numbered by refImages
+  // of "ControlNet" tab (controlnet-target-store).
   const controlnetRefs = useControlNetTarget((s) => s.refImages)
-  // Ярлык быстрой кнопки ControlNet-чата: «Исправить» имеет смысл только
-  // когда в поле вкладки уже есть промпт; иначе предлагаем придумать с нуля.
+  // ControlNet chat quick button label: "Refine" makes sense only
+  // when tab input already has a prompt; otherwise suggest creating from scratch.
   const controlnetHasPrompt = useControlNetTarget((s) => s.prompt.trim().length > 0)
 
   /** Build a preview URL for a reference by (kind, 1-based index).
-   *  (правка 427) В extend-чате <Picture N> — это extendImageRefs вкладки
-   *  «Продление», а не refs вкладки «Генерация».
-   *  (правка 502) В controlnet-чате — refImages вкладки «ControlNet». */
+   *  (edit 427) In extend chat <Picture N> corresponds to extendImageRefs of
+   *  "Extend" tab, not refs of "Generate" tab.
+   *  (edit 502) In controlnet chat — refImages of "ControlNet" tab. */
   const previewFor = useCallback(
     (kind: 'image' | 'video', index: number): { url?: string; label?: string; path?: string } => {
-      // (правка 502) ControlNet: только картинки (refImages без поля kind).
+      // (edit 502) ControlNet: images only (refImages without kind field).
       if (isControlNetChat) {
         if (kind !== 'image') return {}
         const r = controlnetRefs[index - 1]
@@ -228,8 +228,8 @@ export function AssistantView({
   )
 
   /**
-   * (правка 719) Клик по тегу <Picture N>/<Video N> в ответе ассистента —
-   * полноэкранный просмотр референса (как на вкладке «Генерация»).
+   * (edit 719) Click on <Picture N>/<Video N> tag in assistant reply —
+   * full-screen reference viewer (matching "Generate" tab).
    */
   const openRefByTag = useCallback(
     (kind: 'image' | 'video', index: number) => {
@@ -237,7 +237,7 @@ export function AssistantView({
       if (!info.url && !info.path) return
       setViewingRef({
         kind,
-        name: info.label || `Референс ${index}`,
+        name: info.label || `Reference ${index}`,
         path: info.path ?? '',
         url: info.url,
       })
@@ -251,10 +251,10 @@ export function AssistantView({
       try {
         await navigator.clipboard.writeText(prompt)
         setCopiedPrompt(id)
-        toast.success('Промпт скопирован')
+        toast.success('Prompt copied')
         setTimeout(() => setCopiedPrompt(null), 2000)
       } catch {
-        toast.error('Не удалось скопировать')
+        toast.error('Failed to copy')
       }
     },
     [],
@@ -275,34 +275,34 @@ export function AssistantView({
     (rawText: string): React.ReactNode => {
       if (!rawText) return null
 
-      // Fence parsing — единый источник истины: src/lib/assistant-fence.ts
-      // (правка 34). Fence в ответе ассистента = «промпт»; текст ПЕРЕД ним
-      // (preamble) и ПОСЛЕ закрывающего fence (trailing) рендерится обычным
-      // приглушённым текстом. parseAllFences также ловит только ОТКРЫВАЮЩИЙ
-      // fence во время стрима — карточка появляется сразу и заполняется,
-      // вместо того чтобы сырой «```text» мелькнул обычным текстом.
-      // (правка 427) parseAllFences возвращает ВСЕ fence сообщения: в
-      // extend-чатах модель выдаёт промпт каждого клипа отдельным fence с
-      // маркером `clip: N` — карточка рисуется на каждый. Один fence —
-      // рендер идентичен старому parseFence.
+      // Fence parsing — single source of truth: src/lib/assistant-fence.ts
+      // (edit 34). Fence in assistant reply = "prompt"; text BEFORE it
+      // (preamble) and AFTER closing fence (trailing) is rendered with regular
+      // muted text. parseAllFences also catches OPENING-only
+      // fence during stream — card appears immediately and fills in,
+      // instead of raw "```text" flashing as plain text.
+      // (edit 427) parseAllFences returns ALL fences of message: in
+      // extend chats model emits prompt of each clip in separate fence with
+      // `clip: N` marker — card rendered for each. Single fence —
+      // render is identical to legacy parseFence.
       const fences = parseAllFences(rawText)
       if (fences.length) {
         return (
           <div className="space-y-3">
             {fences.map((fence, fi) => {
               const fenceStreaming = fence.streaming
-              // (правка 427) extend: маркер `clip: N` первой строкой fence —
-              // показываем номер в подписи карточки и вырезаем строку из тела
-              // (в карточку клипа она не попадёт — stripClipMarker при вставке).
+              // (edit 427) extend: `clip: N` marker as first line of fence —
+              // show number in card label and strip line from body
+              // (it won't be in clip card — stripClipMarker upon insertion).
               const clipMarker = isExtendChat ? parseClipMarker(fence.prompt) : null
               const prompt = clipMarker !== null ? stripClipMarker(fence.prompt) : fence.prompt
               // Render preamble (if any) with muted style, then the prompt
-              // as plain text — (правка 444) без фиолетовой рамки/фона и без
-              // моноширинного шрифта; остаются только кнопка копирования,
-              // метка клипа (extend) и курсор стрима.
-              // (правка 88) Preamble/trailing и ответы без fence рендерятся как
-              // markdown (списки, жирный, заголовки…); текст промпта — обычный,
-              // с подсветкой тегов.
+              // as plain text — (edit 444) without purple border/background and without
+              // monospace font; only copy button,
+              // clip label (extend) and streaming cursor remain.
+              // (edit 88) Preamble/trailing and responses without fence render as
+              // markdown (lists, bold, headings…); prompt text is plain,
+              // with tag highlighting.
               const preambleNodes = fence.preamble ? (
                 <MarkdownText text={fence.preamble} previewFor={previewFor} onRefClick={openRefByTag} />
               ) : null
@@ -316,9 +316,9 @@ export function AssistantView({
                       {preambleNodes}
                     </div>
                   )}
-                  {/* (правка 448) Тонкая разделительная полоска между
-                      пояснением ассистента и самим промптом — только когда
-                      пояснение есть (иначе линия висела бы в воздухе). */}
+                  {/* (edit 448) Thin divider between
+                      assistant explanation and prompt itself — only when
+                      explanation is present (otherwise line would float). */}
                   {preambleNodes && <div className="h-px bg-border/50" />}
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-0.5">
@@ -327,14 +327,14 @@ export function AssistantView({
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/80 animate-pulse" />
                         )}
                         {clipMarker !== null
-                          ? `Клип ${clipMarker}`
-                          : fenceStreaming ? 'генерируется…' : ''}
+                          ? `Clip ${clipMarker}`
+                          : fenceStreaming ? 'generating…' : ''}
                       </span>
                       <button
                         type="button"
                         onClick={() => copyPrompt(prompt, prompt.slice(0, 40))}
                         className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-[var(--surface-2)] transition-colors"
-                        title="Скопировать промпт"
+                        title="Copy prompt"
                       >
                         {copiedPrompt === prompt.slice(0, 40) ? (
                           <CheckIcon className="w-3 h-3 text-emerald-400" />
@@ -421,11 +421,11 @@ export function AssistantView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // (правка 427) Смена режима-фильтра: если открытый чат — чужого режима,
-  // АВТОМАТИЧЕСКИ открываем первый чат выбранного режима (или создаём новый,
-  // если в режиме пусто). Выбрано вместо заглушки «этот чат из другого
-  // режима» с кнопкой: фильтр ощущается фильтром, а не тупиком — лишний
-  // клик не требуется ни при переключении, ни при пустом режиме.
+  // (edit 427) Mode filter change: if open chat belongs to another mode,
+  // AUTOMATICALLY open first chat of selected mode (or create new,
+  // if mode is empty). Chosen over "chat from another mode" placeholder
+  // with button: filter feels like filter, not dead-end — no extra click
+  // needed when switching or on empty mode.
   useEffect(() => {
     const st = useAssistantChats.getState()
     const current = st.chats.find((c) => c.id === activeId)
@@ -437,10 +437,10 @@ export function AssistantView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assistantMode, activeId, chats])
 
-  // (правка 442) Панельный режим: режим-фильтр жёстко следует за вкладкой —
-  // панель на «Генерации» всегда показывает generate-чаты, на «Продлении» —
-  // extend-чаты (переключателя режима в панели нет). Эффект выше подхватит
-  // смену assistantMode и откроет/создаст чат нужного режима.
+  // (edit 442) Panel mode: filter strictly tracks tab —
+  // panel on "Generate" always shows generate chats, on "Extend" —
+  // extend chats (no mode switch in panel). Effect above catches
+  // assistantMode change and opens/creates chat of appropriate mode.
   useEffect(() => {
     if (!panelMode) return
     const st = useAssistantChats.getState()
@@ -448,31 +448,31 @@ export function AssistantView({
   }, [panelMode, assistantMode])
 
   /**
-   * Auto-run a queued "improve prompt" request (правка 32): the user
+   * Auto-run a queued "improve prompt" request (edit 32): the user
    * message is appended to the active chat and the completion starts.
-   * Правка 32: смена вкладки/чата больше НЕ обрывает идущий ответ — значит
-   * при монтировании стрим может ещё жить. runAssistantCompletion() — no-op
-   * при running, и запрос завис бы без ответа; поэтому, пока стрим активен,
-   * запрос ЖДЁТ в сторе и стартует сразу после его завершения.
-   * (правка 266) Эффект зависит и от pendingImprove: при уже смонтированной
-   * вкладке запрос приходит БЕЗ смены streaming/activeId — без подписки на
-   * стор эффект не перезапускался и запрос висел бессрочно.
+   * Edit 32: switching tab/chat no longer aborts in-flight reply —
+   * on mount the stream may still be running. runAssistantCompletion() — no-op
+   * when running, and request would hang without reply; so while stream is active,
+   * request WAITS in store and starts right after it completes.
+   * (edit 266) Effect also depends on pendingImprove: with tab already mounted
+   * request arrives WITHOUT changing streaming/activeId — without store subscription
+   * effect did not re-run and request would hang indefinitely.
    */
   useEffect(() => {
     if (streaming || !activeId) return
     const pending = useAssistantChats.getState().pendingImprove
     if (!pending) return
     const st = useAssistantChats.getState()
-    // (правка 266) Improve выполняется в чате, который создал
-    // requestImprovePrompt (его id пронесён в pendingImprove), а не в текущем
-    // activeId — иначе запрос попадал в чужой диалог, а созданный чат оставался
-    // пустым. Фолбэк на activeId — для персистнутых pending без chatId.
+    // (edit 266) Improve executes in chat created by
+    // requestImprovePrompt (its id passed in pendingImprove), not in current
+    // activeId — otherwise request landed in another dialog while created chat
+    // was empty. Fallback to activeId — for persisted pending without chatId.
     const id = st.chats.some((c) => c.id === pending.chatId)
       ? pending.chatId
       : st.chats.some((c) => c.id === activeId) ? activeId : st.createChat()
-    // (правка 427) Фильтр списка — в режим чата improve-запроса, иначе
-    // свежий extend-чат остался бы скрытым фильтром «Генерация» (дублирует
-    // setAssistantMode в requestImprovePrompt — для персистнутых pending).
+    // (edit 427) List filter to improve-request chat mode, otherwise
+    // new extend chat would stay hidden by "Generate" filter (duplicates
+    // setAssistantMode in requestImprovePrompt — for persisted pending).
     const targetChat = st.chats.find((c) => c.id === id)
     if (targetChat && targetChat.mode !== st.assistantMode) st.setAssistantMode(targetChat.mode)
     if (id !== activeId) setActiveId(id)
@@ -485,11 +485,11 @@ export function AssistantView({
   }, [streaming, activeId, pendingImprove])
 
   const activeChat = chats.find((c) => c.id === activeId) ?? null
-  /** Сообщения выведены РЕАКТИВНО из персист-стора: ответ, закоммиченный
-   *  движком, пока мы были на другой вкладке, появляется здесь сам. */
+  /** Messages rendered REACTIVELY from persisted store: reply committed
+   *  by engine while on another tab appears here automatically. */
   const messages = activeChat?.messages ?? []
-  // Стабильные ключи (index сдвигается при обрезке >200 сообщений и
-  // ре-анимирует все пузыри); одинаковые сообщения различаем счётчиком.
+  // Stable keys (index shifts on trimming >200 messages and
+  // re-animates all bubbles); duplicate messages distinguished by counter.
   const messageKeys = useMemo(() => {
     const seen = new Map<string, number>()
     return messages.map((m) => {
@@ -500,14 +500,14 @@ export function AssistantView({
     })
   }, [messages])
 
-  /** Идёт генерация видео — отправка сообщений заблокирована (vram-arbiter). */
+  /** Video generation in progress — sending messages blocked (vram-arbiter). */
   const chatBlocked = status?.blockedByGeneration === true
 
   // Poll LLM status + download progress
   useEffect(() => {
     let cancelled = false
-    // Факт использования ассистента в этой сессии: экран генерации
-    // опрашивает /api/llm/status (для блокировки кнопки) только если он был
+    // Note assistant usage in this session: generation view
+    // polls /api/llm/status (for button lock) only if assistant was used
     sessionStorage.setItem('assistantUsed', '1')
     const tick = async () => {
       try {
@@ -533,7 +533,7 @@ export function AssistantView({
               error: null,
             })
           } else if (mine.status === 'error') {
-            setDl({ active: false, received: 0, total: null, speed: 0, error: mine.error || 'Ошибка загрузки' })
+            setDl({ active: false, received: 0, total: null, speed: 0, error: mine.error || 'Download failed' })
           }
         }
       } catch {
@@ -551,9 +551,9 @@ export function AssistantView({
   // Autoscroll on new content (use rAF to ensure DOM has updated)
   useEffect(() => {
     const el = scrollRef.current
-    // (правка 267) Скроллим только «прилипнув» к низу — иначе каждый токен
-    // стрима сбрасывал пользователя, прокрутившего вверх читать историю.
-    // rAF отменяем при размонтировании/перезапуске эффекта.
+    // (edit 267) Scroll only when stuck to bottom — otherwise each token
+    // of stream pushed user down when reading history.
+    // Cancel rAF on unmount/re-run of effect.
     if (!el || !stickToBottomRef.current) return
     const raf = requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight
@@ -561,7 +561,7 @@ export function AssistantView({
     return () => cancelAnimationFrame(raf)
   }, [messages, streamText, activeId, status?.modelReady])
 
-  /* ── Авто-растекание textarea (правка 38): до 8 строк, дальше скролл ── */
+  /* ── Textarea auto-expand (edit 38): up to 8 lines, then scroll ── */
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -576,7 +576,7 @@ export function AssistantView({
     clickTs.current = Date.now()
     setDl({ active: true, received: 0, total: null, speed: 0, error: null })
     try {
-      const modelId = status?.modelId || DEFAULT_LLM_MODEL_ID // (правка 268)
+      const modelId = status?.modelId || DEFAULT_LLM_MODEL_ID // (edit 268)
       const r = await fetch('/api/models/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -584,32 +584,32 @@ export function AssistantView({
       })
       const d = await r.json()
       if (!d.ok) {
-        setDl({ active: false, received: 0, total: null, speed: 0, error: d.error || 'Не удалось начать загрузку' })
-        toast.error(d.error || 'Не удалось начать загрузку')
+        setDl({ active: false, received: 0, total: null, speed: 0, error: d.error || 'Failed to start download' })
+        toast.error(d.error || 'Failed to start download')
       } else {
-        toast.success('Загрузка модели началась')
+        toast.success('Model download started')
       }
     } catch {
-      setDl({ active: false, received: 0, total: null, speed: 0, error: 'Ошибка запуска загрузки' })
-      toast.error('Ошибка запуска загрузки')
+      setDl({ active: false, received: 0, total: null, speed: 0, error: 'Failed to start download' })
+      toast.error('Failed to start download')
     }
   }, [status?.modelId])
 
-  // (правка 86) Обработка выбора файла для вложения
+  // (edit 86) Handle file selection for attachment
   const handleAttFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const isVideo = file.type.startsWith('video/')
     const isImage = file.type.startsWith('image/')
     if (!isVideo && !isImage) {
-      toast.error('Поддерживаются только изображения и видео')
+      toast.error('Only images and videos are supported')
       return
     }
-    // (правка 349) Старое превью отзываем при замене вложения — иначе
-    // blob-URL утекает на каждый перевыбор файла.
+    // (edit 349) Revoke old preview on attachment replacement — otherwise
+    // blob URL leaks on each file re-selection.
     const prevAtt = useAssistantDraft.getState().attachment
     if (prevAtt) {
-      try { URL.revokeObjectURL(prevAtt.previewUrl) } catch { /* уже отозван */ }
+      try { URL.revokeObjectURL(prevAtt.previewUrl) } catch { /* already revoked */ }
     }
     setAttachment({
       file,
@@ -617,7 +617,7 @@ export function AssistantView({
       name: file.name,
       kind: isVideo ? 'video' : 'image',
     })
-    e.target.value = '' // сброс, чтобы повторный выбор того же файла сработал
+    e.target.value = '' // reset so selecting same file triggers change
   }, [])
 
   const removeAttachment = useCallback(() => {
@@ -628,18 +628,18 @@ export function AssistantView({
   const send = useCallback(
     async (text?: string) => {
       const content = (text ?? input).trim()
-      // chatBlocked: генерация идёт — vram-arbiter всё равно вернёт 409,
-      // блокируем заранее (Enter и быстрые кнопки идут в обход disabled)
+      // chatBlocked: generation in progress — vram-arbiter returns 409 anyway,
+      // block ahead of time (Enter and quick buttons bypass disabled)
       if (!content || isStreamActive() || chatBlocked) return
-      // (правка 717) Защита от ДВОЙНОЙ отправки. Проверка isStreamActive()
-      // не срабатывала в окне загрузки вложения (поток ещё не начался), и
-      // быстрые кнопки/Enter могли запустить второй send(): сообщение
-      // дописывалось дважды, а второй runAssistantCompletion отваливался по
-      // `if (running) return` — без ответа и без ошибки.
+      // (edit 717) Protection against DOUBLE send. isStreamActive() check
+      // did not fire during attachment upload (stream not started), and
+      // quick buttons/Enter could trigger second send(): message
+      // was appended twice, while second runAssistantCompletion failed via
+      // `if (running) return` — without reply or error.
       if (sendingRef.current) return
       sendingRef.current = true
       try {
-        // (правка 267) Отправка своего сообщения — возвращаемся к низу ленты.
+        // (edit 267) Sending user message — stick back to bottom of feed.
         stickToBottomRef.current = true
         let id = activeId
         if (!id || !useAssistantChats.getState().chats.some((c) => c.id === id)) {
@@ -647,11 +647,11 @@ export function AssistantView({
           setActiveId(id)
         }
 
-        // (правка 87; правка 108) Загружаем вложение ПЕРВЫМ, чтобы сохранить путь
-        // в сообщение. (правка 108) Загрузка в ИЗОЛИРОВАННОЕ хранилище
-        // data/chat-attachments/ (НЕ в ComfyUI/input/): файл существует только в
-        // чате и используется только для LLM-описания — не попадает в референсы
-        // генерации, галерею, upscale и «чистку input».
+        // (edit 87; edit 108) Upload attachment FIRST to save path
+        // in message. (edit 108) Upload to ISOLATED storage
+        // data/chat-attachments/ (NOT in ComfyUI/input/): file exists only in
+        // chat and is used only for LLM description — does not enter generation
+        // references, gallery, upscale or "input cleanup".
         let attInfo: { path: string; name: string; kind: 'image' | 'video'; src?: 'chat' | 'comfy' } | undefined
         let atts: ChatAttachment[] | undefined
         if (attachment) {
@@ -661,7 +661,7 @@ export function AssistantView({
             attInfo = { path, name: attachment.name, kind: attachment.kind, src: 'chat' }
             atts = [{ path, name: attachment.name, kind: attachment.kind }]
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Не удалось загрузить файл')
+            toast.error(err instanceof Error ? err.message : 'Failed to upload file')
             setAttUploading(false)
             removeAttachment()
             return
@@ -672,16 +672,16 @@ export function AssistantView({
 
         setInput('')
         const userMsg: AssistantChatMessage = { role: 'user', content, attachment: attInfo }
-        // Persist the user message immediately (с вложением для отображения в чате)
+        // Persist user message immediately (with attachment for chat display)
         useAssistantChats.getState().appendMessage(id, userMsg)
-        // (правка 265) history — свежий снапшот ПОСЛЕ appendMessage: userMsg в нём
-        // уже есть; добавление его в литерал дублировало сообщение в запросе.
+        // (edit 265) history — fresh snapshot AFTER appendMessage: userMsg is already
+        // in it; adding it to literal duplicated message in request.
         const history = useAssistantChats.getState().chats.find((c) => c.id === id)?.messages ?? []
 
         runAssistantCompletion(id, history, atts)
       } finally {
-        // (правка 717) Флаг снимается в finally — иначе после исключения
-        // (например, ошибка загрузки вложения) чат «залипал» бы заблокирован.
+        // (edit 717) Flag released in finally — otherwise on exception
+        // (e.g. attachment upload error) chat would remain stuck blocked.
         sendingRef.current = false
       }
     },
@@ -693,23 +693,23 @@ export function AssistantView({
   }, [])
 
   /**
-   * Switch to another chat (правка 32: стрим НЕ обрываем).
-   * Ответ, который уже летит, продолжает генерироваться в СВОЁМ чате —
-   * движок живёт на уровне модуля и переживает смену чата/вкладки.
-   * Живой хвост виден только в том чате, где он начался (streamingHere),
-   * «Стоп» доступен глобально у поля ввода.
+   * Switch to another chat (edit 32: do NOT abort stream).
+   * Reply in-flight continues generating in ITS chat —
+   * engine lives at module level and survives chat/tab switch.
+   * Live tail is visible only in chat where it began (streamingHere),
+   * "Stop" is globally available near input field.
    */
   const switchChat = useCallback(
     (id: string) => {
       useAssistantChats.getState().setActiveChat(id)
       setActiveId(id)
-      // (правка 442) В панели список чатов — выдвижной: после выбора закрываем.
+      // (edit 442) Chat list in panel is slide-out: close after selection.
       if (inPanel) setChatListOpen(false)
     },
     [inPanel],
   )
 
-  /** Новый чат (правка 32: идущий в другом чате ответ не трогаем). */
+  /** New chat (edit 32: reply in another chat is untouched). */
   const newChat = useCallback(() => {
     const id = useAssistantChats.getState().createChat()
     setActiveId(id)
@@ -718,11 +718,11 @@ export function AssistantView({
 
   const deleteChat = useCallback(
     (id: string) => {
-      // Правка 32: если стрим идёт ИМЕННО в удаляемом чате — сначала его
-      // останавливаем. Движок докоммитит частичный ответ в finally ПОСЛЕ
-      // удаления чата, appendMessage не найдёт чат и молча отбросит —
-      // как и надо (мусорный хвост не сохраняется), модель освобождается.
-      // Для чужого чата — no-op.
+      // Edit 32: if stream is running SPECIFICALLY in deleted chat — abort it first.
+      // Engine commits partial reply in finally AFTER
+      // chat deletion, appendMessage won't find chat and silently drops —
+      // as intended (garbage tail not saved), model is freed.
+      // For another chat — no-op.
       stopStreamForChat(id)
       const st = useAssistantChats.getState()
       st.deleteChat(id)
@@ -735,12 +735,12 @@ export function AssistantView({
     [activeId],
   )
 
-  /* ── (правка 264) Переименование чата ──
-   * Инлайн-редактор в списке: pencil → input (prefilled текущим названием),
-   * Enter/blur/✓ — сохранить, Esc/× — отмена. Двойной клик по имени — то же.
-   * renameChat из стора обновляет только title (без updatedAt) — список
-   * не пересортировывается, синхронизация (assistant-chats-sync) сама
-   * отправит изменённый chats-массив на сервер через debounce-PUT. */
+  /* ── (edit 264) Rename chat ──
+   * Inline editor in list: pencil -> input (prefilled with current title),
+   * Enter/blur/checkmark — save, Esc/cross — cancel. Double-click on name does the same.
+   * renameChat updates only title (without updatedAt) — list
+   * is not re-sorted, synchronization (assistant-chats-sync) automatically
+   * sends updated chats array to server via debounced PUT. */
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -748,7 +748,7 @@ export function AssistantView({
   const startRename = useCallback((id: string, current: string) => {
     setRenamingId(id)
     setRenameValue(current)
-    // Фокус + выделение всего после рендера input'а
+    // Focus and select all after input renders
     requestAnimationFrame(() => {
       renameInputRef.current?.focus()
       renameInputRef.current?.select()
@@ -769,40 +769,40 @@ export function AssistantView({
   }, [])
 
   /** Insert an assistant reply into the prompt editor.
-   *  Извлечение промпта — единый источник: src/lib/assistant-fence.ts
-   *  (правка 34): fence-контент → от маркера H3-поля → последний
-   *  содержательный абзац; всегда с обрезкой по закрывающему fence, без
-   *  хвоста модели и декоративных кавычек. */
+   *  Prompt extraction — single source: src/lib/assistant-fence.ts
+   *  (edit 34): fence content -> from H3 field marker -> last
+   *  meaningful paragraph; trimmed at closing fence, without
+   *  model tail or decorative quotes. */
   const insertIntoPrompt = useCallback((content: string) => {
     const clean = extractInsertablePrompt(content)
     if (!clean) return
     useGenStore.getState().setVideoPrompt(clean)
-    // (правка 161) Кнопка видна только когда !streaming — стрим завершён.
-    // Но серверный assistantBusy может ещё быть true (drain-насос не
-    // завершился). GenerateView при монтировании poll'ит /api/llm/status
-    // и блокирует «Сгенерировать». Снимаем лок: генерация не мешает
-    // LLM (strim уже закончен), реальный gate — 409 от runGeneration.
+    // (edit 161) Button visible only when !streaming — stream finished.
+    // But server assistantBusy might still be true (drain pump not
+    // finished). GenerateView polls /api/llm/status on mount
+    // and locks "Generate". Release lock: generation does not interfere with
+    // LLM (stream finished), real gate is 409 from runGeneration.
     void fetch('/api/llm/release', { method: 'POST' }).catch(() => {})
     window.dispatchEvent(new CustomEvent('h3:goto-generate'))
-    toast.success('Промпт вставлен в редактор')
+    toast.success('Prompt inserted into editor')
   }, [])
 
-  /** (правка 502) Вставка fence-промпта controlnet-чата в поле промпта
-   *  вкладки «ControlNet» (controlnet-target-store) + переход на вкладку. */
+  /** (edit 502) Insert controlnet chat fence prompt into prompt field
+   *  of "ControlNet" tab (controlnet-target-store) + navigate to tab. */
   const insertIntoControlNetPrompt = useCallback((content: string) => {
     const clean = extractInsertablePrompt(content)
     if (!clean) return
     useControlNetTarget.getState().setPrompt(clean)
     void fetch('/api/llm/release', { method: 'POST' }).catch(() => {})
     window.dispatchEvent(new CustomEvent('h3:goto-controlnet'))
-    toast.success('Промпт вставлен во вкладку ControlNet')
+    toast.success('Prompt inserted into ControlNet tab')
   }, [])
 
-  /** (правка 427) Вставка fence-промпта extend-чата в карточку клипа N.
-   *  Маркерная строка `clip: N` вырезается (stripClipMarker) — она нужна
-   *  только UI для адресации. Копия массива extendClips по индексу — как
-   *  редактирование в extend-view; release LLM и переход на вкладку
-   *  «Продление» — как у «В промпт» (правка 161). */
+  /** (edit 427) Insert extend chat fence prompt into clip card N.
+   *  `clip: N` marker line is stripped (stripClipMarker) — needed
+   *  only by UI for addressing. Copy array by index matching
+   *  editing in extend-view; release LLM and navigate to tab
+   *  "Extend" — matching "To prompt" (edit 161). */
   const insertIntoClip = useCallback((fenceContent: string, clipNumber: number) => {
     const clean = stripClipMarker(fenceContent).trim()
     if (!clean) return
@@ -810,20 +810,20 @@ export function AssistantView({
     const clips = [...st.video.extendClips]
     const idx = clipNumber - 1
     if (idx < 0 || idx >= clips.length) {
-      toast.error(`Клипа ${clipNumber} нет — добавьте его на вкладке «Продление»`)
+      toast.error(`Clip ${clipNumber} not found — add it on the "Extend" tab`)
       return
     }
     clips[idx] = { ...clips[idx], prompt: clean }
     st.patchVideo({ extendClips: clips })
     void fetch('/api/llm/release', { method: 'POST' }).catch(() => {})
     window.dispatchEvent(new CustomEvent('h3:goto-extend'))
-    toast.success(`Промпт вставлен в клип ${clipNumber}`)
+    toast.success(`Prompt inserted into clip ${clipNumber}`)
   }, [])
 
-  /** (правка 428) Массовая вставка: ассистент обычно выдаёт промпты ВСЕХ
-   *  клипов одним сообщением (несколько fence с маркерами `clip: N`) — тогда
-   *  вместо россыпи кнопок «В клип N» показываем ОДНУ «Вставить все (N)».
-   *  Все правки применяются к одной копии массива и одним patchVideo. */
+  /** (edit 428) Batch insert: assistant usually yields prompts for ALL
+   *  clips in one message (multiple fences with `clip: N` markers) — then
+   *  instead of multiple "To clip N" buttons show ONE "Insert all (N)".
+   *  All updates applied to single array copy and one patchVideo. */
   const insertAllIntoClips = useCallback((pairs: Array<{ content: string; clip: number }>) => {
     const st = useGenStore.getState()
     const clips = [...st.video.extendClips]
@@ -836,18 +836,18 @@ export function AssistantView({
       applied++
     }
     if (applied === 0) {
-      toast.error('Нечего вставлять — клипы не найдены')
+      toast.error('Nothing to insert — clips not found')
       return
     }
     st.patchVideo({ extendClips: clips })
     void fetch('/api/llm/release', { method: 'POST' }).catch(() => {})
     window.dispatchEvent(new CustomEvent('h3:goto-extend'))
-    toast.success(`Промпты вставлены в клипы: ${applied} шт.`)
+    toast.success(`Prompts inserted into clips: ${applied}`)
   }, [])
 
   /**
    * Does this assistant reply actually contain a structured prompt?
-   * The "В промпт" button is rendered ONLY in that case — plain
+   * The "To prompt" button is rendered ONLY in that case — plain
    * conversational answers (greetings, Q&A, tips) have nothing to insert,
    * and a dead button there only confuses users.
    */
@@ -875,11 +875,11 @@ export function AssistantView({
             <span className={cn('rounded-xl gradient-creative flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20', inPanel ? 'w-7 h-7' : 'w-9 h-9')}>
               <BotIcon className={cn('text-white', inPanel ? 'w-3.5 h-3.5' : 'w-4.5 h-4.5')} />
             </span>
-            Ассистент
+            Assistant
           </h1>
         </div>
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-xs text-muted-foreground">Загрузка…</div>
+          <div className="text-xs text-muted-foreground">Loading…</div>
         </div>
       </div>
     )
@@ -889,15 +889,15 @@ export function AssistantView({
     <div
       className="relative flex-1 flex flex-row min-h-0 bg-[var(--surface-1)]"
       onPaste={(e) => {
-        // (правка 123) Ctrl+V из буфера обмена — изображение становится
-        // вложением чата (то же, что кнопка «скрепка»). Срабатывает при
-        // фокусе в любом поле вкладки; text-вставку не трогаем —
-        // перехватываем только если в буфере есть картинка.
-        // preventDefault синхронно (до await).
+        // (edit 123) Ctrl+V from clipboard — image becomes
+        // chat attachment (same as paperclip button). Fires on
+        // focus in any tab field; text paste untouched —
+        // intercept only if clipboard contains image.
+        // preventDefault synchronously (before await).
         if (!hasClipboardImage(e.clipboardData)) return
         e.preventDefault()
         if (attUploading) {
-          toast.error('Дождитесь отправки сообщения — текущее вложение загружается')
+          toast.error('Please wait for message to send — current attachment is uploading')
           return
         }
         void getClipboardImageFiles(e.clipboardData).then((files) => {
@@ -910,15 +910,15 @@ export function AssistantView({
     >
       {/* Left: main content */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      {/* Header — (правка 442) в панели компактный: кнопка списка чатов слева,
-          кнопка сворачивания панели справа */}
+      {/* Header — (edit 442) in panel compact: chat list button on left,
+          collapse panel button on right */}
       <div className={cn('shrink-0 aurora-bg', inPanel ? 'px-3 pt-3 pb-2' : 'px-6 pt-5 pb-3')}>
         <div className={cn('flex gap-3', inPanel ? 'items-center' : 'items-end justify-between')}>
           {inPanel && (
             <button
               type="button"
               onClick={() => setChatListOpen((o) => !o)}
-              title="Список чатов"
+              title="Chat list"
               className={cn(
                 'shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center transition-colors',
                 chatListOpen
@@ -934,17 +934,17 @@ export function AssistantView({
               <span className={cn('rounded-xl gradient-creative flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20', inPanel ? 'w-7 h-7' : 'w-9 h-9')}>
                 <BotIcon className={cn('text-white', inPanel ? 'w-3.5 h-3.5' : 'w-4.5 h-4.5')} />
               </span>
-              Ассистент
+              Assistant
             </h1>
             <p className={cn('text-muted-foreground mt-1 truncate', inPanel ? 'text-[10px]' : 'text-xs')}>
               {inPanel
-                ? `Локальная LLM: ${llmDisplayName(status?.modelId, status?.modelName)}`
-                : `Локальная LLM (${llmDisplayName(status?.modelId, status?.modelName)}) · видит картинки · чаты сохраняются`}
+                ? `Local LLM: ${llmDisplayName(status?.modelId, status?.modelName)}`
+                : `Local LLM (${llmDisplayName(status?.modelId, status?.modelName)}) · multimodal vision · persistent chats`}
             </p>
           </div>
           {modelReady && (
             <div className="flex items-center gap-2 shrink-0">
-              {/* (правка 540) Тогл «3D → Video» убран — перенос движения через вкладку ControlNet */}
+              {/* (edit 540) Toggle "3D -> Video" removed — motion transfer via ControlNet tab */}
               <span
                 className={cn(
                   'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border',
@@ -954,7 +954,7 @@ export function AssistantView({
                 )}
               >
                 <span className={cn('w-1.5 h-1.5 rounded-full', running ? 'bg-emerald-400' : 'bg-muted-foreground/50')} />
-                {running ? (status?.gpuMode === 'gpu' ? 'GPU' : 'CPU') : 'спит'}
+                {running ? (status?.gpuMode === 'gpu' ? 'GPU' : 'CPU') : 'idle'}
               </span>
             </div>
           )}
@@ -962,7 +962,7 @@ export function AssistantView({
             <button
               type="button"
               onClick={onCollapse}
-              title="Свернуть панель"
+              title="Collapse panel"
               className="shrink-0 w-8 h-8 rounded-lg border border-border bg-[var(--surface-2)] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <ChevronRightIcon className="w-4 h-4" />
@@ -981,31 +981,31 @@ export function AssistantView({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">
-                {status?.modelId === 'llm_custom' ? 'Файл своей модели не найден' : 'Модель ассистента не скачана'}
+                {status?.modelId === 'llm_custom' ? 'Custom model file not found' : 'Assistant model not downloaded'}
               </h3>
               <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                 {status?.modelId === 'llm_custom' ? (
                   <>
-                    Проверьте путь к своей модели в <b>Настройках → LLM</b>: файл
-                    «{status?.modelName || '—'}» недоступен. Свои модели студия
-                    не скачивает — исправьте путь или очистите поле, чтобы
-                    вернуться к встроенной модели.
+                    Check the path to your model in <b>Settings → LLM</b>: file
+                    "{status?.modelName || '—'}" is not available. Custom models are
+                    not downloaded by the studio — fix the path or clear the field
+                    to return to the built-in model.
                   </>
                 ) : (
                   <>
-                    Локальная модель ассистента ({llmDisplayName(status?.modelId, status?.modelName)})
-                    — скачивается в <span className="font-mono text-[10px]">ComfyUI/models/llm/</span>. Работает
-                    локально, без интернета, прямо на вашем железе.
+                    Local assistant model ({llmDisplayName(status?.modelId, status?.modelName)})
+                    — downloaded to <span className="font-mono text-[10px]">ComfyUI/models/llm/</span>. Runs
+                    locally without internet, directly on your hardware.
                   </>
                 )}
               </p>
             </div>
             {status?.modelId === 'llm_custom' ? null : dl.error ? (
               <div className="space-y-2">
-                <p className="text-xs text-red-400 break-words">Ошибка: {dl.error}</p>
+                <p className="text-xs text-red-400 break-words">Error: {dl.error}</p>
                 <Button variant="outline" size="sm" onClick={startDownload} className="gap-1.5">
                   <DownloadIcon className="w-3.5 h-3.5" />
-                  Повторить
+                  Retry
                 </Button>
               </div>
             ) : dl.active ? (
@@ -1024,10 +1024,10 @@ export function AssistantView({
                 </div>
                 <p className="text-xs text-muted-foreground font-mono tabular-nums">
                   {dl.received > 0
-                    ? `${(dl.received / 1024 / 1024 / 1024).toFixed(2)} / ${sizeLabel || '~5.7 ГБ'}` +
+                    ? `${(dl.received / 1024 / 1024 / 1024).toFixed(2)} / ${sizeLabel || '~5.7 GB'}` +
                       (dl.total && dl.total > 0 ? ` · ${Math.floor((dl.received / dl.total) * 100)}%` : '') +
-                      (dl.speed > 0 ? ` · ${(dl.speed / 1024 / 1024).toFixed(1)} МБ/с` : '')
-                    : 'Подключение к серверу загрузки…'}
+                      (dl.speed > 0 ? ` · ${(dl.speed / 1024 / 1024).toFixed(1)} MB/s` : '')
+                    : 'Connecting to download server…'}
                 </p>
               </div>
             ) : (
@@ -1036,12 +1036,12 @@ export function AssistantView({
                 className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white border-0 font-semibold gap-2"
               >
                 <DownloadIcon className="w-4 h-4" />
-                Скачать модель ({sizeLabel || '~5.7 ГБ'})
+                Download model ({sizeLabel || '~5.7 GB'})
               </Button>
             )}
             <p className="text-[10px] text-muted-foreground/60">
-              После загрузки первый запуск занимает 1–2 минуты. Пока идёт генерация видео,
-              модель при нехватке VRAM сама стартует в CPU-режиме.
+              After downloading, first launch takes 1–2 minutes. During video generation,
+              the model automatically starts in CPU mode if VRAM is insufficient.
             </p>
           </div>
         </div>
@@ -1050,7 +1050,7 @@ export function AssistantView({
         <>
           <div
             ref={scrollRef}
-            // (правка 267) Отслеживаем «прилип к низу» для автопрокрутки
+            // (edit 267) Track stuck to bottom for autoscroll
             onScroll={(e) => {
               const el = e.currentTarget
               stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
@@ -1062,12 +1062,12 @@ export function AssistantView({
                 <div className="max-w-md text-center space-y-3">
                   <SparklesIcon className="w-8 h-8 text-amber-400/60 mx-auto" />
                   <p className="text-sm text-muted-foreground">
-                    {/* (правка 427) Приветствие зависит от режима чата. */}
+                    {/* (edit 427) Greeting depends on chat mode. */}
                     {isExtendChat
-                      ? 'Опишите, как продолжить видео — ассистент соберёт промпты клипов (каждый отдельным блоком с меткой clip: N) с учётом исходника и референсов продления.'
+                      ? 'Describe how to continue the video — the assistant will craft prompts for clips (each in a separate block labeled clip: N) taking into account the source and extension references.'
                       : isControlNetChat
-                        ? 'Опишите сцену — ассистент соберёт промпт для ControlNet. Движение и камеру задаёт контрольное видео, в промпте — только сцена, внешность, стиль, свет и звук.'
-                        : 'Опишите идею видео по-русски — ассистент соберёт готовый промпт (на английском, с тегами ваших референсов) и запомнит диалог.'}
+                        ? 'Describe the scene — the assistant will create a prompt for ControlNet. Motion and camera are defined by the control video, so the prompt should describe only the scene, appearance, style, lighting, and sound.'
+                        : 'Describe your video idea in natural language — the assistant will generate a prompt (in English, tagged with your references) and remember the conversation.'}
                   </p>
                 </div>
               </div>
@@ -1082,35 +1082,35 @@ export function AssistantView({
                 >
                   <div
                     className={cn(
-                      // (правка 564) select-text: текст сообщений чата выделяется
-                      // (копирование ответов), кнопки внутри исключены в CSS.
+                      // (edit 564) select-text: chat message text can be selected
+                      // (copying replies), internal buttons excluded in CSS.
                       'select-text max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words',
-                      // (правка 88) у ассистента текст рендерится маркдауном —
-                      // pre-wrap там не нужен (двойные переносы), у юзера остаётся.
+                      // (edit 88) assistant text is rendered as markdown —
+                      // pre-wrap is not needed there (double newlines), user keeps it.
                       m.role === 'user' && 'whitespace-pre-wrap',
                       m.role === 'user'
                         ? 'bg-gradient-to-r from-slate-600/90 to-indigo-600/90 text-white rounded-br-sm'
                         : 'bg-[var(--surface-2)]/60 border border-border/60 text-foreground/95 rounded-bl-sm',
                     )}
                   >
-                    {/* (правка 87) Вложение: изображение или видео в пузыре.
-                        (правка 108) src='chat' → изолированное хранилище чата
-                        (data/chat-attachments/); legacy (без src) → /api/comfy/file. */}
+                    {/* (edit 87) Attachment: image or video in bubble.
+                        (edit 108) src='chat' -> isolated chat storage
+                        (data/chat-attachments/); legacy (without src) -> /api/comfy/file. */}
                     {m.attachment && (() => {
                       const attSrc = m.attachment.src === 'chat'
                         ? `/api/assistant/attachment?filename=${encodeURIComponent(m.attachment.path)}`
                         : `/api/comfy/file?filename=${encodeURIComponent(m.attachment.path)}&type=input`
                       return (
                         <div className="mb-2">
-                          {/* (правка 719) Клик по вложению — полноэкранный
-                              просмотр (как на вкладке «Генерация»). */}
+                          {/* (edit 719) Click on attachment — full-screen
+                              viewer (matching "Generate" tab). */}
                           <RefPreviewThumb
                             kind={m.attachment.kind}
                             name={m.attachment.name}
                             path={m.attachment.path}
                             url={attSrc}
                             className="block max-w-full"
-                            title="Открыть вложение во весь экран"
+                            title="Open attachment full screen"
                           >
                             {m.attachment.kind === 'image' ? (
                               <img
@@ -1124,8 +1124,8 @@ export function AssistantView({
                                 className="max-h-48 max-w-full rounded-lg"
                                 controls
                                 preload="metadata"
-                                /* (правка 719) Клик по кнопкам плеера не должен
-                                   открывать полноэкранный просмотр. */
+                                /* (edit 719) Player button clicks must not
+                                   trigger full-screen viewer. */
                                 onClick={(e) => e.stopPropagation()}
                               />
                             )}
@@ -1134,20 +1134,20 @@ export function AssistantView({
                         </div>
                       )
                     })()}
-                    {/* (правка 695) User messages — plain markdown, без fence-парсинга:
-                        инструкция «```text fence с clip: N» содержит три backtick-а,
-                        и parseAllFences находил их как «открытый fence», добавляя
-                        «генерируется…» к сообщению юзера. Fence-карточки нужны
-                        только в ответах ассистента. */}
+                    {/* (edit 695) User messages — plain markdown, without fence parsing:
+                        instruction "```text fence with clip: N" contains three backticks,
+                        and parseAllFences treated them as "open fence", adding
+                        "generating…" to user message. Fence cards needed
+                        only in assistant replies. */}
                     {m.role === 'user'
                       ? (<div className="leading-relaxed break-words"><MarkdownText text={m.content} previewFor={previewFor} onRefClick={openRefByTag} /></div>)
                       : (renderChatContent(m.content) || '')}
-                    {/* (правка 427) Вставка — по режиму чата: «В промпт»
-                        только в чатах «Генерация»; в чатах «Продление» —
-                        per-fence «В клип N» (по маркеру `clip: N`, а без
-                        маркера — ряд кнопок по числу клипов).
-                        (правка 502) В чатах «ControlNet» — «В промпт»
-                        вкладки ControlNet. */}
+                    {/* (edit 427) Insert — by chat mode: "To prompt"
+                        only in "Generate" chats; in "Extend" chats —
+                        per-fence "To clip N" (by `clip: N` marker, or without
+                        marker — row of buttons matching clip count).
+                        (edit 502) In "ControlNet" chats — "To prompt"
+                        of ControlNet tab. */}
                     {m.role === 'assistant' && !streaming && !isExtendChat && hasStructuredPrompt(m.content) && (
                       <div className="mt-2 pt-2 border-t border-border/60 flex items-center gap-2">
                         <button
@@ -1156,17 +1156,17 @@ export function AssistantView({
                           className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
                         >
                           <ArrowDownToLineIcon className="w-3 h-3" />
-                          В промпт
+                          To prompt
                         </button>
                       </div>
                     )}
                     {m.role === 'assistant' && !streaming && isExtendChat && (() => {
                       const msgFences = parseAllFences(m.content)
                       if (!msgFences.length) return null
-                      // (правка 428) Fence с валидным маркером `clip: N`
-                      // собираем в пары; если их 2+ — ОДНА кнопка «Вставить
-                      // все» вместо россыпи «В клип N». Fence без маркера
-                      // (или с устаревшим номером) — ряд ручных кнопок.
+                      // (edit 428) Collect fences with valid `clip: N` marker
+                      // into pairs; if 2+ — ONE "Insert all" button
+                      // instead of multiple "To clip N". Fences without marker
+                      // (or with stale number) — row of manual buttons.
                       const marked: Array<{ content: string; clip: number }> = []
                       const unmarked: Array<{ content: string; fi: number }> = []
                       msgFences.forEach((f, fi) => {
@@ -1177,16 +1177,16 @@ export function AssistantView({
                           unmarked.push({ content: f.prompt, fi })
                         }
                       })
-                      // (правка 453) Дубли кнопок: модель часто выдаёт 2+
-                      // fence БЕЗ маркера `clip: N` — раньше для КАЖДОГО
-                      // рисовался идентичный ряд «В клип: [1] [2]…» (какой
-                      // ряд к какому промпту — непонятно). Теперь: если все
-                      // fence без маркеров и их ≥2 (но не больше, чем клипов)
-                      // — сопоставляем ПОЗИЦИОННО (fence i → клип i+1) и
-                      // показываем ОДНУ кнопку «Вставить все». Одиночный
-                      // fence — ряд ручного выбора один раз. Нестыковка
-                      // (fence'ов больше клипов) — ряды с подписью номера
-                      // промпта, чтобы отличались.
+                      // (edit 453) Button duplicates: model often yields 2+
+                      // fences WITHOUT `clip: N` marker — previously for EACH
+                      // an identical row "To clip: [1] [2]…" was rendered (which
+                      // which row belonged to which prompt was ambiguous). Now: if all
+                      // fences lack markers and there are >=2 (not exceeding clips)
+                      // — match POSITIONALLY (fence i -> clip i+1) and
+                      // show ONE "Insert all" button. Single
+                      // fence — manual selection row once. Mismatch
+                      // (more fences than clips) — rows with prompt number
+                      // label to distinguish.
                       const positional =
                         marked.length === 0 &&
                         unmarked.length >= 2 &&
@@ -1201,10 +1201,10 @@ export function AssistantView({
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
                               >
                                 <ArrowDownToLineIcon className="w-3 h-3" />
-                                Вставить все ({marked.length})
+                                Insert all ({marked.length})
                               </button>
                               <span className="text-[10px] text-muted-foreground/60">
-                                → клипы {marked.map((p) => p.clip).join(', ')}
+                                → clips {marked.map((p) => p.clip).join(', ')}
                               </span>
                             </div>
                           ) : (
@@ -1216,7 +1216,7 @@ export function AssistantView({
                                   className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
                                 >
                                   <ArrowDownToLineIcon className="w-3 h-3" />
-                                  В клип {p.clip}
+                                  To clip {p.clip}
                                 </button>
                               </div>
                             ))
@@ -1233,10 +1233,10 @@ export function AssistantView({
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
                               >
                                 <ArrowDownToLineIcon className="w-3 h-3" />
-                                Вставить все ({unmarked.length})
+                                Insert all ({unmarked.length})
                               </button>
                               <span className="text-[10px] text-muted-foreground/60">
-                                → клипы {unmarked.map((_, i) => i + 1).join(', ')}
+                                → clips {unmarked.map((_, i) => i + 1).join(', ')}
                               </span>
                             </div>
                           ) : (
@@ -1244,14 +1244,14 @@ export function AssistantView({
                               if (extendClipsCount === 0) {
                                 return fi === unmarked[0].fi ? (
                                   <p key={fi} className="text-[10px] text-muted-foreground/60">
-                                    Нет клипов — добавьте их на вкладке «Продление», затем вставьте промпт.
+                                    No clips — add them on the "Extend" tab, then insert prompt.
                                   </p>
                                 ) : null
                               }
                               return (
                                 <div key={fi} className="flex items-center gap-1 flex-wrap">
                                   <span className="text-[10px] text-muted-foreground/60 mr-0.5">
-                                    {unmarked.length > 1 ? `Промпт ${fi + 1} →` : 'В клип:'}
+                                    {unmarked.length > 1 ? `Prompt ${fi + 1} →` : 'To clip:'}
                                   </span>
                                   {Array.from({ length: extendClipsCount }, (_, k) => (
                                     <button
@@ -1260,7 +1260,7 @@ export function AssistantView({
                                       onClick={() => insertIntoClip(content, k + 1)}
                                       className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
                                     >
-                                      Клип {k + 1}
+                                      Clip {k + 1}
                                     </button>
                                   ))}
                                 </div>
@@ -1276,53 +1276,53 @@ export function AssistantView({
               {streamingHere && (
                 <div className="flex justify-start">
                   <div className="select-text max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words bg-[var(--surface-2)]/60 border border-border/60 text-foreground/95 rounded-bl-sm">
-                    {streamText ? renderChatContent(streamText) : 'Готовлю ответ…'}
+                    {streamText ? renderChatContent(streamText) : 'Preparing reply…'}
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Quick actions + input (правка 87: центрировано, max-width) */}
+          {/* Quick actions + input (edit 87: centered, max-width) */}
           <div className="shrink-0 border-t border-border px-4 py-3 bg-[var(--surface-0)]/90 backdrop-blur-sm">
           <div className="max-w-3xl mx-auto space-y-2">
             {!streaming && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 {isExtendChat ? (
-                  /* (правка 427) Extend-чат: быстрая кнопка просит промпты
-                      ВСЕХ клипов — по fence с маркером clip: N на клип. */
+                  /* (edit 427) Extend chat: quick button asks prompts for
+                      ALL clips — via fence with clip: N marker per clip. */
                   <button
                     type="button"
                     onClick={() => {
                       void send(
                         extendClipsCount > 0
-                          ? `Заполни (или улучши) промпты всех ${extendClipsCount} клипов продления по контексту исходника — для каждого клипа отдельный \`\`\`text fence с первой строкой \`clip: N\`.`
-                          : 'Предложи 2–3 клипа продления по контексту исходного видео: для каждого — отдельный ```text fence с первой строкой `clip: N` (я создам карточки клипов с этими номерами).',
+                          ? `Fill in (or improve) prompts for all ${extendClipsCount} extension clips based on the source context — for each clip create a separate \`\`\`text fence with the first line \`clip: N\`.`
+                          : 'Suggest 2–3 extension clips based on the context of the source video: for each, provide a separate ```text fence with the first line `clip: N` (I will create clip cards with these numbers).',
                       )
                     }}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs hover:bg-amber-500/20 transition-colors"
                   >
                     <WandSparklesIcon className="w-3 h-3" />
-                    {extendClipsCount > 0 ? 'Промпты для всех клипов' : 'Предложить клипы продления'}
+                    {extendClipsCount > 0 ? 'Prompts for all clips' : 'Suggest extension clips'}
                   </button>
                 ) : isControlNetChat ? (
-                  /* (правка 502) ControlNet-чат: «Исправить промпт» (правка 560
-                      — переименовано) с текущим промптом вкладки «ControlNet»
-                      (пустой — придумать с нуля). */
+                  /* (edit 502) ControlNet chat: "Refine prompt" (edit 560
+                      — renamed) with current prompt of "ControlNet" tab
+                      (empty — create from scratch). */
                   <button
                     type="button"
                     onClick={() => {
                       const draft = useControlNetTarget.getState().prompt.trim()
                       void send(
                         draft
-                          ? `Исправь мой текущий промпт для режима ControlNet, сохранив смысл. Движение и камеру НЕ описывай — их задаёт контрольное видео. Текущий промпт:\n\n${draft}`
-                          : 'Придумай промпт для режима ControlNet с нуля: движение и камеру задаёт контрольное видео, опиши только сцену, внешность персонажей, стиль, свет и звук.',
+                          ? `Refine my current prompt for ControlNet mode, preserving the meaning. Do NOT describe motion or camera — they are driven by the control video. Current prompt:\n\n${draft}`
+                          : 'Create a prompt for ControlNet mode from scratch: motion and camera are set by the control video, describe only the scene, character appearance, style, lighting, and audio.',
                       )
                     }}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs hover:bg-amber-500/20 transition-colors"
                   >
                     <WandSparklesIcon className="w-3 h-3" />
-                    {controlnetHasPrompt ? 'Исправить промпт' : 'Придумать промпт'}
+                    {controlnetHasPrompt ? 'Refine prompt' : 'Create prompt'}
                   </button>
                 ) : (
                 <button
@@ -1331,19 +1331,19 @@ export function AssistantView({
                     const draft = useGenStore.getState().video.prompt.trim()
                     void send(
                       draft
-                        ? `Исправь мой текущий промпт, сохранив смысл. Текущий промпт:\n\n${draft}`
-                        : 'Предложи 3 разных идеи для короткого видео (по одной сцене на идею), я выберу и попрошу промпт.',
+                        ? `Refine my current prompt while preserving the meaning. Current prompt:\n\n${draft}`
+                        : 'Suggest 3 different ideas for a short video (one scene per idea), I will choose one and ask for a prompt.',
                     )
                   }}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs hover:bg-amber-500/20 transition-colors"
                 >
                   <WandSparklesIcon className="w-3 h-3" />
-                  {hasPrompt ? 'Исправить мой промпт' : 'Предложить идеи'}
+                  {hasPrompt ? 'Refine my prompt' : 'Suggest ideas'}
                 </button>
                 )}
               </div>
             )}
-            {/* (правка 86) Превью вложения */}
+            {/* (edit 86) Attachment preview */}
             {attachment && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10">
                 {attachment.kind === 'image' ? (
@@ -1359,25 +1359,25 @@ export function AssistantView({
                 )}
                 <span className="text-xs text-foreground truncate flex-1 min-w-0">{attachment.name}</span>
                 {attUploading ? (
-                  <span className="text-[10px] text-amber-400 animate-pulse shrink-0">Загрузка…</span>
+                  <span className="text-[10px] text-amber-400 animate-pulse shrink-0">Uploading…</span>
                 ) : (
                   <button
                     type="button"
                     onClick={removeAttachment}
                     className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors shrink-0"
-                    title="Убрать вложение"
+                    title="Remove attachment"
                   >
                     <XIcon className="w-3.5 h-3.5" />
                   </button>
                 )}
-                {/* (правка 691) «Очистить» — сбрасывает текст и вложение одним
-                    жестом (показана, когда есть что чистить). */}
+                {/* (edit 691) "Clear" — resets text and attachment in single
+                    action (shown when there is content to clear). */}
                 {(input.trim() || attachment) && (
                   <button
                     type="button"
                     onClick={() => { setInput(''); removeAttachment() }}
                     className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors shrink-0"
-                    title="Очистить поле ввода и вложение"
+                    title="Clear input and attachment"
                   >
                     <Trash2Icon className="w-3.5 h-3.5" />
                   </button>
@@ -1385,12 +1385,12 @@ export function AssistantView({
               </div>
             )}
             <div className="flex items-center gap-2">
-              {/* (правка 86) Кнопка «+» — прикрепить изображение или видео */}
+              {/* (edit 86) "+" button — attach image or video */}
               <button
                 type="button"
                 onClick={() => attFileRef.current?.click()}
                 disabled={streaming || attUploading}
-                title="Прикрепить изображение или видео для анализа LLM"
+                title="Attach image or video for LLM analysis"
                 className={cn(
                   'shrink-0 inline-flex items-center justify-center rounded-xl border transition-colors',
                   'h-11 w-11',
@@ -1408,7 +1408,7 @@ export function AssistantView({
                 className="hidden"
                 onChange={handleAttFile}
               />
-              {/* Поле ввода + микрофон (правка 87: центрировано) */}
+              {/* Input field + microphone (edit 87: centered) */}
               <div className="relative flex-1 min-w-0">
                 <textarea
                   ref={textareaRef}
@@ -1417,34 +1417,34 @@ export function AssistantView({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      // Кнопка Send disabled во время загрузки вложения —
-                      // Enter должен соблюдать тот же guard: иначе текст
-                      // уходил БЕЗ вложения, а повторный send (по завершении
-                      // загрузки) молча отбрасывался (running=true).
+                      // Send button disabled while attachment is uploading —
+                      // Enter must observe the same guard: otherwise text
+                      // was sent WITHOUT attachment, and repeated send (on upload
+                      // finish) was silently dropped (running=true).
                       if (attUploading) {
-                        toast.error('Дождитесь загрузки вложения')
+                        toast.error('Please wait for attachment to finish uploading')
                         return
                       }
                       void send()
                     }
                   }}
-                  placeholder="Опишите идею сцены… (Enter — отправить, Shift+Enter — новая строка)"
+                  placeholder="Describe scene idea… (Enter to send, Shift+Enter for newline)"
                   rows={1}
-                  // (правка 452) Точный вертикальный ритм: 11+20+11 + 2px рамки =
-                  // ровно 44px (h-11 кнопок) — текст, плейсхолдер и кнопки стоят
-                  // на одной оси. placeholder:text-xs убран: уменьшенный шрифт
-                  // ломал baseline и плейсхолдер висел выше центра.
+                  // (edit 452) Exact vertical rhythm: 11+20+11 + 2px border =
+                  // exactly 44px (h-11 buttons) — text, placeholder and buttons sit
+                  // on one axis. placeholder:text-xs removed: reduced font size
+                  // broke baseline and placeholder hung above center.
                   className="w-full resize-none rounded-xl border border-border bg-[var(--surface-2)] px-3.5 py-[11px] pr-12 text-sm leading-5 text-foreground placeholder:text-muted-foreground/50 placeholder:whitespace-nowrap placeholder:overflow-hidden placeholder:text-ellipsis focus:outline-none focus:ring-1 focus:ring-amber-500/50 min-h-[44px] max-h-[188px] overflow-y-auto"
                 />
-                {/* (правка 139) Микрофон: явный flex-center контейнер h-11, чтобы кнопка 32px
-                    гарантированно стояла ровно по вертикали поля (раньше inline-flex 32px в
-                    absolutely-positioned div с top-1/2 визуально «прижимался» к низу) */}
+                {/* (edit 139) Microphone: explicit flex-center h-11 container so 32px button
+                    is vertically centered with input (previously inline-flex 32px in
+                    absolutely-positioned div with top-1/2 visually hung lower) */}
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center">
                   <VoiceInputButton
                     variant="inline"
                     hotkey
                     onText={(t) => {
-                      // (правка 256) setInput — прямой сеттер стора (не fn-апдейтер)
+                      // (edit 256) setInput — direct store setter (not fn updater)
                       const prev = useAssistantDraft.getState().input
                       setInput(prev.trim() ? `${prev.replace(/\s+$/, '')} ${t}` : t)
                       textareaRef.current?.focus()
@@ -1455,18 +1455,18 @@ export function AssistantView({
               {streaming ? (
                 <Button variant="outline" size="sm" onClick={stop} className="h-11 gap-1.5">
                   <SquareIcon className="w-4 h-4" />
-                  Стоп
+                  Stop
                 </Button>
               ) : (
                 <Button
                   size="sm"
                   onClick={() => { void send() }}
                   disabled={!input.trim() || chatBlocked || attUploading}
-                  title={chatBlocked ? '⚙️ Идёт генерация видео — отправка недоступна' : 'Отправить'}
+                  title={chatBlocked ? '⚙️ Video generation in progress — sending disabled' : 'Send'}
                   className="h-11 px-4 gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 hover:border-amber-500/50 font-medium shadow-sm shadow-amber-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <SendIcon className="w-4 h-4" />
-                  Отправить
+                  Send
                 </Button>
               )}
             </div>
@@ -1476,10 +1476,10 @@ export function AssistantView({
       )}
       </div>
 
-      {/* Right: chat list sidebar (правка 87).
-          (правка 442) В панели — выдвижной оверлей поверх чата (места для
-          постоянной колонки нет), переключатель режима скрыт: режим задаёт
-          вкладка (panelMode). */}
+      {/* Right: chat list sidebar (edit 87).
+          (edit 442) In panel — slide-out overlay over chat (space for
+          permanent column unavailable), mode switcher hidden: mode specified
+          by tab (panelMode). */}
       {inPanel && chatListOpen && (
         <div className="absolute inset-0 z-10 bg-black/30" onClick={() => setChatListOpen(false)} />
       )}
@@ -1493,15 +1493,15 @@ export function AssistantView({
         )}
       >
         <div className="p-3 border-b border-border space-y-2">
-          {/* (правка 427) Режим-фильтр чатов — стиль как «Качество прохода»
-              в extend-view (grid-cols-2, активная — emerald). Переключает
-              ТОЛЬКО список: режим открытого чата синхронизирует эффект выше
-              (авто-открытие первого чата режима или создание нового).
-              (правка 442) В панели скрыт — режим жёстко следует за вкладкой. */}
+          {/* (edit 427) Chat mode filter — styled like "Pass quality"
+              in extend-view (grid-cols-2, active — emerald). Switches
+              ONLY the list: active chat mode synchronized by effect above
+              (auto-open first chat of mode or create new).
+              (edit 442) Hidden in panel — mode strictly follows tab. */}
           {!inPanel && (
           <div className="grid grid-cols-3 gap-1.5">
-            {/* (правка 502) Третий режим: «ControlNet». */}
-            {([['generate', 'Генерация'], ['extend', 'Продление'], ['controlnet', 'ControlNet']] as const).map(([m, label]) => (
+            {/* (edit 502) Third mode: "ControlNet". */}
+            {([['generate', 'Generate'], ['extend', 'Extend'], ['controlnet', 'ControlNet']] as const).map(([m, label]) => (
               <button
                 key={m}
                 type="button"
@@ -1525,11 +1525,11 @@ export function AssistantView({
             onClick={newChat}
           >
             <PlusIcon className="w-3.5 h-3.5" />
-            Новый чат
+            New chat
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {/* (правка 427) Список показывает только чаты выбранного режима. */}
+          {/* (edit 427) List shows only chats for selected mode. */}
           {chats.filter((c) => c.mode === assistantMode).map((c) => {
             const isRenaming = renamingId === c.id
             return (
@@ -1545,7 +1545,7 @@ export function AssistantView({
                 className={cn('w-3.5 h-3.5 shrink-0', c.id === activeId ? 'text-amber-400' : 'text-muted-foreground/60')}
               />
               {isRenaming ? (
-                /* (правка 264) Инлайн-редактор имени чата */
+                /* (edit 264) Inline chat title editor */
                 <div className="flex-1 min-w-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   <input
                     ref={renameInputRef}
@@ -1559,13 +1559,13 @@ export function AssistantView({
                     }}
                     onBlur={commitRename}
                     className="flex-1 min-w-0 rounded-md border border-cyan-500/50 bg-[var(--surface-2)] px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-                    placeholder="Название чата"
+                    placeholder="Chat title"
                   />
                   <button
                     type="button"
                     onClick={commitRename}
                     className="shrink-0 w-6 h-6 flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded"
-                    title="Сохранить (Enter)"
+                    title="Save (Enter)"
                   >
                     <CheckIcon className="w-3.5 h-3.5" />
                   </button>
@@ -1573,7 +1573,7 @@ export function AssistantView({
                     type="button"
                     onClick={cancelRename}
                     className="shrink-0 w-6 h-6 flex items-center justify-center text-muted-foreground/60 hover:text-red-400 hover:bg-red-500/10 rounded"
-                    title="Отмена (Esc)"
+                    title="Cancel (Esc)"
                   >
                     <XIcon className="w-3.5 h-3.5" />
                   </button>
@@ -1589,14 +1589,14 @@ export function AssistantView({
                     {c.id === streamChatId && (
                       <span
                         className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-cyan-400/80 animate-pulse align-middle"
-                        title="Ответ генерируется в этом чате"
+                        title="Reply is generating in this chat"
                       />
                     )}
                   </p>
                   <p className="text-[10px] text-muted-foreground/60">
                     {c.id === streamChatId
-                      ? 'ответ идёт…'
-                      : `${c.messages.length} сообщ. · ${new Date(c.updatedAt).toLocaleDateString('ru-RU')}`}
+                      ? 'generating reply…'
+                      : `${c.messages.length} msg · ${new Date(c.updatedAt).toLocaleDateString('en-US')}`}
                   </p>
                 </div>
               )}
@@ -1609,7 +1609,7 @@ export function AssistantView({
                       startRename(c.id, c.title)
                     }}
                     className="shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground/40 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Переименовать (двойной клик по имени)"
+                    title="Rename (double click title)"
                   >
                     <PencilIcon className="w-3 h-3" />
                   </button>
@@ -1620,7 +1620,7 @@ export function AssistantView({
                       deleteChat(c.id)
                     }}
                     className="shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Удалить чат"
+                    title="Delete chat"
                   >
                     <XIcon className="w-3 h-3" />
                   </button>
@@ -1631,15 +1631,15 @@ export function AssistantView({
           })}
           {chats.filter((c) => c.mode === assistantMode).length === 0 && (
             <p className="text-[10px] text-muted-foreground/50 text-center py-6 px-3">
-              Нет чатов в режиме «{assistantMode === 'extend' ? 'Продление' : assistantMode === 'controlnet' ? 'ControlNet' : 'Генерация'}». Создайте новый.
+              No chats in "{assistantMode === 'extend' ? 'Extend' : assistantMode === 'controlnet' ? 'ControlNet' : 'Generate'}" mode. Create a new one.
             </p>
           )}
         </div>
       </div>
       )}
 
-      {/* (правка 719) Просмотр референса по клику на тег <Picture N>/
-          <Video N> в ответе ассистента. */}
+      {/* (edit 719) Preview reference on click on <Picture N>/
+          <Video N> tag in assistant reply. */}
       <RefViewerDialog
         data={viewingRef}
         onOpenChange={(v) => { if (!v) setViewingRef(null) }}
@@ -1648,7 +1648,7 @@ export function AssistantView({
   )
 }
 
-/** Короткий хэш строки (djb2). */
+/** Short string hash (djb2). */
 function hashStr(s: string): string {
   let h = 0
   for (let i = 0; i < s.length; i++) {

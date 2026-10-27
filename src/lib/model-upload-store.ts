@@ -1,30 +1,30 @@
 /**
- * (правка 104) Общие состояние загрузки моделей/LoRAs для всех панелей.
+ * (fix 104) Shared model/LoRA upload state across all panels.
  *
- * ЗАЧЕМ: раньше `uploading`/`uploadProgress` жили в useState компонента
- * (DiffusionModelSelector, LoraSettingsPanel) внутри Radix-диалога
- * настроек. Radix при закрытии размонтирует содержимое диалога —
- * прогресс-бар исчезал, пользователь видел «загрузка прервалась»
- * (а из-за OOM-бага на сервере она реально умирала — правки 102/103).
+ * WHY: previously `uploading`/`uploadProgress` lived in component useState
+ * (DiffusionModelSelector, LoraSettingsPanel) inside the Radix settings
+ * dialog. Upon close, Radix unmounts dialog contents — the progress bar
+ * disappeared, and the user saw "upload interrupted" (and due to a server-side
+ * OOM bug it actually failed — fixes 102/103).
  *
- * Теперь состояние в модульном zustand-store (вне React-дерева):
- * закрытие и повторное открытие окна настроек НЕ сбрасывает прогресс и
- * НЕ прерывает загрузку — XHR живёт в промисе вне компонента, а
- * индикатор подхватывается новым экземпляром панели.
+ * Now the state resides in a modular zustand store (outside the React tree):
+ * closing and reopening the settings window does NOT reset progress and
+ * does NOT abort the upload — XHR lives in a promise outside the component,
+ * and the indicator is picked up by the new panel instance.
  */
 import { create } from 'zustand'
 
-/** Куда грузится файл — чтобы панели могли показывать «уже идёт загрузка» своей цели. */
+/** Where the file is being uploaded — so panels can show "upload already in progress" for their target. */
 export type UploadTarget = 'diffusion' | 'lora'
 
 interface ModelUploadState {
-  /** Идёт ли сейчас загрузка (любой цели). */
+  /** Whether an upload is currently active (any target). */
   active: boolean
-  /** Целевая папка текущей загрузки. */
+  /** Target folder of the current upload. */
   target: UploadTarget | null
-  /** Прогресс 0–100. */
+  /** Progress 0–100. */
   progress: number
-  /** Имя файла, который грузится (для индикатора). */
+  /** Name of the file being uploaded (for the indicator). */
   fileName: string | null
 
   start: (target: UploadTarget, fileName: string) => void

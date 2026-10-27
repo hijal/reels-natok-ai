@@ -1,5 +1,5 @@
 /**
- * Custom LoRA management (правка 44).
+ * Custom LoRA management (fix 44).
  *
  * Stores settings for LoRAs in a JSON file in the project root.
  * The built-in turbo LoRA is stored here too: it is ON by default, while
@@ -42,10 +42,10 @@ export function loadLoras(): LoraEntry[] {
   } catch {
     entries = []
   }
-  // Встроенная турбо-лора включена по умолчанию. Если файл есть, а записи
-  // в loras.json ещё нет (первый запуск / старая установка), добавляем
-  // синтетическую включённую запись. Явная запись пользователя (в том числе
-  // enabled=false) всегда главнее — выключить турбо-лору в настройках можно.
+  // The built-in turbo LoRA is enabled by default. If the file exists but an entry
+  // in loras.json does not exist yet (first launch / older installation), we add
+  // a synthetic enabled entry. Explicit user entry (including
+  // enabled=false) always takes precedence — turbo LoRA can be disabled in settings.
   if (!entries.some((e) => e.name === TURBO_LORA_NAME)) {
     const files = listLoraFiles()
     if (files.includes(TURBO_LORA_NAME)) {
@@ -60,17 +60,17 @@ export function saveLoras(entries: LoraEntry[]): void {
 }
 
 /**
- * (правка 130) Сброс настроек LoRA к заводским:
- * сила по умолчанию (1.0), триггеры очищены. Файл loras.json сохраняется
- * с «чистым» состоянием.
+ * (fix 130) Reset LoRA settings to defaults:
+ * default strength (1.0), triggers cleared. The loras.json file is saved
+ * with a "clean" state.
  *
- * По умолчанию после заводского сброса включена стандартная 4-шаговая
- * турбо-лора (TURBO_LORA_NAME) — она нужна для базовой работы генерации.
- * Остальные кастомные лоры выключены.
+ * By default after factory reset, the standard 4-step
+ * turbo LoRA (TURBO_LORA_NAME) is enabled — it is needed for basic generation operation.
+ * Other custom LoRAs are disabled.
  */
 export function resetLorasToDefaults(): LoraEntry[] {
   const files = listLoraFiles()
-  // Встроенная турбо-лора — ON по умолчанию, пользовательские — OFF.
+  // Built-in turbo LoRA — ON by default, user-defined ones — OFF.
   const defaults: LoraEntry[] = files.map((name) => ({
     name,
     strength: 1.0,
@@ -88,16 +88,16 @@ export function lorasDir(): string {
 }
 
 /** List all .safetensors files in the LoRAs folder.
- *  (правка 95) Турбо-лора теперь в общем списке — управляется как обычная
- *  (вкл/выкл, сила, удаление), отдельная панель в настройках убрана. */
+ *  (fix 95) Turbo LoRA is now in the general list — managed like a normal one
+ *  (on/off, strength, deletion); separate panel in settings was removed. */
 export function listLoraFiles(): string[] {
   const dir = lorasDir()
   try {
     const local = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.safetensors')) // (правка 82) убран дубль условия
-    // (правка 257) Внешние папки (Настройки → Свои папки моделей): лоры
-    // из коллекций вне студии — имена как их видит ComfyUI (yaml).
+      .filter((f) => f.endsWith('.safetensors')) // (fix 82) duplicate condition removed
+    // (fix 257) External folders (Settings → Custom model folders): LoRAs
+    // from collections outside the studio — names as ComfyUI sees them (yaml).
     const external = listExternalModels('loras')
       .filter((n) => n.toLowerCase().endsWith('.safetensors'))
       .filter((n) => !local.includes(n))
@@ -108,12 +108,12 @@ export function listLoraFiles(): string[] {
 }
 
 /**
- * (правка 483) Включённые LoRA для роутов refine / tile-upscale / controlnet
- * (generate-роут собирает список сам — ему нужно отдельно пропускать турбо
- * в режиме «Кадры» с аудио). Встроенная турбо-лора входит в список, когда
- * включена (по умолчанию — да). Фильтры: запись включена и файл реально
- * есть на диске (иначе ComfyUI упал бы на загрузке несуществующей лоры —
- * «призрак», правка 89).
+ * (fix 483) Enabled LoRAs for refine / tile-upscale / controlnet routes
+ * (the generate route builds its own list — it needs to skip turbo separately
+ * in "Frames" mode with audio). Built-in turbo LoRA is included in the list when
+ * enabled (by default — yes). Filters: entry is enabled and the file actually
+ * exists on disk (otherwise ComfyUI would fail loading a non-existent LoRA —
+ * "ghost", fix 89).
  */
 export function enabledCustomLoras(): Array<{ name: string; strength: number; trigger?: string }> {
   const files = new Set(listLoraFiles())
@@ -122,7 +122,7 @@ export function enabledCustomLoras(): Array<{ name: string; strength: number; tr
     .map((e) => ({ name: e.name, strength: e.strength, trigger: e.trigger }))
 }
 
-/** (правка 483) Триггерные слова включённых LoRA одной строкой ('' = нет). */
+/** (fix 483) Trigger words of enabled LoRAs as a single string ('' = none). */
 export function loraTriggerSuffix(
   entries: Array<{ trigger?: string }>,
 ): string {

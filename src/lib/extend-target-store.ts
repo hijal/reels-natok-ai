@@ -1,23 +1,23 @@
 'use client'
 
 /**
- * (правка 369) ExtendTargetStore — мост «галерея → вкладка Продление».
+ * (fix 369) ExtendTargetStore — bridge "gallery → Extend tab".
  *
- * Пункт «Продлить» в меню действий карточки видео в галерее кладёт сюда
- * имя файла из общей папки output ComfyUI и шлёт событие 'h3:goto-extend'.
- * ExtendView забирает цель и импортирует видео через importGalleryVideo
- * (POST /api/extend/import — сервер копирует output → input).
+ * The "Extend" item in the video card action menu in gallery puts the
+ * filename from the shared ComfyUI output folder here and emits the 'h3:goto-extend' event.
+ * ExtendView retrieves the target and imports the video via importGalleryVideo
+ * (POST /api/extend/import — server copies output → input).
  *
- * Store нужен, потому что клик происходит ДО монтирования ExtendView
- * (вкладка меняется), и событие «на лету» было бы потеряно.
- * Паттерн повторяет UpscaleTargetStore / RefineTargetStore.
+ * The store is needed because the click happens BEFORE ExtendView is mounted
+ * (the active tab changes), and an on-the-fly event would be lost.
+ * Pattern mimics UpscaleTargetStore / RefineTargetStore.
  */
 import { create } from 'zustand'
 
 export interface ExtendTarget {
-  /** Имя файла в папке output ComfyUI. */
+  /** Filename in ComfyUI output folder. */
   filename: string
-  /** Подпапка output (обычно '' — галерея листит корень). */
+  /** Subfolder of output (usually '' — gallery lists root). */
   subfolder: string
 }
 

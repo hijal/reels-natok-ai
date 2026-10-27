@@ -1,19 +1,18 @@
-# Патчи ядра ComfyUI
+# ComfyUI Core Patches
 
-Файлы из папки `comfy-patches/` копируются установщиком поверх скачанного
-ComfyUI при каждом запуске (шаг 4, идемпотентно).
+Files from the `comfy-patches/` directory are copied over the downloaded
+ComfyUI by the installer on every run (step 4, idempotent).
 
-Базовая сборка: коммит
-`5f0c4e18cb7e98f0e7c46c2c7ce928d641351e67` (25.08.2026, `__version__ = "0.33.0"`).
+Base build: commit
+`5f0c4e18cb7e98f0e7c46c2c7ce928d641351e67` (2026-08-25, `__version__ = "0.33.0"`).
 
-| Файл | Что меняет |
+| File | Changes |
 | --- | --- |
-| `comfy/ldm/minimax/model.py` | `to_gate_compress` в `Attention` (веса VSA), `minimax_h3_layout` и `block_index` в `transformer_options` для Veda sparse attention |
-| `comfy/model_detection.py` | определяет `gate_compress` в VSA-чекпоинтах |
-| `comfy_extras/nodes_minimax_h3.py` | keyframe-latent: пересчёт latent'ов при переключении разрешения (правки 146/149); ноды `MiniMaxH3AudioOrSilent` (аудио исходника или тишина) и `MiniMaxH3AudioSliceFrom` (срез с секунды / хвост последних N секунд) — нужны рефайну, face-refine и продлению |
-| `utils/extra_config.py` | принимает списки путей в `extra_model_paths.yaml` (студия пишет их списками) |
+| `comfy/ldm/minimax/model.py` | `to_gate_compress` in `Attention` (VSA weights), `minimax_h3_layout` and `block_index` in `transformer_options` for Veda sparse attention |
+| `comfy/model_detection.py` | detects `gate_compress` in VSA checkpoints |
+| `comfy_extras/nodes_minimax_h3.py` | keyframe-latent: latent recalculation when switching resolutions (patches 146/149); nodes `MiniMaxH3AudioOrSilent` (source audio or silence) and `MiniMaxH3AudioSliceFrom` (slice starting at second / tail of the last N seconds) — required for refine, face-refine, and extension |
+| `utils/extra_config.py` | accepts lists of paths in `extra_model_paths.yaml` (studio writes them as lists) |
 
-Файлы — полные копии из рабочей установки, а не diff-патчи: так установка не
-зависит от наличия `git`/`patch` на машине.
+The files are full copies from the working setup rather than diff patches, so installation does not depend on `git`/`patch` being available on the machine.
 
-При обновлении ComfyUI эти файлы нужно перенести на новую базу и обновить здесь.
+When updating ComfyUI, these files should be ported to the new base and updated here.

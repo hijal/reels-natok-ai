@@ -1,11 +1,11 @@
 'use client'
 
 /**
- * VideoTrimDialog — мини-видеоредактор для обрезки видео.
+ * VideoTrimDialog — mini video editor for trimming video.
  *
- * Показывает видео, таймлайн с двумя маркерами (начало / конец),
- * кнопку проигрывания и «Обрезать и сохранить».
- * После обрезки — новый файл в галерее с бейджем «Edited».
+ * Shows video, timeline with two markers (start / end),
+ * play button, and "Trim and Save".
+ * After trimming — new file in gallery with "Edited" badge.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ScissorsIcon, PlayIcon, PauseIcon, CheckIcon, Loader2Icon } from 'lucide-react'
-import { useGalleryRefresh } from '@/lib/gallery-refresh-store' // (правка 474)
+import { useGalleryRefresh } from '@/lib/gallery-refresh-store' // (fix 474)
 import type { VideoGalleryFile } from './video-gallery-grid'
 
 interface VideoTrimDialogProps {
@@ -103,8 +103,8 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
     setCurrent(pct * duration)
   }, [duration])
 
-  // (правка 474) Кадр под маркером во время перетаскивания: видео встаёт
-  // на позицию маркера и на паузу — видно, что именно попадёт в обрезок.
+  // (fix 474) Frame under marker during dragging: video seeks
+  // to marker position and pauses — previewing what will be in the trimmed clip.
   const seekPreview = useCallback((t: number) => {
     const v = videoRef.current
     if (!v) return
@@ -124,11 +124,11 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
     if (dragging === 'start') {
       const nt = Math.min(t, trimEnd - 0.2)
       setTrimStart(nt)
-      seekPreview(nt) // (правка 474)
+      seekPreview(nt) // (fix 474)
     } else {
       const nt = Math.max(t, trimStart + 0.2)
       setTrimEnd(nt)
-      seekPreview(nt) // (правка 474)
+      seekPreview(nt) // (fix 474)
     }
   }, [dragging, duration, trimStart, trimEnd, seekPreview])
 
@@ -147,7 +147,7 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
   const handleSave = useCallback(async () => {
     if (!file || saving) return
     if (trimStart >= trimEnd - 0.1) {
-      toast.error('Диапазон слишком короткий')
+      toast.error('Range is too short')
       return
     }
     setSaving(true)
@@ -163,18 +163,18 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Ошибка обрезки')
-      toast.success(`Обрезано: ${fmt(trimStart)} → ${fmt(trimEnd)} (${data.duration} с)`)
-      // (правка 474) Глобальный сигнал обновления: onDone → load() без
-      // include_hot не видел свежий файл — files-роут пропускает «горячие»
-      // файлы младше 4 секунд. bump запускает во всех галереях серию
-      // отложенных загрузок + fast-track с include_hot — обрезанный файл
-      // появляется сразу, без ручного обновления.
+      if (!res.ok) throw new Error(data.error || 'Trim failed')
+      toast.success(`Trimmed: ${fmt(trimStart)} → ${fmt(trimEnd)} (${data.duration} s)`)
+      // (fix 474) Global refresh signal: onDone -> load() without
+      // include_hot didn't see the fresh file — files route skips "hot"
+      // files younger than 4 seconds. bump triggers in all galleries a series
+      // of deferred loads + fast-track with include_hot — trimmed file
+      // appears immediately, without manual reload.
       useGalleryRefresh.getState().bump()
       onOpenChange(false)
       onDone?.()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Ошибка')
+      toast.error(err instanceof Error ? err.message : 'Error')
     } finally {
       setSaving(false)
     }
@@ -194,10 +194,10 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <ScissorsIcon className="w-4 h-4 text-cyan-400" />
-            Обрезка видео
+            Trim Video
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Перетащите маркеры на таймлайне, чтобы выбрать диапазон. Кнопка ▶ проигрывает только выбранный фрагмент.
+            Drag markers on the timeline to select a range. The ▶ button plays only the selected fragment.
           </DialogDescription>
         </DialogHeader>
 
@@ -268,13 +268,13 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
             className="h-8 px-3 gap-1.5 text-xs"
           >
             {playing ? <PauseIcon className="w-3.5 h-3.5" /> : <PlayIcon className="w-3.5 h-3.5" />}
-            {playing ? 'Пауза' : 'Превью'}
+            {playing ? 'Pause' : 'Preview'}
           </Button>
 
           <div className="flex-1" />
 
           <span className="text-[10px] text-muted-foreground">
-            Фрагмент: <span className="text-foreground font-medium">{selectedDuration.toFixed(1)} с</span>
+            Clip: <span className="text-foreground font-medium">{selectedDuration.toFixed(1)} s</span>
           </span>
 
           <Button
@@ -288,7 +288,7 @@ export function VideoTrimDialog({ file, open, onOpenChange, onDone }: VideoTrimD
             ) : (
               <CheckIcon className="w-3.5 h-3.5" />
             )}
-            {saving ? 'Сохранение…' : 'Обрезать и сохранить'}
+            {saving ? 'Saving…' : 'Trim & Save'}
           </Button>
         </div>
       </DialogContent>

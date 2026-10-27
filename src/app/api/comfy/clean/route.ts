@@ -7,21 +7,21 @@ import { getAppConfig } from '@/lib/app-config'
  * POST /api/comfy/clean
  * Body: { target: 'input' | 'output' | 'upscale' }
  *
- * Удаляет ВСЕ файлы и подкаталоги в указанной директории.
- * Сама директория сохраняется (удаляется только её содержимое).
+ * Deletes ALL files and subdirectories in the specified directory.
+ * The directory itself is preserved (only its contents are deleted).
  *
- * - target='input'   → очищает ComfyUI/input  (референсы, кадры, загрузки)
- * - target='output'  → очищает ComfyUI/output (сгенерированные видео + .meta.json)
- * - target='upscale' → (правка 167) очищает data/upscale-input, data/upscale-output,
- *   upscale/outputs — все файлы апскейла (входные и выходные)
+ * - target='input'   → cleans ComfyUI/input  (references, frames, uploads)
+ * - target='output'  → cleans ComfyUI/output (generated videos + .meta.json)
+ * - target='upscale' → (fix 167) cleans data/upscale-input, data/upscale-output,
+ *   upscale/outputs — all upscale files (inputs and outputs)
  */
 
-/** Рекурсивно очищает содержимое одной директории. Возвращает число удалённых элементов. */
+/** Recursively cleans the contents of a single directory. Returns the number of deleted items. */
 async function cleanDirectory(dir: string): Promise<number> {
   try {
     await fs.stat(dir)
   } catch {
-    return 0 // Директории нет — считаем, что она уже пуста
+    return 0 // Directory does not exist — consider it already empty
   }
 
   const entries = await fs.readdir(dir, { withFileTypes: true })
@@ -36,7 +36,7 @@ async function cleanDirectory(dir: string): Promise<number> {
       }
       deleted++
     } catch {
-      // Файл мог быть занят — пропускаем
+      // File might be locked — skip
     }
   }
   return deleted
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       )
     }
 
-    // (правка 167) Upscale: чистим ВСЕ директории апскейла (входные + выходные)
+    // (fix 167) Upscale: clean ALL upscale directories (input + output)
     if (target === 'upscale') {
       const cwd = process.cwd()
       const dirs = [
@@ -73,13 +73,13 @@ export async function POST(req: Request) {
     const dir = target === 'input' ? config.inputDir : config.outputDir
 
     if (!dir) {
-      return NextResponse.json({ error: 'Директория не настроена' }, { status: 400 })
+      return NextResponse.json({ error: 'Directory not configured' }, { status: 400 })
     }
 
     const deleted = await cleanDirectory(dir)
     return NextResponse.json({ ok: true, deleted })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Не удалось очистить директорию'
+    const message = err instanceof Error ? err.message : 'Failed to clean directory'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

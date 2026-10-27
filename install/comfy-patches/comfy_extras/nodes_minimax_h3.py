@@ -28,22 +28,22 @@ from comfy_api.latest import ComfyExtension, io
 log = logging.getLogger(__name__)
 
 
-# (правка 149) flf-фикс двухпроходной генерации (правка 146).
+# (patch 149) flf fix for two-pass generation (patch 146).
 #
-# Проблема: ключевые кадры MiniMaxH3ImageToVideo закодированы OДИН раз
-# (vae.encode) под разрешение pass 1 (low-res), а в pass 2 (high-res)
-# PackedLayout строится под новую, более мелкую сетку — и
+# Problem: keyframes in MiniMaxH3ImageToVideo are encoded ONCE
+# (vae.encode) for the pass 1 (low-res) resolution, whereas in pass 2 (high-res)
+# PackedLayout is constructed for the new, finer grid — and
 #   all_video_rows[~img_update] = cond_video_rows
-# падает: shape mismatch [N_coarse] vs [N_fine].
+# fails with: shape mismatch [N_coarse] vs [N_fine].
 #
-# Фикс: патчим comfy.model_base.MiniMaxH3.extra_conds — при несовпадении
-# размера keyframe-latent'а с целевым latent-размером (latent_shapes[0][3:5])
-# перекодируем исходный кадр (image_src) под целевое разрешение через vae.encode,
-# либо (fallback) делаем bilinear-интерполяцию existing latent'а.
-# Патч идемпотентен и не трогает ref-режим (minimax_keyframes не задан).
+# Fix: patch comfy.model_base.MiniMaxH3.extra_conds — on mismatch
+# between keyframe-latent size and target latent size (latent_shapes[0][3:5]),
+# re-encode the source frame (image_src) to target resolution via vae.encode,
+# or (fallback) perform bilinear interpolation on the existing latent.
+# The patch is idempotent and leaves ref-mode untouched (minimax_keyframes not set).
 
 def _interp_keyframe_latent(z, h, w):
-    """Bilinear spatial resize keyframe latent ([B,C,T,H,W]) под целевую сетку."""
+    """Bilinear spatial resize keyframe latent ([B,C,T,H,W]) under target grid."""
     if z.ndim == 4:
         return torch.nn.functional.interpolate(
             z, size=(h, w), mode="bilinear", align_corners=False)
@@ -59,15 +59,15 @@ def _interp_keyframe_latent(z, h, w):
 
 
 def _h3_extra_conds_reencode(self, **kwargs):
-    """Перекодируем keyframe-latents под текущий latent-размер (правка 149)."""
+    """Re-encode keyframe-latents to current latent size (patch 149)."""
     try:
         keyframes = kwargs.get("minimax_keyframes", None)
         latent_shapes = kwargs.get("latent_shapes", None)
         if (keyframes is not None and latent_shapes is not None
                 and len(latent_shapes) > 0 and len(latent_shapes[0]) >= 5):
             th, tw = int(latent_shapes[0][3]), int(latent_shapes[0][4])
-            # VAE живёт в model_options (модель создаётся с vae из workflow);
-            # fallback — атрибут модели, если он есть.
+            # VAE lives in model_options (model is instantiated with vae from workflow);
+            # fallback — model attribute if available.
             vae = None
             if hasattr(self, "model_options") and isinstance(self.model_options, dict):
                 vae = self.model_options.get("vae", None)
@@ -79,10 +79,10 @@ def _h3_extra_conds_reencode(self, **kwargs):
                     continue
                 zh, zw = int(z.shape[-2]), int(z.shape[-1])
                 if zh == th and zw == tw:
-                    continue  # уже под целевой сеткой
+                    continue  # already matches target grid
                 if vae is not None and hasattr(vae, "encode") and "image_src" in kf:
-                    # Идеальный путь: перекодирование исходного кадра (престин)
-                    # под целевое разрешение — максимальное качество.
+                    # Ideal path: re-encoding pristine source frame
+                    # to target resolution — maximum quality.
                     try:
                         z_new = vae.encode(kf["image_src"])
                     except Exception as enc_err:
@@ -92,7 +92,7 @@ def _h3_extra_conds_reencode(self, **kwargs):
                         kf["latent"] = z_new
                         log.info("[MinimaxH3FlfFix] re-encoded keyframe latent -> %s", list(z_new.shape))
                         continue
-                # Fallback: bilinear-интерполяция existing latent'а.
+                    # Fallback: bilinear interpolation of existing latent.
                 kf["latent"] = _interp_keyframe_latent(z, th, tw)
                 log.info("[MinimaxH3FlfFix] interpolated keyframe latent -> %s", list(kf["latent"].shape))
     except Exception as fix_err:
@@ -101,7 +101,7 @@ def _h3_extra_conds_reencode(self, **kwargs):
 
 
 def _install_h3_flf_fix():
-    """Патчим comfy.model_base.MiniMaxH3.extra_conds (правка 149). Идемпотентно."""
+    """Patch comfy.model_base.MiniMaxH3.extra_conds (patch 149). Idempotent."""
     global _ORIGINAL_H3_EXTRA_CONDS
     try:
         import comfy.model_base
@@ -230,11 +230,11 @@ class MiniMaxH3ImageToVideo(io.ComfyNode):
         images = []
         keyframes = []
         if first_frame is not None:
-            # (правка 154) Оба кадра — cover-crop (сохранение пропорций).
-            # Раньше first_frame был stretch ("disabled") — это растягивало
-            # изображение, если его пропорции не совпадали с canvas.
-            # Теперь оба кадра обрабатываются одинаково: центральный кроп
-            # с сохранением aspect ratio → нет искажений.
+            # (patch 154) Both frames use cover-crop (preserving aspect ratio).
+            # Previously first_frame was stretch ("disabled") — this distorted
+            # the image if its aspect ratio did not match the canvas.
+            # Now both frames are processed identically: center crop
+            # preserving aspect ratio -> no distortions.
             img = _resize(first_frame[:1], width, height, "center")
             images.append(img)
             keyframes.append({"resolved_frame_index": 0, "image": img})
@@ -247,13 +247,13 @@ class MiniMaxH3ImageToVideo(io.ComfyNode):
         cond = clip.encode_from_tokens_scheduled(tokens)
 
         if keyframes:
-            # (правка 149) Сохраняем исходный (престин) кадр до vae.encode —
-            # он нужен для перекодирования под разрешение pass 2 (см. фикс выше).
+            # (patch 149) Save pristine source frame before vae.encode —
+            # needed to re-encode at pass 2 resolution (see fix above).
             for kf in keyframes:
                 kf["image_src"] = kf["image"]
                 kf["latent"] = vae.encode(kf.pop("image"))
             cond = node_helpers.conditioning_set_values(cond, {"minimax_keyframes": keyframes})
-            # (правка 149) Убеждаемся, что фикс установлен (идемпотентно).
+            # (patch 149) Ensure fix is installed (idempotent).
             _install_h3_flf_fix()
         return io.NodeOutput(cond, latent)
 
@@ -398,12 +398,12 @@ class MiniMaxH3ReferenceToVideo(io.ComfyNode):
                 scale = min(1.0, math.sqrt((width * height) / (w * h)))
             else:
                 scale = min(1.0, REF_IMAGE_SHORT_EDGE / min(w, h))
-            # (правка 693) Сохраняем ИСТОРИЧЕСКИЙ aspect ratio при ресайзе:
-            # раньше tw/th округлялись НЕЗАВИСИМО к 32 — это ломало ratio
-            # (растяжение/сплющивание), особенно заметное в match-режиме при
-            # малых/экстремальных пропорциях. Теперь короткая сторона гласит
-            # в одну 32-кратную величину g, а длинная считается из g * ratio
-            # — итоговый ratio максимально близок к исходному.
+            # (patch 693) Preserve HISTORICAL aspect ratio during resize:
+            # previously tw/th were rounded INDEPENDENTLY to 32 — this broke
+            # the ratio (stretching/squashing), especially noticeable in match mode
+            # at small/extreme proportions. Now the short side is snapped
+            # to a 32-multiple value g, and the long side is calculated from g * ratio
+            # — the final ratio is as close to the source as possible.
             if w >= h:
                 g = max(CANVAS_MULTIPLE, round(h * scale / CANVAS_MULTIPLE) * CANVAS_MULTIPLE)
                 tw = max(CANVAS_MULTIPLE, round(w / h * g / CANVAS_MULTIPLE) * CANVAS_MULTIPLE)
@@ -516,7 +516,7 @@ class MiniMaxH3AudioOrSilent(io.ComfyNode):
     Silent sources: VHS_LoadVideo hands downstream nodes an empty/absent
     AUDIO, and feeding that into VAEEncodeAudio crashes the workflow. The
     studio's refine/extend templates wrap every source-audio pickup with
-    this node (правка 313): a real waveform goes through untouched, a
+    this node (patch 313): a real waveform goes through untouched, a
     missing one becomes a quiet stereo track of ``fallback_seconds``.
     """
 

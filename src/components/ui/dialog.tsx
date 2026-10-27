@@ -69,10 +69,10 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            // (правка 569) Убран focus-ring (голубое кольцо --ring вокруг
-            // крестика после кликов внутри диалога) — визуальный мусор в
-            // тёмной теме. outline тоже скрыт: hover-затемнение остаётся
-            // единственным индикатором.
+            // (fix 569) Removed focus-ring (blue --ring around
+            // close button after clicks inside dialog) — visual clutter in
+            // dark theme. outline is also hidden: hover-dimming remains
+            // the sole indicator.
             className="data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />

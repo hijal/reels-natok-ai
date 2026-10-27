@@ -1,32 +1,32 @@
 'use client'
 
 /**
- * useImprovePrompt — single entry point for "Исправить промпт" (правка 560:
- * раньше «Улучшить промпт»; из редактора промпта запрос теперь идёт ПАРНО —
- * задание пользователя «что изменить» (fixRequest) + сам черновик).
+ * useImprovePrompt — single entry point for "Fix prompt" (fix 560:
+ * previously "Improve prompt"; from the prompt editor the request now goes as a PAIR —
+ * user instructions "what to change" (fixRequest) + draft itself).
  *
  * Queues the improve-prompt request in the assistant-chats store (so it
  * survives a tab switch), then asks the app shell to open the assistant
- * panel (правка 442: правая панель на «Генерации»/«Продлении», не вкладка).
+ * panel (fix 442: right panel on "Generation"/"Extend", not a tab).
  * AssistantView picks it up on mount and auto-runs the completion.
  *
- * (правка 427) Режимы: 'generate' (по умолчанию, черновик вкладки
- * «Генерация»), 'extend' (промпт клипа на карточке вкладки «Продление»),
- * 'controlnet' (промпт вкладки «ControlNet», правка 502). Запрос всегда
- * идёт в существующий чат своего режима (правка 559) и переключает фильтр
- * чатов на этот режим.
+ * (fix 427) Modes: 'generate' (default, draft on "Generation" tab),
+ * 'extend' (clip prompt on "Extend" tab card),
+ * 'controlnet' (prompt on "ControlNet" tab, fix 502). The request always
+ * goes into an existing chat of its mode (fix 559) and switches the chat
+ * filter to this mode.
  */
 import { useCallback } from 'react'
 import { useAssistantChats, type AssistantChatMode } from '@/lib/assistant-chats-store'
 
-/** (правка 427) Опции исправления: режим чата и номер клипа (extend). */
+/** (fix 427) Fix options: chat mode and clip number (extend). */
 export interface ImprovePromptOptions {
   mode?: AssistantChatMode
-  /** Extend: номер карточки клипа (1-based) — цитируется в сообщении. */
+  /** Extend: clip card number (1-based) — quoted in the message. */
   clipNumber?: number
-  /** (правка 560) Конкретное задание пользователя «что изменить» из окна
-   *  «Исправить промпт» в редакторе — цитируется в сообщении первым,
-   *  чтобы LLM правела именно его, сохраняя остальной смысл промпта. */
+  /** (fix 560) Specific user instructions "what to change" from the
+   *  "Fix prompt" dialog in the editor — quoted first in the message,
+   *  so that the LLM modifies specifically that, preserving the rest of the prompt's meaning. */
   fixRequest?: string
 }
 
@@ -34,57 +34,57 @@ export interface ImprovePromptOptions {
 export function buildImprovePrompt(currentPrompt: string, opts?: ImprovePromptOptions): string {
   const trimmed = currentPrompt.trim()
   const fix = opts?.fixRequest?.trim()
-  // (правка 560) Задание пользователя — первой строкой, с требованием не
-  // трогать всё, чего задание не касается.
-  const fixLine = fix ? `Задание: «${fix}».\nВсё, чего задание НЕ касается, сохрани без изменений.\n` : ''
-  // (правка 427) Extend: цитируем промпт КЛИПА с его номером; пустой промпт —
-  // просим придумать с нуля по контексту исходника (он в системном промпте
-  // extend-чата: мета .meta.json + референсы продления).
+  // (fix 560) User request as the first line, requiring not to
+  // touch anything not related to the request.
+  const fixLine = fix ? `Task: "${fix}".\nKeep everything NOT related to this task unchanged.\n` : ''
+  // (fix 427) Extend: quote the CLIP prompt with its number; empty prompt —
+  // ask to generate from scratch based on source context (in the extend chat
+  // system prompt: metadata .meta.json + extend references).
   if (opts?.mode === 'extend') {
     const n = opts.clipNumber ?? 1
     return trimmed
-      ? `${fixLine}Исправь промпт клипа ${n}, сохранив смысл. Текущий промпт клипа:\n\n${trimmed}`
-      : `Придумай промпт для клипа ${n} с нуля по контексту исходного видео и референсов продления (они в системном контексте).${fix ? ` Задание: «${fix}».` : ''}`
+      ? `${fixLine}Fix the prompt for clip ${n}, preserving the meaning. Current clip prompt:\n\n${trimmed}`
+      : `Create a prompt for clip ${n} from scratch based on the context of the source video and extend references (in system context).${fix ? ` Task: "${fix}".` : ''}`
   }
-  // (правка 502) ControlNet: движение/камера задаёт контрольное видео —
-  // исправляем ТОЛЬКО описание сцены/внешности/стиля/света/звука.
+  // (fix 502) ControlNet: motion/camera is defined by the control video —
+  // fix ONLY scene/appearance/style/lighting/sound descriptions.
   if (opts?.mode === 'controlnet') {
     return trimmed
-      ? `${fixLine}Исправь мой промпт для режима ControlNet, сохранив смысл. Движение и камеру НЕ описывай — их задаёт контрольное видео; в промпте только сцена, внешность персонажей, стиль, свет и звук. Референсы — тегами <Picture N>. Текущий промпт:\n\n${trimmed}`
-      : 'Придумай промпт для режима ControlNet с нуля: движение и камеру задаёт контрольное видео (оно в системном контексте), опиши только сцену, внешность персонажей, стиль, свет и звук. Если прикреплены референсы — ссылайся на них тегами <Picture N>.'
+      ? `${fixLine}Fix my prompt for ControlNet mode, preserving the meaning. Do NOT describe motion or camera — they are defined by the control video; include only scene, character appearances, style, lighting, and sound in the prompt. Reference images using <Picture N> tags. Current prompt:\n\n${trimmed}`
+      : 'Create a prompt for ControlNet mode from scratch: motion and camera are set by the control video (in system context); describe only scene, character appearance, style, lighting, and sound. If reference images are attached, reference them using <Picture N> tags.'
   }
   return trimmed
-    ? `${fixLine}Исправь мой текущий промпт, сохранив смысл. Текущий промпт:\n\n${trimmed}`
-    : 'Предложи 3 разных идеи для короткого видео (5–8 секунд) с референсами, которые я прикреплю.'
+    ? `${fixLine}Fix my current prompt, preserving the meaning. Current prompt:\n\n${trimmed}`
+    : 'Suggest 3 different ideas for a short video (5–8 seconds) with the references I will attach.'
 }
 
 /**
  * Queue an improve-prompt request and switch to the assistant tab.
  * Safe to call from anywhere (the store is a module singleton).
  *
- * (правка 559) Раньше КАЖДЫЙ improve-запрос создавал новый чат — чаты
- * плодились от каждой кнопки «Улучшить промпт» (редактор промпта, карточка
- * клипа, ControlNet). Теперь запрос идёт в ТОТ ЖЕ чат режима, что и быстрая
- * кнопка панели: активный чат режима (тот, что открыт в панели вкладки),
- * иначе самый свежий чат этого режима; новый чат — только если чатов
- * режима ещё нет. Контекст запроса (режим + номер клипа) по-прежнему
- * цитируется в самом сообщении.
+ * (fix 559) Previously EVERY improve-request created a new chat — chats
+ * spawned from every "Improve prompt" button (prompt editor, clip card,
+ * ControlNet). Now the request goes into the SAME chat for the mode as the quick
+ * panel button: active chat for the mode (the one opened in the tab panel),
+ * otherwise the freshest chat of this mode; new chat — only if no chats exist
+ * for this mode yet. Request context (mode + clip number) is still
+ * quoted in the message itself.
  */
 export function requestImprovePrompt(currentPrompt: string, opts?: ImprovePromptOptions): void {
   if (typeof window === 'undefined') return
 
   const mode: AssistantChatMode = opts?.mode ?? 'generate'
   const content = buildImprovePrompt(currentPrompt, opts)
-  // (правка 266) id чата проносим в pendingImprove: если AssistantView уже
-  // смонтирован, improve должен выполниться именно в ЭТОМ чате (подписка на
-  // pendingImprove в view перезапускает эффект автозапуска).
-  // (правка 427) Фильтр списка чатов переключается на режим запроса —
-  // иначе чат режима был бы скрыт фильтром другого режима.
+  // (fix 266) Chat id passed into pendingImprove: if AssistantView is already
+  // mounted, improve must be executed in THIS chat (subscription to
+  // pendingImprove in view restarts the auto-run effect).
+  // (fix 427) Chat list filter switches to request mode —
+  // otherwise mode chat would be hidden by the filter of another mode.
   const st = useAssistantChats.getState()
   st.setAssistantMode(mode)
-  // (правка 559) Переиспользуем существующий чат режима вместо создания
-  // нового. Список чатов отсортирован по updatedAt (свежие сверху) —
-  // fallback-ветка берёт самый свежий чат режима.
+  // (fix 559) Reuse existing mode chat instead of creating
+  // a new one. Chat list is sorted by updatedAt (fresh on top) —
+  // fallback branch takes the newest chat of this mode.
   const active = st.chats.find((c) => c.id === st.activeChatId)
   const chatId =
     active && active.mode === mode
@@ -92,8 +92,8 @@ export function requestImprovePrompt(currentPrompt: string, opts?: ImprovePrompt
       : (st.chats.find((c) => c.mode === mode)?.id ?? st.createChat(mode))
   st.queueImprove(content, chatId)
 
-  // (правка 442) Вкладки «Ассистент» больше нет: просим app-shell переключиться
-  // на вкладку нужного режима и развернуть правую панель ассистента.
+  // (fix 442) "Assistant" tab no longer exists: ask app-shell to switch
+  // to the desired mode tab and expand the right assistant panel.
   window.dispatchEvent(new CustomEvent('h3:open-assistant-panel', { detail: { mode } }))
 }
 

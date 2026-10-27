@@ -7,7 +7,7 @@
  * Sections:
  *   1. Technical specs & limits
  *   2. Mode selection (T2VA/I2VA/FL2VA/L2VA/Ref2VA)
- *   2b. Что пишет ассистент в студии (формат по вкладкам)
+ *   2b. What the studio assistant outputs (format by tab)
  *   3. Prompt formula (3 blocks)
  *   4. Final structure (alignment + 3 fields)
  *   5. Writing the 3 core fields
@@ -19,7 +19,7 @@
  *   11. Common mistakes (table)
  *   12. Ref2VA deep dive (6 sections, labels, rules)
  *   13. Checklist
- *   14. Built-in LLM assistant (Bonsai 2 27B по умолчанию / Gemma 4 12B / Qwen3.5 9B)
+ *   14. Built-in LLM assistant (Bonsai 2 27B default / Gemma 4 12B / Qwen3.5 9B)
  *   15. History / favorites / examples
  *   16. Hover previews
  */
@@ -64,7 +64,7 @@ async function copyText(text: string, okMsg: string) {
   }
 }
 
-function CopyButton({ text, label = 'Скопировать' }: { text: string; label?: string }) {
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [done, setDone] = useState(false)
   return (
     <Button
@@ -72,7 +72,7 @@ function CopyButton({ text, label = 'Скопировать' }: { text: string; 
       size="sm"
       className="h-7 gap-1.5 text-xs"
       onClick={async () => {
-        await copyText(text, 'Скопировано в буфер обмена')
+        await copyText(text, 'Copied to clipboard')
         setDone(true)
         setTimeout(() => setDone(false), 2000)
       }}
@@ -168,41 +168,41 @@ function PromptSample({ text, note }: { text: string; note?: string }) {
 /* ──────────────────── examples ──────────────────── */
 
 /** Ready-made example prompts — ENGLISH texts (the model follows English
- *  noticeably better); titles/notes stay Russian. Shared with the Generate
- *  tab "Примеры" menu. */
+ *  noticeably better); titles/notes in English. Shared with the Generate
+ *  tab "Examples" menu. */
 export const EXAMPLES: Array<{ title: string; note: string; text: string }> = [
   {
-    title: 'T2VA (только текст)',
-    note: 'Чистое текстовое описание — модель создаёт всё с нуля.',
+    title: 'T2VA (text only)',
+    note: 'Pure text description — the model creates everything from scratch.',
     text: 'integrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium-wide shot frames a baker opening the shutters of a small street bakery before sunrise. The camera pushes in with small amplitude at slow speed as the middle-aged baker with a calm, slightly raspy voice (S1) places a fresh loaf on the wooden counter and says: <d>[English] First batch of the morning.</d> [Shot 2] At 00:05.000, the camera cuts to a close-up of steam rising from the sliced bread while the baker\'s final words carry over from the previous shot.\n\noverall_soundscape: Wooden shutters scrape open over a quiet street as trays clink softly inside the bakery. The doorbell rings once, followed by light footsteps and the crisp sound of bread being sliced.\n\nnon_diegetic_music: A soft acoustic-guitar pattern at a moderate tempo, joined by sparse upright-bass notes and a gentle fade at the end.',
   },
   {
-    title: 'I2VA (начальный кадр)',
-    note: 'Одно изображение — отправная точка, сцена развивается вперёд.',
+    title: 'I2VA (start frame)',
+    note: 'Single image — starting point, the scene unfolds forward.',
     text: 'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\nintegrated_multimodal_description: [Shot 1] Live-action, cinematic, the young woman shown in <Picture 1> remains beside the rain-covered train window, preserving her appearance, clothing, seat position, and the carriage layout. The camera trucks right with small amplitude at slow speed as she lifts her gaze from the book in her lap to the window, rain streaking the glass, her reflection visible in the dark pane. She says softly: <d>[English] We\'re almost there.</d>\n\noverall_soundscape: The train wheels produce a steady metallic rhythm beneath a low ventilation hum. Rain ticks against the window while paper rustles softly in her hands.\n\nnon_diegetic_music: Sustained cello notes at a slow tempo with widely spaced piano tones, gradually decreasing in volume.',
   },
   {
-    title: 'FL2VA (первый + последний кадр)',
-    note: 'Два изображения — начало и конец, описываем путь между ними.',
+    title: 'FL2VA (first + last frame)',
+    note: 'Two images — beginning and end, describing the progression between them.',
     text: 'How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Live-action, cinematic, a rain-soaked cyclist begins in the position and framing established by Picture 1, holding a closed black umbrella beside a silver bicycle. The camera pulls out with small amplitude at slow speed as she releases the bicycle handle, raises the umbrella, and opens it with a sharp snap. Water droplets fly in a radial burst as the canopy expands. By the final frame, she stands upright, fully covered, the bicycle parked at her side, matching Picture 2.\n\noverall_soundscape: Rain falls steadily on the pavement, followed by the metallic click of the umbrella runner and the soft snap of the canopy opening. Water drips from the bicycle frame as distant traffic passes.\n\nnon_diegetic_music: N/A',
   },
   {
-    title: 'Ref2VA (референсы + голос)',
-    note: 'Мультимодальный ввод: персонаж, локация, голос.',
+    title: 'Ref2VA (references + voice)',
+    note: 'Multimodal input: character, location, voice.',
     text: 'subject_definitions:\n<Subject 1> is the coffee-shop environment in <Picture 1>, featuring an exposed brick wall, an orange tufted sofa with patterned pillows, a neon sign, and a wooden coffee table.\n<Subject 2> is the fluffy white Samoyed in <Picture 2>, with thick white fur, pointed ears, and a curved tail.\n<Subject 3> is the young blonde woman in <Video 1>, with long blonde hair and a light-pink button-down shirt.\n<Audio 1> is the voice-timbre reference for <Subject 3> (S1), containing a spoken English vocal layer.\n\nsummary:\n[reference generation + audio reference] The target video shows <Subject 3> eating a cookie in <Subject 1>. <Subject 2> lunges toward the cookie. The exchange uses <Audio 1> as the voice-timbre reference for <Subject 3>.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - the exposed brick wall, orange sofa, and wooden table are retained.\n<Subject 3> (appears in [Shot 1], [Shot 2]): fully_preserved - her long blonde hair and light-pink shirt are retained.\n<Audio 1>: reference - its vocal timbre guides the dialogue delivery of <Subject 3> without copying the original signal.\n\ndetailed_description:\n[Shot 1] A medium shot establishes <Subject 1>, the coffee shop. <Subject 3> (S1), the young woman with long blonde hair, sits on the sofa holding a cookie. <Subject 2> lunges toward her hand. <Subject 3> (S1) jerks her hand back and, using the clear youthful voice timbre referenced from <Audio 1>, exclaims with light annoyance: <d>[English] Hey! Watch your dog!</d>\n\noverall_soundscape:\nSoft indoor coffee-shop room tone continues throughout the scene.\n\nnon_diegetic_music:\nN/A',
   },
 ]
 
 const DONT_LIST = [
-  '«Сначала покажи улицу, потом режь на крупный план» — монтаж и склейки модель не делает: это один непрерывный дубль.',
-  'Перечислять теги референсов в конце промпта отдельно — тег должен стоять там, где референс участвует в сцене.',
-  'Длинные монологи в <d>…</d> — озвучка рассчитана на короткие реплики (до ~10 слов), длинные искажаются.',
-  '«Сделай красиво как в фильме…» — называй конкретные вещи: свет, ракурс, движение камеры, звук.',
-  'Противоречить референсам (другая одежда/причёнка/место) — модель ориентируется на картинку/видео.',
-  'Без референсов просить «знакомого персонажа» — опиши внешность словами, модель не знает кого-либо без описания.',
-  'Слишком много действий за 30 секунд — одно непрерывное движение, не сценарий из 5 сцен.',
-  'Смешивать роли first/last-frame с ролями референсных медиа — API требует, чтобы семейства ролей не пересеклись.',
-  'Давать аудио как единственный медиа-референс для Ref2VA — обязательно приложите изображение или видео.',
+  '\"First show the street, then cut to a close-up\" — the model does not perform montage and cuts: this is a single continuous take.',
+  'Listing reference tags separately at the end of the prompt — a tag must be placed right where the reference appears in the scene.',
+  'Long monologues inside <d>...</d> — voiceover is designed for short lines (up to ~10 words); longer ones distort.',
+  '\"Make it cinematic and pretty...\" — specify concrete details: lighting, camera angle, camera motion, sound.',
+  'Contradicting references (different clothing/hair/setting) — the model adheres closely to the image/video.',
+  'Asking for a \"known character\" without references — describe their appearance in words; the model does not know arbitrary characters without description.',
+  'Too many actions packed into 30 seconds — prefer one continuous motion, not a 5-scene screenplay.',
+  'Mixing first/last-frame roles with reference media roles — the API requires that role families do not overlap.',
+  'Providing audio as the only media reference for Ref2VA — always attach an image or video.',
 ]
 
 /** Camera/light vocabulary — ENGLISH phrases inserted verbatim into the
@@ -237,32 +237,32 @@ export function PromptGuide() {
       {/* ── 1. Technical specs ── */}
       <Section
         icon={<MonitorPlayIcon className="w-4 h-4" />}
-        title="Технические характеристики"
-        subtitle="Лимиты и требования MiniMax H3"
+        title="Technical Specifications"
+        subtitle="MiniMax H3 limits and requirements"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div className="grid sm:grid-cols-2 gap-3">
             <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3">
-              <p className="text-xs font-semibold text-foreground mb-2">Выход</p>
+              <p className="text-xs font-semibold text-foreground mb-2">Output</p>
               <ul className="space-y-1 text-xs text-muted-foreground">
-                <li>• Разрешение: <span className="text-foreground/80 font-mono">480p / 720p / 1080p</span></li>
-                <li>• Длительность: <span className="text-foreground/80 font-mono">~2.5–30 сек</span> (выравнивание 17n+5 кадров)</li>
-                <li>• Соотношение сторон: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9 + свободное разрешение</li>
+                <li>• Resolution: <span className="text-foreground/80 font-mono">480p / 720p / 1080p</span></li>
+                <li>• Duration: <span className="text-foreground/80 font-mono">~2.5–30 sec</span> (17n+5 frame alignment)</li>
+                <li>• Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9 + custom resolution</li>
               </ul>
             </div>
             <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3">
-              <p className="text-xs font-semibold text-foreground mb-2">Вход (референсы)</p>
+              <p className="text-xs font-semibold text-foreground mb-2">Input (References)</p>
               <ul className="space-y-1 text-xs text-muted-foreground">
-                <li>• Изображения: до <span className="text-foreground/80 font-mono">9</span></li>
-                <li>• Видео: до <span className="text-foreground/80 font-mono">3</span></li>
-                <li>• Аудио: до <span className="text-foreground/80 font-mono">3</span></li>
-                <li>• Смешанный ввод: максимум <span className="text-foreground/80 font-mono">15 файлов</span> суммарно</li>
-                <li>• Сумма длительности видео+аудио: ≤ <span className="text-foreground/80 font-mono">15 сек</span></li>
+                <li>• Images: up to <span className="text-foreground/80 font-mono">9</span></li>
+                <li>• Videos: up to <span className="text-foreground/80 font-mono">3</span></li>
+                <li>• Audio: up to <span className="text-foreground/80 font-mono">3</span></li>
+                <li>• Mixed input: maximum <span className="text-foreground/80 font-mono">15 files</span> total</li>
+                <li>• Total video + audio duration: ≤ <span className="text-foreground/80 font-mono">15 sec</span></li>
               </ul>
             </div>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            💡 Все генерации выполняются <span className="text-foreground/80">локально на вашем компьютере</span> через ComfyUI — интернет не нужен.
+            💡 All generations run <span className="text-foreground/80">locally on your computer</span> via ComfyUI — no internet connection required.
           </p>
         </div>
       </Section>
@@ -270,26 +270,26 @@ export function PromptGuide() {
       {/* ── 2. Mode selection ── */}
       <Section
         icon={<MonitorPlayIcon className="w-4 h-4" />}
-        title="Выбор режима генерации"
-        subtitle="Определите, какие входные данные у вас есть — не выбирайте режим «на звук»"
+        title="Generation Mode Selection"
+        subtitle="Identify what inputs you have — do not choose a mode by guesswork"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-[var(--surface-1)]/60">
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Режим</th>
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Вход</th>
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Задача промпта</th>
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Подходит для</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Mode</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Input</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Prompt Objective</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Best For</th>
               </tr>
             </thead>
             <tbody>
               {[
-                ['T2VA', 'Только текст', 'Построить полный аудиовизуальный таймлайн с нуля', 'Новая идея из текста'],
-                ['I2VA', 'Одно начальное изображение', 'Тело промпта + инструкция по первому кадру + развитие вперёд', 'Анимация готовой композиции'],
-                ['FL2VA', 'Первое и последнее изображение', 'Выровнять оба изображения и описать путь между ними', 'Контроль начала и конца перехода'],
-                ['L2VA', 'Одно конечное изображение', 'Построить правдоподобную предыдущую последовательность, завершающуюся на заданном кадре', 'Ревел или трансформация «с конца»'],
-                ['Ref2VA', 'Референсы (изображения/видео/аудио)', 'Назначить каждому активу роль через формат полного референса', 'Управление идентичностью, стилем, движением, камерой или звуком по нескольким источникам'],
+                ['T2VA', 'Text only', 'Build a full audiovisual timeline from scratch', 'New ideas from text'],
+                ['I2VA', 'Single start image', 'Prompt body + first frame instruction + forward progression', 'Animating a finished composition'],
+                ['FL2VA', 'First and last image', 'Align both images and describe the transition path between them', 'Controlling start and end transitions'],
+                ['L2VA', 'Single end image', 'Build a plausible preceding sequence terminating at the target frame', 'Reveals or backwards transformation'],
+                ['Ref2VA', 'References (images/videos/audio)', 'Assign each asset a role via full reference format', 'Controlling identity, style, motion, camera, or sound across multiple sources'],
               ].map(([mode, input, task, use]) => (
                 <tr key={mode} className="border-b border-border/50 last:border-0">
                   <td className="px-3 py-2 font-mono text-foreground">{mode}</td>
@@ -303,29 +303,29 @@ export function PromptGuide() {
         </div>
       </Section>
 
-      {/* ── 2b. Студия: какой формат пишет ассистент ── */}
+      {/* ── 2b. What the assistant writes in studio ── */}
       <Section
         icon={<ListOrderedIcon className="w-4 h-4" />}
-        title="Что именно пишет ассистент в студии"
-        subtitle="Формат выбирается автоматически по текущему режиму вкладки"
+        title="What the Studio Assistant Outputs"
+        subtitle="Format is automatically chosen based on the active tab mode"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-[var(--surface-2)]/60">
-                  <th className="text-left px-3 py-2 font-semibold text-foreground">Вкладка студии</th>
-                  <th className="text-left px-3 py-2 font-semibold text-foreground">Режим H3</th>
-                  <th className="text-left px-3 py-2 font-semibold text-foreground">Формат промпта</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground">Studio Tab</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground">H3 Mode</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground">Prompt Format</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ['«Текст»', 'T2VA', '3 поля: integrated_multimodal_description · overall_soundscape · non_diegetic_music'],
-                  ['«Кадры»', 'FL2VA / I2VA', 'те же 3 поля'],
-                  ['«Референсы»', 'Ref2VA', '6 полей: subject_definitions · summary · retention_analysis · detailed_description · overall_soundscape · non_diegetic_music'],
-                  ['«Продление»', 'extend', 'те же 3 поля, но описывается только НОВОЕ действие'],
-                  ['«ControlNet»', 'Ref2VA', '6 полей + отдельные правила для контрольного видео'],
+                  ['"Text"', 'T2VA', '3 fields: integrated_multimodal_description · overall_soundscape · non_diegetic_music'],
+                  ['"Frames"', 'FL2VA / I2VA', 'same 3 fields'],
+                  ['"References"', 'Ref2VA', '6 fields: subject_definitions · summary · retention_analysis · detailed_description · overall_soundscape · non_diegetic_music'],
+                  ['"Extend"', 'extend', 'same 3 fields, describing only the NEW action'],
+                  ['"ControlNet"', 'Ref2VA', '6 fields + dedicated rules for the control video'],
                 ].map(([tab, mode, fmt]) => (
                   <tr key={tab} className="border-b border-border/50 last:border-0">
                     <td className="px-3 py-2 font-medium text-foreground">{tab}</td>
@@ -337,10 +337,10 @@ export function PromptGuide() {
             </table>
           </div>
           <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-            <li>• Вручную ничего выбирать не надо: ассистент смотрит на режим вкладки и сам берёт нужную структуру.</li>
-            <li>• Метки <span className="font-mono text-[10px]">&lt;Picture N&gt;</span> / <span className="font-mono text-[10px]">&lt;Video N&gt;</span> / <span className="font-mono text-[10px]">&lt;Subject N&gt;</span> в «Тексте» и «Кадрах» <span className="text-foreground/80">запрещены</span> — в «Тексте» допустима только <span className="font-mono text-[10px]">&lt;Audio N&gt;</span>, и то если аудио-реф реально приложен.</li>
-            <li>• Режима «только последний кадр» (L2VA) в студии нет — доступны «Текст», «Кадры» и «Референсы», плюс отдельные вкладки «Продление» и «ControlNet».</li>
-            <li>• Готовый промпт приходит в markdown-блоке кода — так его можно сразу скопировать в поле.</li>
+            <li>• No manual configuration needed: the assistant detects the tab mode and selects the correct structure automatically.</li>
+            <li>• Tags <span className="font-mono text-[10px]">&lt;Picture N&gt;</span> / <span className="font-mono text-[10px]">&lt;Video N&gt;</span> / <span className="font-mono text-[10px]">&lt;Subject N&gt;</span> are <span className="text-foreground/80">forbidden</span> in "Text" and "Frames" — in "Text", only <span className="font-mono text-[10px]">&lt;Audio N&gt;</span> is allowed, and only if an audio ref is actually attached.</li>
+            <li>• There is no standalone "end frame only" (L2VA) mode in the studio — "Text", "Frames", and "References" are available, alongside dedicated "Extend" and "ControlNet" tabs.</li>
+            <li>• The generated prompt arrives in a markdown code block — ready for instant copying into the prompt field.</li>
           </ul>
         </div>
       </Section>
@@ -348,15 +348,15 @@ export function PromptGuide() {
       {/* ── 3. Formula ── */}
       <Section
         icon={<SparklesIcon className="w-4 h-4" />}
-        title="Формула промпта"
-        subtitle="Три блока в строгом порядке (официальный мануал MiniMax)"
+        title="Prompt Formula"
+        subtitle="Three blocks in strict order (official MiniMax manual)"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4">
           <div className="flex flex-wrap items-center gap-2">
             {[
-              ['Заметки по референсам', 'что делает каждый файл (только для I2VA/FL2VA/L2VA/Ref2VA)'],
-              ['Основная идея', 'субъект, место, событие, стиль'],
-              ['Описания сцены по кадрам', 'движение во времени, с таймкодами'],
+              ['Reference Notes', 'what each file does (only for I2VA/FL2VA/L2VA/Ref2VA)'],
+              ['Core Idea', 'subject, setting, event, style'],
+              ['Shot-by-Shot Scene Breakdown', 'movement across time, with timestamps'],
             ].map(([k, v], i) => (
               <div key={k} className="flex items-center gap-2">
                 <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1.5">
@@ -368,7 +368,7 @@ export function PromptGuide() {
             ))}
           </div>
           <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-            Первый блок пропускается, если файлов не загружено (T2VA).
+            The first block is omitted when no files are uploaded (T2VA).
           </p>
         </div>
       </Section>
@@ -376,32 +376,32 @@ export function PromptGuide() {
       {/* ── 4. Final structure ── */}
       <Section
         icon={<ListOrderedIcon className="w-4 h-4" />}
-        title="Структура финального промпта"
-        subtitle="Две части: инструкция выравнивания + три основных поля"
+        title="Final Prompt Structure"
+        subtitle="Two parts: alignment instruction + three core fields"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Часть 1 — Инструкция (первая строка)</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Part 1 — Instruction (first line)</p>
             <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-              <li>• <span className="text-foreground/80 font-mono">T2VA</span>: нет инструкции, начинается сразу с трёх полей.</li>
+              <li>• <span className="text-foreground/80 font-mono">T2VA</span>: no instruction, starts directly with the three fields.</li>
               <li>• <span className="text-foreground/80 font-mono">I2VA</span>: <span className="font-mono text-[10px]">For the target video, at 0.00 seconds into the target video, &lt;Picture 1&gt; (from [Shot 1]) is fully referenced.</span></li>
               <li>• <span className="text-foreground/80 font-mono">FL2VA</span>: <span className="font-mono text-[10px]">How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark...</span></li>
             </ul>
             <p className="text-[11px] text-muted-foreground/80 leading-relaxed mt-2 border-l-2 border-cyan-500/40 pl-2">
-              В студии эту строку писать <span className="text-foreground/80">не нужно</span>: кадры и их привязка ко времени
-              подставляются самой программой, а ассистент всегда начинает промпт с первого поля
-              (<span className="font-mono text-[10px]">integrated_multimodal_description</span> или
-              <span className="font-mono text-[10px]">subject_definitions</span>). Строка выше — справка по
-              официальному API MiniMax, если вы пишете промпт для другой обвязки.
+              In the studio, you <span className="text-foreground/80">do not need</span> to write this line: frames and time alignment
+              are handled automatically by the application, and the assistant always starts the prompt with the first field
+              (<span className="font-mono text-[10px]">integrated_multimodal_description</span> or
+              <span className="font-mono text-[10px]">subject_definitions</span>). The lines above serve as a reference to the
+              official MiniMax API if drafting prompts for external wrappers.
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Часть 2 — Три основных поля</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Part 2 — Three Core Fields</p>
             <div className="space-y-1.5">
               {[
-                ['integrated_multimodal_description', 'Основное тело промпта: визуал, действия, кадры, говорящие, диалоги, пение, синхронизированный звук вдоль таймлайна.'],
-                ['overall_soundscape', 'Сводка об атмосферном звуке, физических звуках действий и невербальных человеческих звуках за всё видео.'],
-                ['non_diegetic_music', 'Фоновая музыка, которую слышат только зрители (персонажи её не слышат).'],
+                ['integrated_multimodal_description', 'Main prompt body: visuals, actions, shots, speakers, dialogue, singing, synchronized sound along the timeline.'],
+                ['overall_soundscape', 'Summary of ambient sound, physical action audio, and non-verbal human sounds across the entire video.'],
+                ['non_diegetic_music', 'Background score heard only by the audience (inaudible to characters in the scene).'],
               ].map(([field, desc]) => (
                 <div key={field} className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-2.5">
                   <p className="font-mono text-xs text-foreground/90">{field}</p>
@@ -416,35 +416,35 @@ export function PromptGuide() {
       {/* ── 5. Writing the 3 fields ── */}
       <Section
         icon={<BookOpenIcon className="w-4 h-4" />}
-        title="Как писать три основных поля"
-        subtitle="Детали по каждому полю"
+        title="Writing the Three Core Fields"
+        subtitle="Details for each field"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div>
             <p className="text-xs font-semibold text-foreground mb-2">5.1 integrated_multimodal_description</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Развивайте описание вдоль таймлайна. Каждый элемент должен соответствовать чему-то видимому или слышимому: стиль, начальная композиция, облик и положение субъекта, сцена и ключевые реквизиты, действия и реакции, смена кадров, язык речи, синхронизированный звуковой эффект.
+              Develop the description chronologically along the timeline. Every element should correspond to something visible or audible: style, starting composition, subject appearance and positioning, scene and key props, actions and reactions, shot transitions, spoken language, synchronized sound effects.
             </p>
             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-              В начале <span className="font-mono text-[10px]">[Shot 1]</span> укажите общий стиль и начальную композицию. Распространённые стили: <span className="text-foreground/80">Cinematic, live-action, 2D-animated, 3D CG, claymation, watercolor, vintage film</span>.
+              At the start of <span className="font-mono text-[10px]">[Shot 1]</span>, declare the overall style and initial framing. Common styles: <span className="text-foreground/80">Cinematic, live-action, 2D-animated, 3D CG, claymation, watercolor, vintage film</span>.
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">5.2 Кадровая структура и срезы</p>
+            <p className="text-xs font-semibold text-foreground mb-2">5.2 Shot Structure and Cuts</p>
             <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-              <li>• <span className="text-foreground/80">Первому кадру не ставьте таймкод.</span></li>
-              <li>• Для последующих кадров используйте нумерацию <span className="font-mono text-[10px]">[Shot 2]</span>, <span className="font-mono text-[10px]">[Shot 3]</span> и т. д., начиная каждый с <span className="text-foreground/80">строго возрастающего</span> времени среза в пределах длительности видео.</li>
-              <li>• Для обычных срезов используйте: <span className="font-mono text-[10px]">the camera cuts to</span>, <span className="font-mono text-[10px]">the shot cuts to</span>, <span className="font-mono text-[10px]">the shot transitions to</span>, <span className="font-mono text-[10px]">the shot changes to</span>, <span className="font-mono text-[10px]">the shot switches to</span>.</li>
-              <li>• Перекрёстное растворение (cross-dissolve), fade и wipe допускаются только при явном запросе пользователя.</li>
-              <li>• Срез должен вносить новую информацию о субъекте, пространстве, состоянии, точке зрения или времени.</li>
+              <li>• <span className="text-foreground/80">Do not assign a timestamp to the first shot.</span></li>
+              <li>• For subsequent shots, use numbering <span className="font-mono text-[10px]">[Shot 2]</span>, <span className="font-mono text-[10px]">[Shot 3]</span>, etc., beginning each with a <span className="text-foreground/80">strictly increasing</span> cut timestamp within the total video duration.</li>
+              <li>• For standard hard cuts, use: <span className="font-mono text-[10px]">the camera cuts to</span>, <span className="font-mono text-[10px]">the shot cuts to</span>, <span className="font-mono text-[10px]">the shot transitions to</span>, <span className="font-mono text-[10px]">the shot changes to</span>, <span className="font-mono text-[10px]">the shot switches to</span>.</li>
+              <li>• Cross-dissolves, fades, and wipes should only be specified when explicitly requested.</li>
+              <li>• A cut should introduce new information regarding the subject, space, condition, viewpoint, or time.</li>
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">5.3 Ключевые кадры (I2VA / FL2VA / L2VA)</p>
+            <p className="text-xs font-semibold text-foreground mb-2">5.3 Keyframes (I2VA / FL2VA / L2VA)</p>
             <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-              <li>• <span className="text-foreground/80 font-mono">I2VA</span>: опишите первое изображение как отправную точку <span className="font-mono text-[10px]">[Shot 1]</span>, затем расскажите, как сцена развивается вперёд. Паттерн: <em>открывающееся изображение → первое движение → продолжение действия → финальная реакция</em>.</li>
-              <li>• <span className="text-foreground/80 font-mono">FL2VA</span>: не описывайте оба статичных изображения дважды — опишите <span className="text-foreground/80">движение</span>, которое их связывает. Паттерн: <em>начальное состояние → промежуточные физические изменения → приближение к конечной композиции → конечное состояние</em>.</li>
-              <li>• <span className="text-foreground/80 font-mono">L2VA</span>: стройте правдоподобную предыдущую последовательность, сходящуюся к заданному конечному кадру. <span className="text-foreground/80">В студии такого режима нет</span> — последний кадр задаётся только вместе с первым («Кадры»).</li>
+              <li>• <span className="text-foreground/80 font-mono">I2VA</span>: describe the first image as the starting point in <span className="font-mono text-[10px]">[Shot 1]</span>, then explain how the scene develops forward. Pattern: <em>opening frame → initial movement → continuous action → final reaction</em>.</li>
+              <li>• <span className="text-foreground/80 font-mono">FL2VA</span>: do not describe both static images twice — describe the <span className="text-foreground/80">motion</span> bridging them together. Pattern: <em>starting state → intermediate physical transformations → approaching final composition → ending state</em>.</li>
+              <li>• <span className="text-foreground/80 font-mono">L2VA</span>: construct a plausible preceding progression that converges toward the specified ending frame. <span className="text-foreground/80">The studio does not offer this isolated mode</span> — end frames are paired with start frames in "Frames" mode.</li>
             </ul>
           </div>
         </div>
@@ -453,15 +453,15 @@ export function PromptGuide() {
       {/* ── 6. Camera movement ── */}
       <Section
         icon={<CameraIcon className="w-4 h-4" />}
-        title="Движение камеры"
-        subtitle="Три измерения: тип, амплитуда, скорость"
+        title="Camera Movement"
+        subtitle="Three dimensions: type, amplitude, speed"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div className="grid sm:grid-cols-3 gap-2">
             {[
-              ['Тип движения', 'как движется камера'],
-              ['Амплитуда', 'small / large amplitude'],
-              ['Скорость', 'slow / moderate / fast speed'],
+              ['Movement Type', 'how the camera moves'],
+              ['Amplitude', 'small / large amplitude'],
+              ['Speed', 'slow / moderate / fast speed'],
             ].map(([k, v]) => (
               <div key={k} className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-2.5">
                 <p className="text-xs font-semibold text-foreground">{k}</p>
@@ -473,24 +473,24 @@ export function PromptGuide() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-[var(--surface-1)]/60">
-                  <th className="text-left px-3 py-2 font-semibold text-foreground">Тип</th>
-                  <th className="text-left px-3 py-2 font-semibold text-foreground">Выражение</th>
-                  <th className="text-left px-3 py-2 font-semibold text-foreground">Описание</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground">Type</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground">Expression</th>
+                  <th className="text-left px-3 py-2 font-semibold text-foreground">Description</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ['Zoom In / Out', 'Zoom In, Zoom Out', 'Меняется фокусное расстояние, камера неподвижна'],
-                  ['Pan Left / Right', 'Pan Left, Pan Right', 'Камера на месте, объектив поворачивается горизонтально'],
-                  ['Truck Left / Right', 'Truck Left, Truck Right', 'Камера перемещается горизонтально'],
-                  ['Tilt Up / Down', 'Tilt Up, Tilt Down', 'Камера на месте, объектив поворачивается вертикально'],
-                  ['Pedestal Up / Down', 'Pedestal Up, Pedestal Down', 'Вся камера поднимается/опускается'],
-                  ['Arc Shot', 'Arc Shot', 'Камера движется дугой вокруг субъекта'],
-                  ['Tracking Shot', 'Tracking Shot', 'Камера следует за движущимся субъектом'],
-                  ['Static Shot', 'Static Shot', 'Позиция камеры и объектив неподвижны'],
-                  ['Shake', 'Shake Slightly / Shake Strongly', 'Слабое/сильное дрожание камеры'],
-                  ['POV', 'POV', 'Точка зрения субъекта'],
-                  ['Roll', 'Roll Clockwise / Counterclockwise', 'Камера кренится вокруг оси объектива'],
+                  ['Zoom In / Out', 'Zoom In, Zoom Out', 'Focal length changes while camera stays stationary'],
+                  ['Pan Left / Right', 'Pan Left, Pan Right', 'Camera stationary, lens pivots horizontally'],
+                  ['Truck Left / Right', 'Truck Left, Truck Right', 'Camera physically moves horizontally'],
+                  ['Tilt Up / Down', 'Tilt Up, Tilt Down', 'Camera stationary, lens pivots vertically'],
+                  ['Pedestal Up / Down', 'Pedestal Up, Pedestal Down', 'Entire camera moves vertically up/down'],
+                  ['Arc Shot', 'Arc Shot', 'Camera moves along a curved arc around the subject'],
+                  ['Tracking Shot', 'Tracking Shot', 'Camera tracks along with a moving subject'],
+                  ['Static Shot', 'Static Shot', 'Camera position and framing remain locked and stationary'],
+                  ['Shake', 'Shake Slightly / Shake Strongly', 'Subtle or vigorous camera shake'],
+                  ['POV', 'POV', 'First-person point of view'],
+                  ['Roll', 'Roll Clockwise / Counterclockwise', 'Camera rolls around the optical axis'],
                 ].map(([type, expr, desc]) => (
                   <tr key={type} className="border-b border-border/50 last:border-0">
                     <td className="px-3 py-2 font-medium text-foreground">{type}</td>
@@ -502,7 +502,7 @@ export function PromptGuide() {
             </table>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            💡 Движение камеры описывается как естественное английское действие внутри кадра:
+            💡 Camera movement is described as natural English action inside the shot:
           </p>
           <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3">
             <p className="text-xs font-mono text-foreground/90 leading-relaxed">
@@ -517,19 +517,19 @@ export function PromptGuide() {
       {/* ── 7. Speaking characters ── */}
       <Section
         icon={<MessageSquareQuoteIcon className="w-4 h-4" />}
-        title="Говорящие персонажи, диалоги и пение"
-        subtitle="ID, voiceover, разрыв диалога"
+        title="Speaking Characters, Dialogue & Singing"
+        subtitle="IDs, voiceover, dialogue bridging across cuts"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <ul className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
-            <li>• Говорящие, поющие или издающие голос субъекты получают стабильные идентификаторы <span className="font-mono text-[10px]">(S1)</span>, <span className="font-mono text-[10px]">(S2)</span> и т. д. Когда несколько уже нумерованных говорящих говорят/поют вместе — используйте составной ID <span className="font-mono text-[10px]">(S1,S2)</span>.</li>
-            <li>• Идентификатор сохраняется на протяжении кадров; персонажи, которые никогда не произносят слов, получают <span className="text-foreground/80">никакой</span> ID.</li>
-            <li>• При первом появлении говорящего укажите достаточно информации для стабильной идентичности: тип персонажа, возраст, пол, находится ли он в кадре, высота тона, тембр, скорость речи или акцент.</li>
+            <li>• Subjects speaking, singing, or vocalizing receive consistent identifiers <span className="font-mono text-[10px]">(S1)</span>, <span className="font-mono text-[10px]">(S2)</span>, etc. When multiple already-numbered speakers vocalize together, use a composite ID <span className="font-mono text-[10px]">(S1,S2)</span>.</li>
+            <li>• Identifiers persist across shots; characters who never utter spoken words receive <span className="text-foreground/80">no</span> ID.</li>
+            <li>• On first appearance of a speaker, provide enough identity detail: character type, age, gender, on/off-screen status, pitch, vocal timbre, speaking pace, or accent.</li>
           </ul>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Формат строки диалога</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Dialogue Line Format</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Идентифицирующая фраза, ID, действие и подача ставятся <span className="text-foreground/80">вне</span> <span className="font-mono text-[10px]">&lt;d&gt;</span>. Внутри <span className="font-mono text-[10px]">&lt;d&gt;</span> — только тег языка и фактический произносимый контент. Сохраняйте каждое слово и знак препинания дословно; не переводите и не переписывайте их.
+              Identifying phrases, ID, action, and delivery are placed <span className="text-foreground/80">outside</span> <span className="font-mono text-[10px]">&lt;d&gt;</span>. Inside <span className="font-mono text-[10px]">&lt;d&gt;</span>, include only the language tag and the verbatim spoken line. Keep every word and punctuation mark intact; do not translate or rewrite them.
             </p>
           </div>
           <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3">
@@ -539,9 +539,9 @@ export function PromptGuide() {
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Оффаscreen-озвучка (voiceover)</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Off-Screen Voiceover</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Используйте точную фразу <span className="font-mono text-[10px]">says in an off-screen voiceover</span>. Сразу после каждого блока <span className="font-mono text-[10px]">&lt;d&gt;</span> укажите, что губы соответствующего персонажа на экране остаются закрытыми:
+              Use the exact phrasing <span className="font-mono text-[10px]">says in an off-screen voiceover</span>. Immediately after each <span className="font-mono text-[10px]">&lt;d&gt;</span> block, explicitly state that the character's visible lips remain closed:
             </p>
           </div>
           <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3">
@@ -550,9 +550,9 @@ export function PromptGuide() {
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Разрыв диалога по кадру</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Dialogue Bridging Across Cuts</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Если одна реплика или куплет пересекает срез, используйте <span className="font-mono text-[10px]">&lt;scenetrans&gt;</span> в соединяющих точках обеих частей и явно укажите, что звук продолжается через срез. Для обрыва речи к концу видео используйте <span className="font-mono text-[10px]">&lt;cutoff&gt;</span>.
+              If a single line or verse crosses a cut, use <span className="font-mono text-[10px]">&lt;scenetrans&gt;</span> at the junction points of both segments and explicitly state that the audio carries across the cut. For speech truncated at the video end, use <span className="font-mono text-[10px]">&lt;cutoff&gt;</span>.
             </p>
           </div>
         </div>
@@ -561,16 +561,16 @@ export function PromptGuide() {
       {/* ── 8. On-screen text ── */}
       <Section
         icon={<TypeIcon className="w-4 h-4" />}
-        title="Текст на экране"
-        subtitle="Баннеры, вывески, подписи, субтитры"
+        title="On-Screen Text"
+        subtitle="Banners, signs, captions, subtitles"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Любой баннер, вывеска, подпись, субтитр или неоновый текст, реально видимый на экране, пишите в <span className="text-foreground/80">английских двойных кавычках</span>, сохраняя оригинальный текст и знаки препинания дословно, без перевода:
+            Any banner, sign, caption, subtitle, or neon text actually visible on screen should be enclosed in <span className="text-foreground/80">English double quotes</span>, preserving original characters and punctuation verbatim without translation:
           </p>
           <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3 mt-2">
             <p className="text-xs font-mono text-foreground/90 leading-relaxed">
-              A red neon sign reading "营业中" glows above the doorway.
+              A red neon sign reading \"OPEN\" glows above the doorway.
             </p>
           </div>
         </div>
@@ -579,26 +579,26 @@ export function PromptGuide() {
       {/* ── 9. Soundscape & music ── */}
       <Section
         icon={<MusicIcon className="w-4 h-4" />}
-        title="Звуковой ландшафт и музыка"
-        subtitle="overall_soundscape и non_diegetic_music"
+        title="Soundscape & Music"
+        subtitle="overall_soundscape and non_diegetic_music"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div>
             <p className="text-xs font-semibold text-foreground mb-2">overall_soundscape</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Используйте <span className="text-foreground/80">1–4 предложения</span> в одном непрерывном абзаце для сводки атмосферного звука, физических звуков действий и невербальных человеческих звуков за всё видео (ветер, дождь, транспорт, шаги, движение ткани, удары, дыхание, смех, хрипота).
+              Use <span className="text-foreground/80">1–4 sentences</span> in a single continuous paragraph summarizing ambient atmosphere, physical action audio, and non-verbal human sounds across the entire video (wind, rain, traffic, footsteps, rustling fabric, impacts, breathing, laughter, gasps).
             </p>
             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-              ⚠️ Диалоги, пение и диетическая музыка уже относятся к <span className="font-mono text-[10px]">integrated_multimodal_description</span> и <span className="text-foreground/80">не должны повторяться</span> здесь.
+              ⚠️ Spoken dialogue, singing, and diegetic music belong in <span className="font-mono text-[10px]">integrated_multimodal_description</span> and <span className="text-foreground/80">must not be repeated</span> here.
             </p>
           </div>
           <div>
             <p className="text-xs font-semibold text-foreground mb-2">non_diegetic_music</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Используйте <span className="text-foreground/80">1–3 предложения</span> для описания фоновой музыки, которую персонажи не слышат, а только зритель. Акцентируйте инструментовку, темп, ритм и изменения динамики; <span className="text-foreground/80">не используйте абстрактные слова настроения</span> и не объясняйте эмоциональную функцию саундтрека.
+              Use <span className="text-foreground/80">1–3 sentences</span> to describe background score heard only by the audience. Emphasize instrumentation, tempo, rhythm, and dynamic shifts; <span className="text-foreground/80">do not use vague mood descriptors</span> or explain emotional intent.
             </p>
             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-              ⚠️ Пение, инструменты, радио, телевизор или музыка с телефона, слышимые персонажами — это диетические события и должны находиться в <span className="font-mono text-[10px]">integrated_multimodal_description</span>.
+              ⚠️ Singing, live instruments, radios, TVs, or phone audio heard by characters are diegetic events and must reside in <span className="font-mono text-[10px]">integrated_multimodal_description</span>.
             </p>
           </div>
           <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-3">
@@ -613,8 +613,8 @@ export function PromptGuide() {
       {/* ── 10. Examples ── */}
       <Section
         icon={<BookOpenIcon className="w-4 h-4" />}
-        title="Полные примеры промптов"
-        subtitle="Четыре режима — можно копировать и адаптировать"
+        title="Complete Prompt Examples"
+        subtitle="Four modes — ready to copy and adapt"
       >
         <div className="space-y-3">
           {EXAMPLES.map((ex) => (
@@ -623,7 +623,7 @@ export function PromptGuide() {
                 <span className="text-xs font-medium text-foreground">{ex.title}</span>
                 <span className="text-[10px] text-muted-foreground">— {ex.note}</span>
               </div>
-              <PromptSample text={ex.text} note="Нажмите на иконку справа, чтобы скопировать" />
+              <PromptSample text={ex.text} note="Click the icon on the right to copy" />
             </div>
           ))}
         </div>
@@ -632,26 +632,26 @@ export function PromptGuide() {
       {/* ── 11. Common mistakes ── */}
       <Section
         icon={<AlertTriangleIcon className="w-4 h-4" />}
-        title="Частые ошибки"
-        subtitle="Что снижает качество генерации и как исправить"
+        title="Common Mistakes"
+        subtitle="What degrades generation quality and how to fix it"
       >
         <div className="rounded-xl border border-border overflow-hidden">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-[var(--surface-1)]/60">
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Проблема</th>
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Причина</th>
-                <th className="text-left px-3 py-2 font-semibold text-foreground">Исправление</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Problem</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Cause</th>
+                <th className="text-left px-3 py-2 font-semibold text-foreground">Fix</th>
               </tr>
             </thead>
             <tbody>
               {[
-                ['Говорит не тот человек', 'ID изменены или говорящий никогда не был установлен', 'Назначьте стабильные (S1) и (S2) при первом появлении каждого голоса, затем повторно используйте их'],
-                ['Реплика повторяется в звуковом ландшафте', 'Произнесённые слова скопированы в несколько полей', 'Храните полную реплику только внутри integrated_multimodal_description'],
-                ['Неверное изображение открывается/закрывается видео', 'Изображение было добавлено как референс вместо точного первого кадра', 'Используйте Start Frame и начните промпт с официальной инструкции выравнивания первого кадра'],
-                ['Детальная шпаргалка теряется или сливается', 'Промпт конкурирует с визуальным планом, либо длительность слишком короткая', 'Назначьте шпаргалке одну чёткую роль, сократите промпт и выберите длительность, подходящую для последовательности'],
-                ['Модель игнорирует референс', 'Роль не явная', 'Назовите точный субъект, атрибут, диапазон кадров и intended relationship'],
-                ['Два источника конфликтуют за один атрибут', 'Не выбран контрольный актив', 'Выберите актив, управляющий атрибутом, исключите версию другого'],
+                ['Wrong person speaking', 'IDs shifted or speaker identity was never established', 'Assign stable (S1) and (S2) on the first appearance of each voice, then reuse them consistently'],
+                ['Dialogue duplicated in soundscape', 'Spoken words were copied into multiple fields', 'Keep the spoken line strictly within integrated_multimodal_description'],
+                ['Wrong image starts/ends the video', 'Image was attached as reference instead of exact start frame', 'Use Start Frame mode and begin the prompt with the official first-frame alignment instruction'],
+                ['Detailed reference elements lost or blurred', 'Prompt conflicts with reference visuals or duration is too short', 'Assign each reference a single clear role, streamline the prompt, and select a suitable duration for the sequence'],
+                ['Model ignores reference', 'Role is ambiguous', 'Specify exact subject, attribute, shot range, and intended relationship'],
+                ['Two sources conflict over a single attribute', 'No primary controlling asset designated', 'Select the primary controlling asset and exclude contradictory elements from the other'],
               ].map(([problem, cause, fix]) => (
                 <tr key={problem} className="border-b border-border/50 last:border-0">
                   <td className="px-3 py-2 text-foreground">{problem}</td>
@@ -667,20 +667,20 @@ export function PromptGuide() {
       {/* ── 12. Ref2VA deep dive ── */}
       <Section
         icon={<TagIcon className="w-4 h-4" />}
-        title="Режим референсов (Ref2VA)"
-        subtitle="Шестисекционная структура, метки, правила"
+        title="Reference Mode (Ref2VA)"
+        subtitle="Six-section structure, tags, and rules"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 space-y-3">
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Шестисекционная структура</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Six-Section Structure</p>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {[
-                ['subject_definitions', 'Кто/что есть: <Subject N>, привязка к <Picture N>, <Video N>, <Audio N>'],
-                ['summary', 'Кратко: задача, целевое видео, связи между референсами'],
-                ['retention_analysis', 'Что сохраняется (fully_preserved) / передаётся (reference) / меняется'],
-                ['detailed_description', 'Основное тело: кадры [Shot 1], [Shot 2]… по порядку'],
-                ['overall_soundscape', 'Атмосферные и физические звуки'],
-                ['non_diegetic_music', 'Фоновая музыка для зрителя (или N/A)'],
+                ['subject_definitions', 'Entities present: <Subject N>, mapped to <Picture N>, <Video N>, <Audio N>'],
+                ['summary', 'Concise summary: task, target video, relationships between references'],
+                ['retention_analysis', 'What is retained (fully_preserved) / referenced (reference) / modified'],
+                ['detailed_description', 'Main body: shots [Shot 1], [Shot 2]... in sequence'],
+                ['overall_soundscape', 'Ambient environmental and physical action sounds'],
+                ['non_diegetic_music', 'Background score for audience (or N/A)'],
               ].map(([k, v], i) => (
                 <div key={k} className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-2.5">
                   <div className="flex items-center gap-1.5">
@@ -693,13 +693,13 @@ export function PromptGuide() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Метки референсов</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Reference Tags</p>
             <div className="grid sm:grid-cols-2 gap-2">
               {[
-                ['<Subject N>', 'Видимое содержимое, абстрагированное из референсных активов; можно переиспользовать или изменить в целевом видео'],
-                ['<Picture N>', 'Референсное изображение, которое само служит первым/последним кадром, ключевым кадром или якорем композиции'],
-                ['<Video N>', 'Референсное видео как источник монтажа, продолжения или всей временной структуры'],
-                ['<Audio N>', 'Аудиосигнал, который копируется или референсируется'],
+                ['<Subject N>', 'Visible content abstracted from reference assets; can be reused or modified in the target video'],
+                ['<Picture N>', 'Reference image serving as first/last frame, keyframe, or compositional anchor'],
+                ['<Video N>', 'Reference video as source for editing, continuation, or overarching temporal structure'],
+                ['<Audio N>', 'Audio signal that is copied or referenced'],
               ].map(([tag, desc]) => (
                 <div key={tag} className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-2.5">
                   <p className="font-mono text-xs text-foreground/90">{tag}</p>
@@ -709,48 +709,48 @@ export function PromptGuide() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Правила нумерации и независимые треки</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Numbering Rules and Independent Tracks</p>
             <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-              <li>• <span className="font-mono text-[10px]">&lt;Video N&gt;</span> и <span className="font-mono text-[10px]">&lt;Audio N&gt;</span> нумеруются <span className="text-foreground/80">независимо</span> — индексы не кодируют пару между ними.</li>
-              <li>• Если изображение используется только для определения персонажа/стиля, не создавайте отдельную строку <span className="font-mono text-[10px]">&lt;Picture N&gt;</span> — укажите источник внутри соответствующего <span className="font-mono text-[10px]">&lt;Subject N&gt;</span>.</li>
-              <li>• Если актив <span className="font-mono text-[10px]">&lt;Picture N&gt;</span>/<span className="font-mono text-[10px]">&lt;Video N&gt;</span> лишь идентифицирует другой референс и не анализируется отдельно, сослайтесь на него внутри определения этого актива.</li>
+              <li>• <span className="font-mono text-[10px]">&lt;Video N&gt;</span> and <span className="font-mono text-[10px]">&lt;Audio N&gt;</span> are numbered <span className="text-foreground/80">independently</span> — index numbers do not imply a pair between them.</li>
+              <li>• If an image is used only to define character or style, do not add a separate <span className="font-mono text-[10px]">&lt;Picture N&gt;</span> entry — specify the source within the respective <span className="font-mono text-[10px]">&lt;Subject N&gt;</span>.</li>
+              <li>• If a <span className="font-mono text-[10px]">&lt;Picture N&gt;</span>/<span className="font-mono text-[10px]">&lt;Video N&gt;</span> asset merely identifies another reference and is not analyzed independently, reference it within that asset\'s definition.</li>
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Отношения сохранения (relationship markers)</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Retention Relationships (Relationship Markers)</p>
             <div className="grid sm:grid-cols-2 gap-2">
               <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-2.5">
-                <p className="text-[10px] font-semibold text-foreground mb-1">Для видимого содержимого</p>
+                <p className="text-[10px] font-semibold text-foreground mb-1">For Visual Content</p>
                 <ul className="space-y-0.5 text-[10px] text-muted-foreground">
-                  <li>• <span className="font-mono text-[10px]">fully_preserved</span> — геометрия, цвета, детали полностью сохранены</li>
-                  <li>• <span className="font-mono text-[10px]">weak_reference</span> — сохраняется лишь общее сходство по категории/атмосфере</li>
+                  <li>• <span className="font-mono text-[10px]">fully_preserved</span> — geometry, colors, and fine details fully preserved</li>
+                  <li>• <span className="font-mono text-[10px]">weak_reference</span> — only general categorical or stylistic similarity is preserved</li>
                 </ul>
               </div>
               <div className="rounded-lg border border-border bg-[var(--surface-1)]/60 p-2.5">
-                <p className="text-[10px] font-semibold text-foreground mb-1">Для аудио</p>
+                <p className="text-[10px] font-semibold text-foreground mb-1">For Audio</p>
                 <ul className="space-y-0.5 text-[10px] text-muted-foreground">
-                  <li>• <span className="font-mono text-[10px]">fully_copy</span> — исходный звук переиспользуется 1:1 как финальный трек</li>
-                  <li>• <span className="font-mono text-[10px]">reference</span> — не копируется дословно; передаётся тембр, ритм, стиль музыки, содержание диалога</li>
-                  <li>• <span className="font-mono text-[10px]">weak_reference</span> — сохраняется лишь широкое сходство по категории/атмосфере</li>
+                  <li>• <span className="font-mono text-[10px]">fully_copy</span> — source audio is reused 1:1 as the final audio track</li>
+                  <li>• <span className="font-mono text-[10px]">reference</span> — not copied verbatim; transfers vocal timbre, rhythm, musical style, or dialogue context</li>
+                  <li>• <span className="font-mono text-[10px]">weak_reference</span> — broad similarity in category, genre, or atmosphere</li>
                 </ul>
               </div>
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Говорящие персонажи и ID</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Speaking Characters and IDs</p>
             <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-              <li>• Переиспользуйте глобальный ID говорящего <span className="font-mono text-[10px]">(Sx)</span> на каждом реальном вокальном событии.</li>
-              <li>• <span className="font-mono text-[10px]">&lt;Audio N&gt;</span>, привязанный к целевому говорящему, тоже переиспользует тот же <span className="font-mono text-[10px]">(Sx)</span>, но <span className="text-foreground/80">никогда</span> не присваивает новый ID самостоятельно.</li>
-              <li>• Не пишите <span className="font-mono text-[10px]">(Sx)</span> в <span className="font-mono text-[10px]">retention_analysis</span>.</li>
-              <li>• Голоса, физически произведённые конкретным человеком/персонажем — используют <span className="font-mono text-[10px]">(Sx)</span>. Музыка или диалог из прямого переиспользования саундтрека — ссылаются на <span className="font-mono text-[10px]">&lt;Audio N&gt;</span>.</li>
+              <li>• Reuse the global speaker ID <span className="font-mono text-[10px]">(Sx)</span> on every real vocal event.</li>
+              <li>• An <span className="font-mono text-[10px]">&lt;Audio N&gt;</span> linked to a target speaker reuses the same <span className="font-mono text-[10px]">(Sx)</span>, but <span className="text-foreground/80">never</span> assigns a new ID on its own.</li>
+              <li>• Do not write <span className="font-mono text-[10px]">(Sx)</span> inside <span className="font-mono text-[10px]">retention_analysis</span>.</li>
+              <li>• Voices physically produced by a specific character use <span className="font-mono text-[10px]">(Sx)</span>. Music or dialogue directly reused from soundtrack assets refer to <span className="font-mono text-[10px]">&lt;Audio N&gt;</span>.</li>
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Важные предупреждения</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Important Warnings</p>
             <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed">
-              <li>• <span className="text-foreground/80">Не смешивайте</span> роли first/last-frame с ролями референсных медиа. API требует, чтобы семейства ролей не пересеклись в одном запросе.</li>
-              <li>• Референсное аудио <span className="text-foreground/80">не может быть единственным</span> медиа-референсом для H3-Base-Ref2VA — обязательно приложите изображение или видео.</li>
-              <li>• Если только тембр передаётся — не копируйте исходный диалог дословно в цельное видео.</li>
+              <li>• <span className="text-foreground/80">Do not mix</span> first/last-frame roles with reference media roles. The API requires that role families do not intersect in the same request.</li>
+              <li>• Reference audio <span className="text-foreground/80">cannot be the sole</span> media reference for H3-Base-Ref2VA — always attach an image or video.</li>
+              <li>• If only timbre is referenced — do not copy the source dialogue verbatim into the resulting video.</li>
             </ul>
           </div>
         </div>
@@ -759,24 +759,24 @@ export function PromptGuide() {
       {/* ── 13. Checklist ── */}
       <Section
         icon={<ClipboardCheckIcon className="w-4 h-4" />}
-        title="Чеклист перед генерацией"
-        subtitle="Проверьте все пункты перед отправкой"
+        title="Pre-Generation Checklist"
+        subtitle="Verify all items before submitting"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4">
           <ul className="space-y-1.5">
             {[
-              'Выбран правильный режим под имеющиеся входные данные: «Текст», «Кадры» или «Референсы».',
-              'Промпт начинается с нужного поля: integrated_multimodal_description (обычный режим) или subject_definitions (референсы).',
-              'Кадры идут по порядку: [Shot 1], [Shot 2]… — первый без таймкода.',
-              'Описание одного и того же субъекта остаётся стабильным во всех кадрах.',
-              'Каждый говорящий сохраняет один ID (Sx).',
-              'Каждая реплика сохранена с точным языком и формулировкой внутри <d>.',
-              'Видимый текст находится в английских двойных кавычках.',
-              'Физические звуки описаны в overall_soundscape, музыка для зрителей — в non_diegetic_music, либо там указано N/A.',
-              'Запрашиваемые действия помещаются в выбранную длительность клипа.',
-              'Каждый прикреплённый референс упомянут в промпте своей меткой (<Picture N> / <Video N> / <Audio N>).',
-              'В retention_analysis отмечено, что сохраняется (fully_preserved), а что меняется.',
-              'Проверка приёмки называет самое важное: идентичность, текст на экране, переход, тайминг, звук или финальный кадр.',
+              'The correct mode is selected for available inputs: \"Text\", \"Frames\", or \"References\".',
+              'The prompt begins with the correct field: integrated_multimodal_description (standard mode) or subject_definitions (references).',
+              'Shots are ordered sequentially: [Shot 1], [Shot 2]... — first shot has no timestamp.',
+              'Descriptions of the same subject remain consistent across all shots.',
+              'Each speaking character retains a consistent ID (Sx).',
+              'Each spoken line is preserved with exact language tag and wording inside <d>.',
+              'Visible text is enclosed in English double quotes.',
+              'Physical and environmental sounds are placed in overall_soundscape, score for audience in non_diegetic_music, or marked N/A.',
+              'Requested actions fit comfortably within the selected clip duration.',
+              'Every attached reference is cited in the prompt with its respective tag (<Picture N> / <Video N> / <Audio N>).',
+              'In retention_analysis, preserved elements (fully_preserved) and changes are explicitly specified.',
+              'Acceptance criteria prioritize key aspects: character identity, on-screen text, transition, timing, audio, or end frame.',
             ].map((item, i) => (
               <li key={i} className="flex gap-2 text-xs text-muted-foreground leading-relaxed">
                 <span className="text-cyan-400 shrink-0 mt-0.5">☐</span>
@@ -790,8 +790,8 @@ export function PromptGuide() {
       {/* ── 14. LLM assistant ── */}
       <Section
         icon={<BotIcon className="w-4 h-4" />}
-        title="LLM-ассистент в студии"
-        subtitle="Встроенный локальный помощник (Bonsai 2 27B по умолчанию / Gemma 4 12B / Qwen3.5 9B) — видит референсы, а видео-кадры — по флажку в Настройки → LLM"
+        title="Studio LLM Assistant"
+        subtitle="Built-in local assistant (Bonsai 2 27B default / Gemma 4 12B / Qwen3.5 9B) — inspects references, and video frames when enabled in Settings → LLM"
       >
         <div className="rounded-xl border border-violet-500/25 bg-violet-500/5 p-4 space-y-3">
           <div className="flex items-start gap-3">
@@ -800,18 +800,18 @@ export function PromptGuide() {
             </span>
             <div className="space-y-1">
               <p className="text-xs text-foreground leading-relaxed">
-                <span className="text-violet-300 font-medium">«Ассистент»</span> — правая панель на вкладках «Генерация» и «Продление» (ширину можно тянуть за край, кнопка в шапке сворачивает в узкий рейл). Это локальная LLM (по умолчанию Bonsai 2 27B, тернарная, vision; альтернативы: Gemma 4 12B, Qwen3.5 9B), которая работает прямо на вашей видеокарте. Она уже знает полный гайд по MiniMax H3, <span className="text-violet-300 font-medium">видит прикреплённые картинки И видео-кадры</span>, поэтому может описать, что на них, и зафиксировать персонажей в промпте. Ассистент знает выбранный режим генерации и не добавит теги, которые не поддерживаются (правка 150).
+                <span className="text-violet-300 font-medium">\"Assistant\"</span> is the right-hand panel on the \"Generate\" and \"Extend\" tabs (resizable border, header button collapses into a narrow rail). It runs a local LLM (default: Bonsai 2 27B ternary vision; alternatives: Gemma 4 12B, Qwen3.5 9B) directly on your GPU. It knows the full MiniMax H3 prompt engineering guide, <span className="text-violet-300 font-medium">inspects attached images and video frames</span>, and can accurately ground characters and settings in the prompt. The assistant detects the active generation mode and avoids unsupported tags.
               </p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Отвечает по-русски, готовый промпт выдаёт на английском. Если референсов нет — не использует теги; если есть — привязывает только существующие <span className="font-mono text-[10px]">&lt;Picture N&gt;</span>, <span className="font-mono text-[10px]">&lt;Video N&gt;</span>, <span className="font-mono text-[10px]">&lt;Audio N&gt;</span>.
+                Chat in natural language, and receive the finalized prompt in English. If no references are attached, it omits tags; when references are present, it binds only active tags: <span className="font-mono text-[10px]">&lt;Picture N&gt;</span>, <span className="font-mono text-[10px]">&lt;Video N&gt;</span>, <span className="font-mono text-[10px]">&lt;Audio N&gt;</span>.
               </p>
             </div>
           </div>
           <div className="grid sm:grid-cols-3 gap-2.5">
             {[
-              ['Открой панель «Ассистент»', 'Справа на вкладке «Генерация» или «Продление». Напиши идею словами (по-русски). Прикреплённые референсы уже видны модели.'],
-              ['Или «Исправить промпт»', 'Кнопка ✦ справа от поля промпта (и в шапке полноэкранного редактора): спросит, что именно изменить, и отправит черновик с вашим заданием в LLM — панель чата развернётся сама.'],
-              ['Вставь готовый промпт', 'Ответ ассистента копируешь в поле генерации — теги и персонажи уже привязаны к твоим рефам.'],
+              ['Open the \"Assistant\" panel', 'On the right side of the \"Generate\" or \"Extend\" tab. Describe your concept in natural words. Attached references are automatically visible to the model.'],
+              ['Or \"Refine Prompt\"', 'The ✦ button beside the prompt input (and in the fullscreen editor header): prompts for what to adjust, sends your draft and instructions to the LLM, and expands the chat panel automatically.'],
+              ['Paste the final prompt', 'Copy the assistant response directly into the prompt box — tags and character definitions are already mapped to your references.'],
             ].map(([t, d]) => (
               <div key={t} className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-3">
                 <p className="text-xs font-semibold text-violet-400">{t}</p>
@@ -825,14 +825,14 @@ export function PromptGuide() {
       {/* ── 15. History / favorites / examples ── */}
       <Section
         icon={<HistoryIcon className="w-4 h-4" />}
-        title="История, избранное и примеры"
-        subtitle="Ваши промпты не теряются — они сохраняются и доступны в один клик"
+        title="History, Favorites & Examples"
+        subtitle="Your prompts are saved automatically and available in one click"
       >
         <div className="grid sm:grid-cols-3 gap-2.5">
           {[
-            ['📜 История', 'Каждый отправленный промпт сохраняется (до 30). Клик — подставить обратно. Доступно в редакторе (вкладка «История») и в меню «История» на вкладке генерации.'],
-            ['⭐ Избранное', 'Закрепите удачные промпты звёздочкой — они всегда сверху и не удаляются при переполнении истории (до 20).'],
-            ['📚 Примеры', 'Готовые английские промпты для разных сценариев (T2VA, I2VA, FL2VA, Ref2VA). Доступны в редакторе и в меню «Примеры».'],
+            ['📜 History', 'Every submitted prompt is saved (up to 30). Click to restore. Available in the prompt editor (\"History\" tab) and in the \"History\" menu on the Generate tab.'],
+            ['⭐ Favorites', 'Star effective prompts to pin them to the top — they remain protected when history rotates (up to 20).'],
+            ['📚 Examples', 'Ready-made English prompt templates for different scenarios (T2VA, I2VA, FL2VA, Ref2VA). Available in the editor and in the \"Examples\" menu.'],
           ].map(([t, d]) => (
             <div key={t} className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-3">
               <p className="text-xs font-semibold text-foreground">{t}</p>
@@ -845,8 +845,8 @@ export function PromptGuide() {
       {/* ── 16. Hover previews ── */}
       <Section
         icon={<MousePointerClickIcon className="w-4 h-4" />}
-        title="Превью референсов при наведении"
-        subtitle="Наведите курсор на тег — увидите, какой файл за ним стоит"
+        title="Hover Reference Previews"
+        subtitle="Hover over any tag to preview the corresponding asset"
       >
         <div className="rounded-xl border border-border bg-[var(--surface-2)]/40 p-4 flex items-start gap-3">
           <span className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center shrink-0">
@@ -854,13 +854,13 @@ export function PromptGuide() {
           </span>
           <div className="space-y-1">
             <p className="text-xs text-foreground leading-relaxed">
-              В поле промпта, редакторе и чате с LLM наведение курсора на тег <span className="font-mono text-[10px] px-1 py-0.5 rounded bg-purple-500/15 text-purple-300">&lt;Picture N&gt;</span> или <span className="font-mono text-[10px] px-1 py-0.5 rounded bg-cyan-500/15 text-cyan-300">&lt;Video N&gt;</span> показывает плавающее превью: картинку или постер видео. Это помогает не путать номера референсов в длинных промптах.
+              In the prompt input, editor, and LLM chat, hovering over a <span className="font-mono text-[10px] px-1 py-0.5 rounded bg-purple-500/15 text-purple-300">&lt;Picture N&gt;</span> or <span className="font-mono text-[10px] px-1 py-0.5 rounded bg-cyan-500/15 text-cyan-300">&lt;Video N&gt;</span> tag reveals a floating preview card showing the image or video poster. This prevents mixing up asset numbers in complex prompts.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Аудио-референсы (<span className="font-mono text-[10px]">&lt;Audio N&gt;</span>) превью не показывают — для звука нет визуального представления.
+              Audio references (<span className="font-mono text-[10px]">&lt;Audio N&gt;</span>) do not show visual previews as sound has no standalone visual preview.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Клик по самому превью референса открывает файл на весь экран — так видно детали, которых не разглядеть в маленьком квадрате (работает одинаково во всех вкладках студии).
+              Clicking on the preview thumbnail opens the asset fullscreen for inspecting fine details (consistent across all studio tabs).
             </p>
           </div>
         </div>
@@ -869,8 +869,8 @@ export function PromptGuide() {
       {/* ── 17. Camera vocabulary (quick insert) ── */}
       <Section
         icon={<CameraIcon className="w-4 h-4" />}
-        title="Кинематографический словарик (быстрая вставка)"
-        subtitle="Фразы, которые модель понимает и любит — вставляйте в промпт"
+        title="Cinematic Vocabulary (Quick Insert)"
+        subtitle="Phrases the model understands and responds to well — insert directly into your prompt"
       >
         <div className="flex flex-wrap gap-2">
           {CAMERA_WORDS.map((w) => (
@@ -884,8 +884,8 @@ export function PromptGuide() {
       {/* ── 18. Don'ts (summary) ── */}
       <Section
         icon={<AlertTriangleIcon className="w-4 h-4" />}
-        title="Чего НЕ делать (кратко)"
-        subtitle="Быстрый список запрещённых действий"
+        title="What NOT to Do (Summary)"
+        subtitle="Quick reference of anti-patterns to avoid"
       >
         <ul className="space-y-1.5">
           {DONT_LIST.map((t, i) => (

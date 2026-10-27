@@ -24,13 +24,13 @@ import {
  * to ComfyUI automatically at generation time — the response carries
  * `staged: true` so the UI can inform the user.
  *
- * (правка 347) Потоковая запись на диск (temp → openAsBlob в ComfyUI /
- * move в staging) вместо Buffer.from(await file.arrayBuffer()): видео-
- * референсы в сотни МБ раньше целиком буферизовались в heap. Лимит
- * размера — как у вложений ассистента (MAX_ATTACH_BYTES, 1 ГБ).
- * (правка 587) Сам multipart тоже парится потоково (readFirstMultipartPart,
- * как /api/loras): req.formData() буферизовал ВСЁ тело запроса в heap до
- * проверки лимита — гигабайтная загрузка раздувала память до отдачи 413.
+ * (fix 347) Streamed write to disk (temp → openAsBlob in ComfyUI /
+ * move to staging) instead of Buffer.from(await file.arrayBuffer()): video
+ * references of hundreds of MBs were previously buffered entirely in heap. Size
+ * limit matches assistant attachments (MAX_ATTACH_BYTES, 1 GB).
+ * (fix 587) Multipart itself is also parsed as a stream (readFirstMultipartPart,
+ * same as /api/loras): req.formData() buffered the ENTIRE request body in heap before
+ * checking the limit — a gigabyte upload inflated memory before returning 413.
  */
 const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
 
@@ -49,10 +49,10 @@ export async function POST(req: NextRequest) {
       part.cancel()
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
-    // (правка 347) Базовая санитизация имени (basename + небезопасные символы).
+    // (fix 347) Basic name sanitization (basename + unsafe characters).
     const safeName = (path.basename(part.filename).replace(UNSAFE_CHARS, '_') || 'upload').slice(0, 200)
 
-    // Потоковая запись во временный файл с лимитом размера.
+    // Streamed write to temporary file with size limit.
     tmpPath = path.join(
       os.tmpdir(),
       `mms-upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -77,14 +77,14 @@ export async function POST(req: NextRequest) {
       tmpPath = null
       if (tooLarge) {
         part.cancel()
-        return NextResponse.json({ error: 'Файл слишком большой (лимит 1 ГБ)' }, { status: 413 })
+        return NextResponse.json({ error: 'File is too large (1 GB limit)' }, { status: 413 })
       }
       throw e
     }
 
-    // (правка 291) Для видео-файлов возвращаем durationSec (ffprobe на сервере)
-    // — клиент (extend-view) сразу знает длительность исходника и показывает
-    // «итого ~X с» в badges/карточках клипов. Для изображений — нет.
+    // (fix 291) For video files, return durationSec (ffprobe on server)
+    // — client (extend-view) immediately knows source duration and displays
+    // "total ~X s" in badges/clip cards. Not for images.
     const ext = path.extname(safeName).toLowerCase()
     const isVideo = ['.mp4', '.m4v', '.mov', '.mkv', '.avi', '.webm', '.m2ts',
       '.mts', '.mxf', '.vob', '.wmv', '.flv', '.mpg', '.mpeg', '.ogv'].includes(ext)
@@ -102,14 +102,14 @@ export async function POST(req: NextRequest) {
           if (Number.isFinite(pr.durationSec) && pr.durationSec > 0) {
             durationSec = Math.round(pr.durationSec * 10) / 10
           }
-        } catch { /* ffprobe недоступен — не критично, UI обработает 0 */ }
+        } catch { /* ffprobe unavailable — non-critical, UI will handle 0 */ }
       }
       return NextResponse.json({ name, ...(durationSec !== undefined ? { durationSec } : {}) })
     } catch (comfyErr) {
       // ComfyUI unreachable — stage locally instead of failing hard
       try {
         const stagedTmp = tmpPath
-        tmpPath = null // владение передаём stageFileFromPath (move)
+        tmpPath = null // ownership transferred to stageFileFromPath (move)
         const name = await stageFileFromPath(stagedTmp!, safeName)
         return NextResponse.json({ name, staged: true })
       } catch {

@@ -1,5 +1,5 @@
 /**
- * Server-side metadata writer (правка 21).
+ * Server-side metadata writer (fix 21).
  *
  * Previously .meta.json sidecars were written ONLY by the browser after it
  * saw the job finish — closing the tab/window while the ComfyUI queue kept
@@ -19,17 +19,17 @@
 import fs from 'fs'
 import path from 'path'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
-import { probeVideoFile } from '@/lib/video-probe' // (правка 410)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
+import { probeVideoFile } from '@/lib/video-probe' // (fix 410)
 import { computeFinalDimensions, finalDimsFromMegapixels, framesForDuration, clampLowResMP, selectResolution, type MiniMaxH3Params } from '@/lib/comfy/minimax-h3-template'
-import { replaceVideoAudio, resolveOriginalAudioReplacement } from '@/lib/replace-video-audio' // (правка 699)
+import { replaceVideoAudio, resolveOriginalAudioReplacement } from '@/lib/replace-video-audio' // (fix 699)
 
 /* ──────────────────── shared helpers ──────────────────── */
 
-/** (правки 121, 124) Итоговые размеры видео ПОСЛЕ точного кропа — ТО же
- *  формула, что в шаблоне (buildMiniMaxH3Workflow): пресет → номинал
- *  (computeFinalDimensions), свободное разрешение → finalDimsFromMegapixels.
- *  lowResMP на итог больше не влияет: апскейлер — «target dimensions». */
+/** (fixes 121, 124) Final video dimensions AFTER exact crop — same
+ *  formula as in template (buildMiniMaxH3Workflow): preset → nominal
+ *  (computeFinalDimensions), free resolution → finalDimsFromMegapixels.
+ *  lowResMP no longer affects the result: upscaler uses "target dimensions". */
 export function computeOutputDimensions(
   aspectRatio: string,
   megapixels: number,
@@ -41,9 +41,9 @@ export function computeOutputDimensions(
   return { w: d.outW, h: d.outH }
 }
 
-/** Убрать undefined-значения: в режиме слияния явный undefined
- *  «съел» бы уже записанное в сайдкаре значение, а JSON.stringify
- *  undefined и так не сериализует (в обычном режиме поведение прежнее). */
+/** Remove undefined values: in merge mode an explicit undefined
+ *  would overwrite an already recorded value in sidecar, while JSON.stringify
+ *  does not serialize undefined anyway (in standard mode behavior unchanged). */
 function stripUndefined(o: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(o)) {
@@ -53,16 +53,16 @@ function stripUndefined(o: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * (правка 722) Слияние массива `references` по элементам (ключ — path).
+ * (fix 722) Element-wise merge of `references` array (keyed by path).
  *
- * Зачем не обычное «новое перетирает старое»: у писателей поля НЕ равны по
- * составу, и каждый знает что-то, чего не знает другой:
- *  • клиент знает `role` (imageIntent: персонаж/сцена/стиль/композиция) —
- *    сервер о роли не знает вообще (в теле запроса только пути);
- *  • сервер знает `trim_start`/`trim_end` (обрезка аудио-референсов) и
- *    `compress` (сжатое видео-в-480p) — клиент их не пишет.
- * Обычная перезапись теряла то или другое. Здесь: состав — от пришедших,
- * а поля, которых у пришедших нет, сохраняются; `role` берётся непустой.
+ * Why not standard "new overwrites old": writers' fields differ in composition,
+ * and each knows something the other does not:
+ *  • client knows `role` (imageIntent: character/scene/style/composition) —
+ *    server knows nothing about role (request body contains only paths);
+ *  • server knows `trim_start`/`trim_end` (trimming of audio references) and
+ *    `compress` (compressed 480p video) — client does not write them.
+ * Standard overwrite lost one or the other. Here: items from incoming,
+ * while fields absent in incoming are preserved; non-empty `role` is preferred.
  */
 function mergeReferences(existing: unknown, incoming: unknown): unknown {
   if (!Array.isArray(incoming)) return existing
@@ -80,7 +80,7 @@ function mergeReferences(existing: unknown, incoming: unknown): unknown {
     const rec = r as Record<string, unknown>
     const prev = byPath.get(String(rec.path ?? ''))
     const merged: Record<string, unknown> = { ...(prev ?? {}), ...rec }
-    // Роль: непустая из любой стороны (клиент знает, сервер — нет).
+    // Role: non-empty from either side (client knows, server does not).
     const role = rec.role || (prev ? prev.role : '') || ''
     merged.role = role
     out.push(merged)
@@ -91,15 +91,15 @@ function mergeReferences(existing: unknown, incoming: unknown): unknown {
 /** Write a .meta.json sidecar next to the output file + clean VHS
  *  byproducts (silent video / first-frame png). Returns the path or null.
  *
- *  (правка 722) opts.merge — СЛИЯНИЕ с уже существующим сайдкаром вместо
- *  полной перезаписи. Проблема, которую это чинит: сайдкар одного и того же
- *  файла пишут ДВА независимых писателя — серверный (pending-meta:
- *  recordPendingMeta → finalizePendingMeta) и клиентский быстрый путь
- *  (POST /api/comfy/metadata). Наборы полей у них различались, а перезапись
- *  была полной → «кто отработал последним, тот и вычеркнул» поля другого.
- *  Например, реально применённые кастомные LoRA (`lora`) писал только
- *  сервер, а клиент их не знал и затирал. Теперь поля объединяются:
- *  пришедшие перетирают старые, старые незнакомые поля сохраняются. */
+ *  (fix 722) opts.merge — MERGE with existing sidecar instead of
+ *  complete overwrite. Problem this fixes: sidecars for the same file
+ *  are written by TWO independent writers — server-side (pending-meta:
+ *  recordPendingMeta → finalizePendingMeta) and client fast path
+ *  (POST /api/comfy/metadata). Their field sets differed, and full overwrite
+ *  meant "whichever ran last erased the other's fields".
+ *  For example, actually applied custom LoRAs (`lora`) were only written by
+ *  server, and client overwrote them without knowing. Now fields are merged:
+ *  incoming overwrites old, old unfamiliar fields are preserved. */
 export function writeMetaSidecar(
   filename: string,
   subfolder: string,
@@ -110,12 +110,12 @@ export function writeMetaSidecar(
   if (!OUTPUT_DIR || !filename) return null
 
   const safeName = path.basename(filename)
-  // (правка 495) subfolder — многоуровневый относительный путь ('a/b').
+  // (fix 495) subfolder — multi-level relative path ('a/b').
   const safeSub = subfolder ? sanitizeFolderPath(subfolder) : ''
-  // (правка 348) startsWith без нормализации на Windows сравнивал пути с
-  // разным регистром/разделителями ('E:\\Out' vs 'e:\\out') — ложный отказ
-  // или, наоборот, прохождение чужого префикса. Сравниваем resolve-нутые
-  // пути (на win32 — в нижнем регистре), граница — по разделителю.
+  // (fix 348) startsWith without normalization on Windows compared paths with
+  // different case/separators ('E:\\Out' vs 'e:\\out') — false negative
+  // or false positive on foreign prefix. Compare resolved
+  // paths (lowercase on win32), bounded by path separator.
   const outRoot = path.resolve(OUTPUT_DIR)
   const dir = path.resolve(path.join(outRoot, safeSub))
   const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
@@ -127,29 +127,29 @@ export function writeMetaSidecar(
   fs.mkdirSync(dir, { recursive: true })
   let metadata: Record<string, unknown>
   if (opts?.merge) {
-    // (правка 722) Слияние: старый сайдкар — база, новые поля сверху.
+    // (fix 722) Merge: old sidecar is base, new fields on top.
     let existing: Record<string, unknown> = {}
     try {
       const parsed = JSON.parse(fs.readFileSync(metaFile, 'utf-8'))
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed
-    } catch { /* нет/битый сайдкар — пишем с нуля */ }
-    // (правка 722) Слияние — ТОЛЬКО внутри одной задачи. Счётчик ComfyUI
-    // сбрасывается после рестарта, и имя `Minimax_Studio_00001.mp4` может
-    // достаться новой генерации: старая метa тогда смешалась бы с новой
-    // (промпт новый, а `flf_resolution`/`lora` — от прежней задачи).
+    } catch { /* missing/corrupt sidecar — write from scratch */ }
+    // (fix 722) Merge — ONLY within the same task. ComfyUI counter
+    // resets on restart, and the name `Minimax_Studio_00001.mp4` might
+    // belong to a new generation: old meta would then mix with new
+    // (prompt is new, but `flf_resolution`/`lora` from old task).
     const oldJob = typeof existing.job_id === 'string' ? existing.job_id : null
     const newJob = typeof params.job_id === 'string' ? params.job_id : null
     const sameJob = oldJob === newJob
     metadata = sameJob
       ? { ...existing, ...stripUndefined(params) }
       : { ...stripUndefined(params) }
-    // (правка 722) references — слияние по элементам (см. mergeReferences).
+    // (fix 722) references — element-wise merge (see mergeReferences).
     if (sameJob) {
       const mergedRefs = mergeReferences(existing.references, params.references)
       if (mergedRefs !== undefined) metadata.references = mergedRefs
     }
-    // created_at — момент ПОЯВЛЕНИЯ файла: более поздняя запись не должна
-    // его перетирать (иначе «дата создания» ползёт вместе с записями).
+    // created_at — file CREATION timestamp: a later write must not
+    // overwrite it (otherwise "creation date" shifts on every write).
     if (sameJob && typeof existing.created_at === 'number') metadata.created_at = existing.created_at
     else metadata.created_at = Date.now() / 1000
   } else {
@@ -162,18 +162,17 @@ export function writeMetaSidecar(
   fs.writeFileSync(metaFile, JSON.stringify(metadata, null, 2), 'utf-8')
 
   // VHS byproduct cleanup (same logic the client-facing route had).
-  // Удаляем «сиблинга» ТОЛЬКО если он создан ПОЗЖЕ начала этой же задачи:
-  // без фильтра по mtime файл пользователя foo-audio.mp4 из совсем другой
-  // генерации мог стереть его легитимный foo.mp4.
+  // Delete sibling ONLY if created AFTER this task started:
+  // without mtime filtering a user file foo-audio.mp4 from a completely different
+  // generation could erase a legitimate foo.mp4.
   const audioMatch = safeName.match(/^(.*)-audio\.[^.]+$/i)
-  // (правка 715) Без started_at чистку НЕ выполняем вовсе. Раньше здесь стояло
-  // `jobStartMs = ... : 0`, и условие `st.mtimeMs >= 0` было истинно всегда —
-  // защита «удалять сиблинга только если он создан ПОСЛЕ старта этой задачи»
-  // вырождалась в ничто, и под cleanup попадали легитимные файлы ЧУЖОЙ
-  // генерации (foo.mp4 рядом с foo-audio.mp4). Теперь: нет метки времени —
-  // нет удаления (fail-safe, а не fail-open).
-  // Дополнительно: метка должна быть правдоподобной (не 0 и не из будущего) —
-  // иначе клиент подставил бы 0 и вернул прежнее fail-open поведение.
+  // (fix 715) Without started_at, DO NOT perform cleanup at all. Previously
+  // `jobStartMs = ... : 0`, and condition `st.mtimeMs >= 0` was always true —
+  // the protection "delete sibling only if created AFTER this task started"
+  // became a no-op, and legitimate files of ANOTHER generation were deleted
+  // (foo.mp4 next to foo-audio.mp4). Now: no timestamp — no deletion (fail-safe).
+  // Additionally: timestamp must be plausible (not 0 and not from the future) —
+  // otherwise client could pass 0 and restore previous fail-open behavior.
   const rawStart = params.started_at
   const jobStartMs =
     typeof rawStart === 'number' &&
@@ -185,21 +184,21 @@ export function writeMetaSidecar(
   if (audioMatch && jobStartMs !== null) {
     const base = audioMatch[1]
     const ext = path.extname(safeName).toLowerCase()
-    // (правка 587) Второе условие из комментария: сиблинг не новее самого
-    // аудиофайла (иначе это более поздний чужой файл). stat аудио не удался —
-    // прежнее поведение (Infinity = условие не ограничивает).
+    // (fix 587) Second condition: sibling is not newer than audio file itself
+    // (otherwise it's a later unrelated file). If stat fails —
+    // previous behavior (Infinity = condition does not restrict).
     let audioMtimeMs = Infinity
     try {
       audioMtimeMs = fs.statSync(path.join(dir, safeName)).mtimeMs
-    } catch { /* аудиофайл недоступен — не блокируем чистку */ }
+    } catch { /* audio file unavailable — don't block cleanup */ }
     const unwanted = [path.join(dir, base + ext), path.join(dir, base + '.png')]
     for (const f of unwanted) {
       try {
         const st = fs.statSync(f)
-        // «Сиблинг» той же задачи: изменён после её старта и не старше
-        // самого аудиофайла (иначе это более поздний чужой файл).
+        // Sibling of the same task: modified after its start and not newer
+        // than the audio file itself (otherwise it's a later unrelated file).
         if (st.mtimeMs >= jobStartMs && st.mtimeMs <= audioMtimeMs) fs.unlinkSync(f)
-      } catch { /* нет файла — ок */ }
+      } catch { /* file missing — ok */ }
     }
   }
   return metaFile
@@ -258,18 +257,18 @@ function savePending(map: Record<string, PendingEntry>) {
  *  (same shape the browser writes — see use-video-gen genParamsMap). */
 function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
   const fps = 24
-  // (правка 138) дефолт 5 → 2.5: минимум 2.5 с
+  // (fix 138) default 5 → 2.5: minimum 2.5s
   const duration = body.duration ?? 2.5
-  // Actual frame count the server produces (node 46:19), for metadata (правка 55).
+  // Actual frame count the server produces (node 46:19), for metadata (fix 55).
   const videoLengthFrames = framesForDuration(duration, fps)
   const finalResolution = body.finalResolution ?? 0.7
-  // (правки 121, 124) ТОЧНЫЕ финальные размеры: пресет → body.targetDimensions,
-  // свободное разрешение → MP-путь (та же формула, что в шаблоне)
+  // (fixes 121, 124) EXACT final dimensions: preset → body.targetDimensions,
+  // free resolution → MP path (same formula as in template)
   const { w, h } = computeOutputDimensions(body.aspectRatio || '16:9', finalResolution, body.targetDimensions)
   const genMode0: 'ref' | 't2v' | 'flf' | 'extend' = body.mode === 't2v' || body.mode === 'flf' || body.mode === 'extend' ? body.mode : 'ref'
   const draft0 = genMode0 !== 'extend' && body.pipeline === 'draft'
-  // Драфт: фактический выход = ОСНОВНОЕ разрешение (как flf):
-  // пресет → ceil32(targetDimensions), свободное → finalRes MP
+  // Draft: actual output = BASE resolution (like flf):
+  // preset → ceil32(targetDimensions), free → finalRes MP
   const draftCanvas = draft0 && genMode0 !== 'flf'
     ? (body.targetDimensions
         ? {
@@ -280,12 +279,12 @@ function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
     : null
   const resW = draftCanvas ? draftCanvas.w : w
   const resH = draftCanvas ? draftCanvas.h : h
-  // (правка 2) Аудио-рефы: сохраняем обрезку (trim_start/trim_end) —
-  // восстановление из меты вернёт её в UI.
-  const references: Array<{ type: string; path: string; role: string; trim_start?: number; trim_end?: number | null; /** (правка 493) видео-реф сжимался до 480p */ compress?: boolean }> = [
+  // (fix 2) Audio refs: preserve trim (trim_start/trim_end) —
+  // restoring from meta restores it in UI.
+  const references: Array<{ type: string; path: string; role: string; trim_start?: number; trim_end?: number | null; /** (fix 493) video ref was compressed to 480p */ compress?: boolean }> = [
     ...(body.refImages ?? []).map((p) => ({ type: 'image', path: p, role: '' })),
-    // (правка 493) path — ОРИГИНАЛ (роут подменяет путь только для сабмита),
-    // флаг compress — «Повторить» сожмёт заново (сжатие кэшируется).
+    // (fix 493) path is ORIGINAL (route only substitutes path for submission),
+    // compress flag — "Retry" compresses anew (compression is cached).
     ...(body.refVideos ?? []).map((r) => ({ type: 'video', path: r.path, role: '', ...(r.compress === true && { compress: true }) })),
     ...(body.refAudios ?? []).map((p, i) => {
       const t = body.refAudioTrims?.[i]
@@ -294,16 +293,16 @@ function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
         : { type: 'audio', path: p, role: '' }
     }),
   ]
-  // (правка 470) flf: первый кадр — тоже якорь идентичности. Раньше он жил
-  // только в поле first_frame, а references у flf-видео были пусты → рефайн
-  // (readMetaImageRefs читает только references) шёл без мета-рефов, и сайдкар
-  // результата рефайна обрывал цепочку якорей навсегда. Дедуп по path.
+  // (fix 470) flf: first frame is also an identity anchor. Previously it lived
+  // only in first_frame field, and references for flf videos were empty → refine
+  // (readMetaImageRefs reads only references) ran without meta refs, and resulting
+  // refine sidecar severed the anchor chain permanently. Deduplicate by path.
   if (genMode0 === 'flf' && body.firstFrame && !references.some((r) => r.path === body.firstFrame)) {
     references.unshift({ type: 'image', path: body.firstFrame, role: '' })
   }
-  // (правка 157) Режимы + размеры первого кадра — для «Повторить»
-  // (без first_frame_width/height ориентация из кадра не восстановится
-  //  и flf-генерация снова даст не ту ориентацию).
+  // (fix 157) Modes + first frame dimensions — for "Retry"
+  // (without first_frame_width/height aspect ratio won't be restored from frame
+  //  and flf generation would produce wrong aspect ratio again).
   const genMode: 'ref' | 't2v' | 'flf' | 'extend' = genMode0
   const draft = draft0
   return {
@@ -320,22 +319,22 @@ function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
       last_frame: body.lastFrame ?? null,
       first_frame_width: body.firstFrameWidth ?? null,
       first_frame_height: body.firstFrameHeight ?? null,
-      // (правка 722) Итоговый номинал flf — «Повторить» восстанавливает
-      // именно его, а не UI-пресет. В пресетном режиме targetDimensions уже
-      // посчитан клиентом как flfNominalDimensions (пропорция первого кадра).
+      // (fix 722) Final nominal resolution of flf — "Retry" restores
+      // this specifically rather than the UI preset. In preset mode targetDimensions
+      // has already been computed by client as flfNominalDimensions (first frame aspect ratio).
       ...(body.targetDimensions && {
         flf_resolution: `${body.targetDimensions.width}x${body.targetDimensions.height}`,
       }),
     }),
     resolution: `${resW}x${resH}`,
     aspect_ratio: body.aspectRatio,
-    // (правка 722) Папка вывода задачи — без неё fallback-поиск выходного
-    // файла (concat/extend) не знает, где искать свой ролик.
+    // (fix 722) Task output subfolder — without it fallback lookup for output
+    // file (concat/extend) does not know where to look.
     output_subfolder: body.outputSubfolder || '',
     final_resolution_mp: finalResolution,
-    // Заклёмпленное значение — как в реальном workflow (clampLowResMP).
-    // (правка 424) extend: дополнительный кап по МП исходника — канва pass 1
-    // не должна превышать final ни по одной оси (апскейлер только upscale).
+    // Clamped value — same as in real workflow (clampLowResMP).
+    // (fix 424) extend: additional cap by source MP — pass 1 canvas
+    // must not exceed final on any axis (upscaler only upscales).
     low_res_mp: genMode0 === 'extend' && body.targetDimensions
       ? Math.min(
           clampLowResMP(body.lowResMP ?? 0.2, finalResolution),
@@ -345,29 +344,28 @@ function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
     video_length: videoLengthFrames,
     duration_seconds: videoLengthFrames / fps,
     fps,
-    // Extend: фактические шаги КЛИПА (override > фолбэк firstSamplerSteps) —
-    // по этой мете следующее продление берёт значение «авто».
+    // Extend: actual CLIP steps (override > firstSamplerSteps fallback) —
+    // next extension reads "auto" value from this meta.
     pass1_steps: genMode === 'extend'
       ? (body.extendClipSteps ?? body.firstSamplerSteps ?? 6)
       : (body.firstSamplerSteps ?? 6),
-    // Всего шагов в расписании pass 1 (точка сплита = это число → «6 из 6»).
+    // Total steps in pass 1 schedule (split point = this number → "6 of 6").
     pass1_total_steps: body.firstSamplerTotalSteps ?? body.firstSamplerSteps ?? 6,
-    // (правка 722) Шаги ЕДИНСТВЕННОГО прохода драфта. Без этого поля серверный
-    // сайдкар драфта показывал в диалоге метаданных «6» (значение точки
-    // сплита) вместо реально использованных шагов драфта — а «Повторить»
-    // вообще не умел восстанавливать draftSteps.
+    // (fix 722) Steps of the SINGLE draft pass. Without this field, server
+    // draft sidecar showed "6" in metadata dialog (split point value)
+    // instead of actually used draft steps — and "Retry" was unable to restore draftSteps.
     ...(draft && { draft_steps: body.draftSteps ?? 4 }),
     pass2_steps: { '3step': 3, '4step': 4, '5step': 5, '6step': 6, '7step': 7 }[body.sigmaVariant || '3step'] ?? 3,
     sigma_variant: body.sigmaVariant || '3step',
-    pass2_sampler: body.pass2Sampler || 'euler', // (правка 69)
-    pass1_sampler: body.pass1Sampler || 'euler', // (правка 70)
-    pass1_scheduler: body.pass1Scheduler || 'simple', // (правка 70)
-    // Турбо-лора теперь снова подключается (через customLoras, включена по
-    // умолчанию), поэтому её имя попадает в `lora` ниже. Отдельная сила
-    // турбо в шаблоне не используется — сила хранится в loras.json.
-    minimax_h3_reference_detail: body.refImageSize || 'match', // (правка 58)
-    sparse_attention: body.sparseAttention === true, // (правки 168→387) Sol-Attn default OFF
-    // (правка 466) настройки Sol-Attn — «Повторить» восстанавливает
+    pass2_sampler: body.pass2Sampler || 'euler', // (fix 69)
+    pass1_sampler: body.pass1Sampler || 'euler', // (fix 70)
+    pass1_scheduler: body.pass1Scheduler || 'simple', // (fix 70)
+    // Turbo LoRA is now re-attached (via customLoras, enabled by default),
+    // so its name goes into `lora` below. Dedicated turbo strength is not
+    // used in template — strength is stored in loras.json.
+    minimax_h3_reference_detail: body.refImageSize || 'match', // (fix 58)
+    sparse_attention: body.sparseAttention === true, // (fixes 168→387) Sol-Attn default OFF
+    // (fix 466) Sol-Attn settings — "Retry" restores them
     ...(body.sparseAttention === true && {
       sparse_tau: body.sparseTau ?? 1.3,
       sparse_start_percent: body.sparseStartPercent ?? 0.2,
@@ -375,8 +373,8 @@ function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
       sparse_min_tokens: body.sparseMinTokens ?? 12288,
       sparse_extra_tokens: body.sparseExtraTokens ?? 256,
     }),
-    veda_attention: body.vedaAttention === true, // (правка 301)
-    // (правка 404) veda-настройки — «Повторить» восстанавливает
+    veda_attention: body.vedaAttention === true, // (fix 301)
+    // (fix 404) veda settings — "Retry" restores them
     ...(body.vedaAttention === true && {
       veda_generated_sparsity: body.vedaGeneratedSparsity ?? '90%',
       veda_reference_sparsity: body.vedaReferenceSparsity ?? '90%',
@@ -392,29 +390,29 @@ function bodyToMetaParams(body: MiniMaxH3Params): Record<string, unknown> {
           chunk_ff_threshold: body.chunkFFThreshold ?? 4096,
         }
       : {}),
-    // Фактически применённые LoRA (включая встроенную турбо-лору, если она
-    // не пропущена в flf+audio). Может быть пусто; MetaDialog «Ещё» удаляет поле.
+    // Actually applied LoRAs (including built-in turbo LoRA unless skipped
+    // in flf+audio). May be empty; MetaDialog "More" removes field.
     lora: (body.customLoras ?? []).map((l) => l.name).join(', '),
     references,
-    // (правка 161) extend-режим: клипы + рефы
+    // (fix 161) extend mode: clips + refs
     ...(genMode === 'extend' && {
       extend_clips: body.extendClips || [],
       extend_refs: body.extendRefs || [],
-      // (правка 260) исходник продления — из чего сделано видео
+      // (fix 260) extension source — what the video was made from
       source_video: body.extendSourceVideo ? { name: body.extendSourceVideo } : null,
-      // (правка 722) Те же данные ИМЕНАМИ клиентского писателя: клиентский
-      // сайдкар писал extend_source_video (строка) и extend_clips_count, а
-      // серверный — source_video {name} и extend_clips (массив). Наборы полей
-      // расходились, и «кто записал последним» решал судьбу метаданных.
-      // Теперь сервер пишет оба варианта.
+      // (fix 722) Same data under client writer's property NAMES: client
+      // sidecar wrote extend_source_video (string) and extend_clips_count, while
+      // server wrote source_video {name} and extend_clips (array). Field sets
+      // diverged, and "whoever wrote last" determined metadata contents.
+      // Server now writes both variations.
       extend_source_video: body.extendSourceVideo ?? null,
       extend_clips_count: (body.extendClips || []).length,
       ...((body.extendClips || []).length > 0 && {
         extend_prompts: (body.extendClips || [])
           .map((c) => (c.prompt || '').trim())
-          .filter((p) => /[a-zA-Zа-яА-ЯёЁ\u00c0-\u024f\u0400-\u04ff]{2,}/.test(p)),
+          .filter((p) => /\p{L}{2,}/u.test(p)),
       }),
-      // (правка 423) двухпроходный режим продления — в сайдкар
+      // (fix 423) two-pass extension mode — in sidecar
       extend_two_pass: body.extendTwoPass === true,
     }),
   }
@@ -425,9 +423,9 @@ export function recordPendingMeta(promptId: string, body: MiniMaxH3Params) {
   try {
     const map = loadPending()
     const startedAt = Date.now()
-    // (правка 715) started_at кладём ВНУТРЬ params — иначе финализация
-    // (finalizePendingMeta) собирает params из entry.params и метка времени
-    // терялась → защита от удаления чужих сиблингов не работала.
+    // (fix 715) put started_at INSIDE params — otherwise finalization
+    // (finalizePendingMeta) collects params from entry.params and timestamp
+    // was lost → protection against deleting foreign siblings broke.
     map[promptId] = {
       params: { ...bodyToMetaParams(body), job_id: promptId, started_at: startedAt },
       started_at: startedAt,
@@ -437,16 +435,16 @@ export function recordPendingMeta(promptId: string, body: MiniMaxH3Params) {
 }
 
 /**
- * (правка 260) Запись pending-метаданных для НЕ-генерационных джобов
- * (рефайн «Целый»/«Частями»): параметры передаются ГОТОВЫМИ (без мэппинга
- * MiniMaxH3Params). Финализация — тем же /api/comfy/status на 'done',
- * значит сайдкар появится, даже если браузер закрыли.
+ * (fix 260) Write pending metadata for NON-generation jobs
+ * (refine "Whole"/"Chunks"): parameters passed READY-MADE (without
+ * MiniMaxH3Params mapping). Finalization by the same /api/comfy/status on 'done',
+ * ensuring sidecar is created even if browser was closed.
  */
 export function recordPendingMetaRaw(promptId: string, params: Record<string, unknown>) {
   try {
     const map = loadPending()
     const startedAt = Date.now()
-    // (правка 715) started_at — внутри params (см. recordPendingMeta).
+    // (fix 715) started_at — inside params (see recordPendingMeta).
     map[promptId] = {
       params: { ...params, job_id: promptId, started_at: startedAt },
       started_at: startedAt,
@@ -506,20 +504,20 @@ export async function finalizePendingMeta(
     // client badge: queued → from execution start, straight → from submit).
     const from = entry.saw_queued ? (entry.running_since ?? entry.started_at) : entry.started_at
     const durationMs = typeof execMs === 'number' && execMs > 0 ? execMs : Date.now() - from
-    // (правка 375) Латент-пайплайн: выход MiniMaxStudioSaveAVLatent ('46:49')
-    // приходит в outputs как {filename: *.latent, subfolder: '<sub>/latents'}.
-    // Пишем в сайдкар путь относительно output/ — рефайн по нему стартует
-    // с первозданного латента (lossless-ветка refine-роута).
-    // (правка 383 → актуализировано правкой 397, откат — правка 417)
-    // Страж «одно видео в джобе». После правки 417 extend снова отдаёт
-    // НЕСКОЛЬКО видео (поштучные extclip-файлы) и латента у него нет —
-    // страж автоматически отсекает latent_file у extend-джобов. Страж
-    // защищает от джобов с несколькими видеовыходами, где единый латент
-    // джоба не соответствовал бы каждому из файлов.
-    // (правка 420) У extend-джоба с ОДНИМ клипом латент есть (combined,
-    // пост-сборка), но он соответствует ИТОГУ склейки, а не extclip-файлу —
-    // extend исключён явно; latent_file итога клиент пишет в мету combined
-    // при вызове /api/comfy/concat.
+    // (fix 375) Latent pipeline: output of MiniMaxStudioSaveAVLatent ('46:49')
+    // arrives in outputs as {filename: *.latent, subfolder: '<sub>/latents'}.
+    // Write path relative to output/ in sidecar — refine starts from it
+    // with original latent (lossless branch of refine route).
+    // (fix 383 → updated by fix 397, reverted by fix 417)
+    // Guard "single video in job". After fix 417 extend produces MULTIPLE
+    // videos again (individual extclip files) and has no latent —
+    // guard automatically omits latent_file for extend jobs. Guard
+    // protects against jobs with multiple video outputs where a single job
+    // latent would not match each individual file.
+    // (fix 420) Extend job with ONE clip has a latent (combined,
+    // post-assembly), but it corresponds to the STITCHED result rather than the extclip file —
+    // extend is explicitly excluded; result's latent_file is written by client to combined meta
+    // when calling /api/comfy/concat.
     const vids = outputs.filter((o) => o.filename?.match(/\.(mp4|webm|mov|m4v)$/i) && !/Minimax_Studio_cnref/i.test(o.filename ?? ''))
     const latentOut = vids.length === 1 && entry.params.generation_mode !== 'extend'
       ? outputs.find((o) => o.filename?.match(/\.latent$/i))
@@ -529,31 +527,31 @@ export async function finalizePendingMeta(
       : null
     const params: Record<string, unknown> = {
       ...entry.params,
-      // (правка 715) Метка времени старта джоба — внутри params, иначе
-      // writeMetaSidecar не видел её и чистил «чужие» сиблинги.
+      // (fix 715) Job start timestamp — inside params, otherwise
+      // writeMetaSidecar didn't see it and cleaned "unrelated" siblings.
       started_at: entry.started_at,
       generation_time: Math.max(1, Math.round(durationMs / 1000)),
       ...(latentFile && { latent_file: latentFile }),
     }
 
-    // (правка 410, актуализировано правкой 417) Extend с исходником: probe
-    // видеовыходов. Раньше чинил сайдкар combined-файла латент-комбайна
-    // (video_length плана клипов ≠ факту итога). После отката 417 extend
-    // снова пишет поштучные extclip-файлы — probe даёт им фактические
-    // кадры/разрешение (файл клипа длиннее плана клипа на preserved-голову).
-    // Итоговый combined делает ffmpeg-склейка /api/comfy/concat — она
-    // прописывает probe-поля сама.
+    // (fix 410, updated by fix 417) Extend with source: probe
+    // video outputs. Previously fixed sidecar of combined file from latent combiner
+    // (planned video_length of clips ≠ actual result). After rollback 417 extend
+    // writes individual extclip files again — probe provides them with actual
+    // frames/resolution (clip file is longer than clip plan by preserved head).
+    // Final combined file is created by ffmpeg concatenation /api/comfy/concat — which
+    // writes probed fields itself.
     const isExtendCombined =
       entry.params.generation_mode === 'extend' && !!entry.params.source_video
-    // (правка 471) Рефайн: теперь сохраняет .latent результата → сайдкару
-    // нужны ТОЧНЫЕ video_length/resolution выходного mp4 (resolveSourceLatent
-    // сверяет их с ffprobe при повторном рефайне). Плановых полей у рефайна
-    // нет (у «Частями» длина итога ≠ длине исходника: сетка 17k+5 и срезы
-    // окон), поэтому probe выхода, как у extend.
-    // (правка 722) Проба нужна и остальным режимам: у FPS/Tile Upscale/
-    // ControlNet плановые размеры — это параметры ВХОДА, а в сайдкар должны
-    // попасть размеры и длина ИТОГОВОГО файла (иначе метаданные врут:
-    // у FPS кадров в ×multiplier больше, чем в исходнике).
+    // (fix 471) Refine: now saves result .latent → sidecar needs
+    // EXACT video_length/resolution of output mp4 (resolveSourceLatent
+    // compares them with ffprobe on subsequent refine). Refine has no planned
+    // fields (in "Chunks" mode result length ≠ source length: 17k+5 grid and
+    // window trims), so output is probed like extend.
+    // (fix 722) Probe is also needed by other modes: for FPS/Tile Upscale/
+    // ControlNet planned dimensions are INPUT parameters, whereas sidecar must
+    // receive dimensions and duration of the FINAL file (otherwise metadata lies:
+    // FPS has ×multiplier more frames than source).
     const needsProbe =
       isExtendCombined ||
       entry.params.generation_mode === 'refine' ||
@@ -562,9 +560,9 @@ export async function finalizePendingMeta(
       entry.params.generation_mode === 'controlnet' ||
       entry.params.generation_mode === 'facerefine'
 
-    // (правка 260) Сайдкар на КАЖДОМ видеовыходе джоба (клипы extend,
-    // куски рефайна), а не только на первом — метаданные обязаны быть
-    // у любого сгенерированного ролика. Дедуп по имени файла.
+    // (fix 260) Sidecar on EVERY video output of the job (extend clips,
+    // refine chunks), not just the first — metadata must exist
+    // on every generated clip. Deduplicate by filename.
     const seen = new Set<string>()
     let last: string | null = null
     let i = 0
@@ -575,10 +573,10 @@ export async function finalizePendingMeta(
       if (seen.has(key)) continue
       seen.add(key)
 
-      // (правка 699) FLF — всегда, ref с галочкой аудио-гайда — по флагу
-      // keep_original_audio: подставляем оригинальную дорожку (references
-      // type='audio') вместо перегенерированной, обрезая по длине видео.
-      // Делаем ДО пробы/сайдкара — иначе probe увидит старый аудио-стим.
+      // (fix 699) FLF — always; ref with audio guide checked — by
+      // keep_original_audio flag: substitute original track (references
+      // type='audio') instead of regenerated audio, trimmed to video duration.
+      // Perform BEFORE probe/sidecar — otherwise probe will see old audio stream.
       if (i === 0 && OUTPUT_DIR) {
         const videoPath = path.join(OUTPUT_DIR, o.subfolder || '', path.basename(o.filename))
         const audioPath = resolveOriginalAudioReplacement(params)
@@ -587,7 +585,7 @@ export async function finalizePendingMeta(
             const ok = await replaceVideoAudio(videoPath, audioPath)
             if (ok) {
               console.log(`[replace-audio] ${params.generation_mode}: swapped audio in ${o.filename} from ${path.basename(audioPath)}`)
-              params.audio_replaced_from = path.basename(audioPath) // метка в сайдкар
+              params.audio_replaced_from = path.basename(audioPath) // tag in sidecar
             }
           } catch (err) {
             console.error('[replace-audio] flf swap failed:', err)
@@ -604,14 +602,14 @@ export async function finalizePendingMeta(
             probed = {
               video_length: pr.frames,
               duration_seconds: Number(pr.durationSec.toFixed(2)),
-              // Фактический fps файла (probe из r_frame_rate): у режима FPS
-              // итог 48/72 к/с — прежний хардкод 24 врал в сайдкаре.
-              // Генерация/refine и так пишут 24 — значение не меняется.
+              // Actual file fps (probed from r_frame_rate): FPS mode results
+              // in 48/72 fps — previous hardcoded 24 was incorrect in sidecar.
+              // Generation/refine already write 24 — value does not change.
               fps: Math.round(pr.fps ?? 24),
               resolution: `${pr.width}x${pr.height}`,
             }
           }
-        } catch { /* probe не критичен — остаются плановые поля */ }
+        } catch { /* probe is non-critical — planned fields remain */ }
       }
       last = writeMetaSidecar(o.filename, o.subfolder || '', {
         ...params,
@@ -638,18 +636,18 @@ export function clearPendingMeta(promptId: string) {
   } catch { /* non-critical */ }
 }
 
-/** (правка 511) Удалить временные depth/canny карты (Minimax_Studio_cnref_*.mp4)
- *  из output-папки ComfyUI. Файлы создаются VHS_VideoCombine (cn_preout)
- *  во время ControlNet-генерации для VHS_LoadVideoPath; после завершения
- *  джоба они бесполезны. Режим «Карта» создаёт Minimax_Studio_controlmap_*
- *  (другой префикс) — на него cleanup не влияет.
+/** (fix 511) Delete temporary depth/canny maps (Minimax_Studio_cnref_*.mp4)
+ *  from ComfyUI output folder. Files are created by VHS_VideoCombine (cn_preout)
+ *  during ControlNet generation for VHS_LoadVideoPath; after job completion
+ *  they are unnecessary. "Map" mode creates Minimax_Studio_controlmap_*
+ *  (different prefix) — not affected by cleanup.
  *
- *  (правка 716) Теперь удаляются ТОЛЬКО карты конкретного джоба (по
- *  уникальному префиксу cn_ref_prefix). Раньше префикс был общим
- *  («Minimax_Studio_cnref» + счётчик ComfyUI) и cleanup удалял ВСЕ карты —
- *  в том числе карты параллельно идущей ControlNet-задачи, из-за чего та
- *  падала внутри VHS_LoadVideoPath. Если префикс неизвестен (например,
- *  джоб был без ControlNet) — ничего не удаляем. */
+ *  (fix 716) Now ONLY maps for the specific job are deleted (by
+ *  unique prefix cn_ref_prefix). Previously prefix was generic
+ *  ("Minimax_Studio_cnref" + ComfyUI counter) and cleanup removed ALL maps —
+ *  including maps of a concurrently running ControlNet task, causing it
+ *  to crash inside VHS_LoadVideoPath. If prefix is unknown (e.g.
+ *  job did not use ControlNet) — delete nothing. */
 export async function cleanupCnrefTempFiles(_promptId: string, prefix?: string | null) {
   try {
     if (!prefix) return
@@ -657,8 +655,8 @@ export async function cleanupCnrefTempFiles(_promptId: string, prefix?: string |
     const outDir = cfg.outputDir
     if (!outDir) return
 
-    // Префикс из джоба — санитайзим, чтобы он не стал шаблоном для
-    // произвольного удаления по glob-подобному совпадению.
+    // Prefix from job — sanitize to prevent it from becoming a wildcard
+    // for arbitrary deletion via glob-like matching.
     const safePrefix = prefix.replace(/[^A-Za-z0-9_.-]/g, '')
     if (!safePrefix) return
     const fileRe = new RegExp(`^${safePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*\\.mp4$`, 'i')
@@ -669,7 +667,7 @@ export async function cleanupCnrefTempFiles(_promptId: string, prefix?: string |
         try { fs.unlinkSync(path.join(outDir, f)) } catch { /* ignore */ }
       }
     }
-    // Подпапки (outputSubfolder)
+    // Subfolders (outputSubfolder)
     for (const f of files) {
       const fp = path.join(outDir, f)
       try {
@@ -688,8 +686,8 @@ export async function cleanupCnrefTempFiles(_promptId: string, prefix?: string |
 }
 
 /**
- * (правка 716) Префикс временной карты референса для задачи (из pending-meta).
- * Читается ДО финализации, пока запись жива.
+ * (fix 716) Temporary reference map prefix for task (from pending-meta).
+ * Read BEFORE finalization while the entry exists.
  */
 export function getPendingCnRefPrefix(promptId: string): string | null {
   try {

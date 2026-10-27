@@ -162,9 +162,9 @@ const POPUP_WIDTH = 288
  * transparent textarea's caret/selection would drift away from the visible
  * backdrop text (click here → delete there). So the font and line-height
  * are set explicitly on BOTH layers — identical to the fullscreen editor.
- * (правка 443) Шрифт — общий UI sans (font-sans), не mono: промпт — это
- * текст, а не код; моноширинный ввод выглядел инородно на фоне всего
- * приложения. Синхронность слоёв сохраняется — font-sans задан на ОБОИХ.
+ * Font is shared UI sans (font-sans), not mono: prompt is text,
+ * not code; monospace input looked out of place in the UI.
+ * Layer synchronization is preserved — font-sans is set on BOTH.
  *
  * Likewise, renderHighlightedPrompt() below must NOT add any padding,
  * width, or weight that the textarea text doesn't have — any metric
@@ -282,13 +282,13 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
         wrapSelection: (open: string, close: string) => {
           const el = textareaRef.current
           if (!el) {
-            onChange(value + (value ? ' ' : '') + open + 'речь героя' + close)
+            onChange(value + (value ? ' ' : '') + open + 'character dialogue' + close)
             return
           }
           const start = el.selectionStart ?? value.length
           const end = el.selectionEnd ?? start
           const selected = value.slice(start, end)
-          const inner = selected || 'речь героя'
+          const inner = selected || 'character dialogue'
           const newValue = value.slice(0, start) + open + inner + close + value.slice(end)
           onChange(newValue)
           requestAnimationFrame(() => {
@@ -350,8 +350,8 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
       }
     }, [showPopup])
 
-    // Фильтр сузил список — выбранный индекс мог выйти за его пределы:
-    // без клампа Enter/Tab брали undefined → краш всего приложения
+    // Filter narrowed the list — selected index could go out of bounds:
+    // without clamp Enter/Tab took undefined -> crash of entire application
     useEffect(() => {
       setSelectedIndex((i) => Math.min(i, Math.max(0, filteredMentions.length - 1)))
     }, [filteredMentions.length])
@@ -449,8 +449,8 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
               setSelectedIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length)
               return
             case 'Enter':
-              // Ctrl/Cmd+Enter (генерация/сохранение) не перехватываем —
-              // иначе попап @ блокировал горячую клавишу родителя
+              // Do not intercept Ctrl/Cmd+Enter (generation/save) —
+              // otherwise the @ popup blocked the parent's hotkey
               if (e.ctrlKey || e.metaKey || e.altKey) break
               e.preventDefault()
               {
@@ -484,9 +484,9 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
     const dragState = useRef<{ startY: number; startH: number } | null>(null)
     const MIN_H = 150
     /**
-     * Макс. высота (правка 51) — 15 строк текста:
-     * text-sm (14px) × leading-relaxed (1.625) = 22.75px/строка,
-     * + py-2 (16px) + border (2px). Выше — внутренний скролл-бар.
+     * Max height — 15 lines of text:
+     * text-sm (14px) x leading-relaxed (1.625) = 22.75px/line,
+     * + py-2 (16px) + border (2px). Higher content uses internal scrollbar.
      */
     const MAX_H = Math.ceil(15 * 22.75) + 18 // = 360px
     const isFullHeight = className?.includes('h-full')
@@ -550,11 +550,11 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
             effectiveH
               ? {
                   height: effectiveH,
-                  // (правка 92) Раньше: auto только при effectiveH >= MAX_H —
-                  // после РУЧНОГО сжатия поля ниже MAX_H текст не помещался,
-                  // а overflow:hidden его обрезал без скролл-бара. Теперь:
-                  // 'auto' всегда — браузер сам показывает бар только когда
-                  // контент реально переполняет поле.
+                  // Previously: auto only when effectiveH >= MAX_H —
+                  // after MANUAL field shrink below MAX_H text overflowed,
+                  // and overflow:hidden clipped it without scrollbar. Now:
+                  // 'auto' always — browser shows scrollbar only when
+                  // content actually overflows.
                   overflowY: 'auto',
                   overflowX: 'hidden',
                 }
@@ -663,7 +663,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextarea
             className="absolute z-50 rounded-lg border border-border bg-[var(--surface-3)] shadow-2xl shadow-black/60 overflow-hidden"
           >
             <div className="px-2.5 py-1.5 text-[10px] text-muted-foreground/70 border-b border-border/50">
-              Выберите референс
+              Select reference
             </div>
             <div className="max-h-48 overflow-y-auto py-1">
               {filteredMentions.map((m, i) => {

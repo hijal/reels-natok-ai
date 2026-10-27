@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Assistant stream engine (правка 31) — lives at MODULE scope, NOT in a
+ * Assistant stream engine (fix 31) — lives at MODULE scope, NOT in a
  * component, so an in-flight LLM reply SURVIVES AssistantView unmount.
  *
  * Why this exists: switching app tabs unmounts AssistantView (page.tsx uses
@@ -24,7 +24,7 @@ import { create } from 'zustand'
 import { toast } from 'sonner'
 import { useAssistantChats, type AssistantChatMessage, type AssistantChatMode } from './assistant-chats-store'
 import { useGenStore } from './gen-store'
-import { useControlNetTarget } from './controlnet-target-store' // (правка 502)
+import { useControlNetTarget } from './controlnet-target-store' // (fix 502)
 import { H3_SPEC_A, H3_SPEC_B, H3_SPEC_EXTEND } from './h3-prompt-spec'
 
 export interface LlmStatusResp {
@@ -32,85 +32,85 @@ export interface LlmStatusResp {
   starting: boolean
   gpuMode: 'gpu' | 'cpu' | null
   modelReady: boolean
-  /** Активный ID модели LLM (зависит от выбранной квантизации). */
+  /** Active LLM model ID (depends on selected quantization). */
   modelId: string
-  /** (правка 257) Имя файла активной модели (для подписей своей модели). */
+  /** (fix 257) Active model file name (for custom model labels). */
   modelName?: string
-  /** Ассистент сейчас стримит ответ (для блокировки генерации). */
+  /** Assistant is currently streaming a response (to lock generation). */
   streaming: boolean
-  /** Ассистент занят (грузится или отвечает). */
+  /** Assistant is busy (loading or responding). */
   assistantBusy: boolean
-  /** Идёт генерация видео — чат заблокирован. */
+  /** Video generation in progress — chat is locked. */
   blockedByGeneration: boolean
 }
 
 /**
- * Pre-cap on the wire (равен потолку стора — 200 сообщ./чат); точную
- * токен-обрезку делает сервер (правка 169): системный промпт + самый
- * длинный влезающий хвост последних сообщений. Длинные чаты деградируют
- * мягко — отрезается только начало истории, ассистент всегда помнит
- * системный промпт и то, что обсуждалось в конце.
+ * Pre-cap on the wire (equal to store ceiling — 200 msg/chat); exact
+ * token truncation is done by server (fix 169): system prompt + longest
+ * fitting tail of recent messages. Long chats degrade
+ * gracefully — only the beginning of history is trimmed, assistant always remembers
+ * the system prompt and what was discussed at the end.
  */
 const HISTORY_LIMIT = 200
 
 /** System prompt: compact OFFICIAL H3 spec + live session context.
- * (правка 168) Контекст генерации (режим, рефы, кадры, длительность) модель
- * видит АВТОМАТИЧЕСКИ и всегда ТЕКУЩИЙ — без ручных действий, как раньше.
- * Черновик промпта из формы генерации в системный промпт НЕ подставляется:
- * это был главный канал «утечки» тем между чатами (вставленный из другого
- * чата промпт модель тащила в новый диалог). Пользователь цитирует черновик
- * в самом сообщении (кнопка «Улучшить мой промпт» делает это автоматически).
- * (правка 53) `videoVisionOn` — видит ли ассистент видео-рефы (настройка
- * «Видение видео ассистентом», включена по умолчанию). Видео идёт сжатым
- * digest-описанием, а не сырыми кадрами. Без этого флага промпт не должен
- * говорить модели «ты ВИДИШЬ кадры», иначе она выдумывает содержимое.
- * (правка 150) Ассистент видит ТЕКУЩИЙ РЕЖИМ ГЕНЕРАЦИИ (t2v/flf/ref) из gen-store
- * и строит system-промпт с учётом режима: в t2v/flf запрещает метки <Picture N>,
- * <Video N>, <Subject N> (нода MiniMaxH3ReferenceToVideo не используется),
- * <Audio N> остаётся разрешённым для аудио-референсов.
- * (правка 427) `chatMode` — режим ЧАТА ('generate' | 'extend'), а не режим
- * генерации формы: extend-чаты получают отдельный системный промпт
- * (buildExtendSystemMessage) — раньше режим 'extend' формы проваливался в
- * ref-ветку с чужими рефами вкладки «Генерация». Async: extend-ветка дочитывает
- * мету исходника через /api/comfy/meta.
- * (правка 502) Режим 'controlnet' — свой системный промпт
- * (buildControlNetSystemMessage) и референсы вкладки «ControlNet». */
+ * (fix 168) Generation context (mode, refs, frames, duration) the model
+ * sees AUTOMATICALLY and always CURRENT — without manual steps as before.
+ * Prompt draft from generation form is NOT inserted into system prompt:
+ * this was the main channel of topic "leakage" between chats (prompt pasted
+ * from another chat was pulled by the model into a new dialog). The user quotes the draft
+ * in the message itself (the "Improve my prompt" button does this automatically).
+ * (fix 53) `videoVisionOn` — whether assistant sees video refs (setting
+ * "Video vision by assistant", enabled by default). Video comes as a compressed
+ * digest description, not raw frames. Without this flag prompt must not
+ * tell the model "you SEE frames", otherwise it invents content.
+ * (fix 150) Assistant sees CURRENT GENERATION MODE (t2v/flf/ref) from gen-store
+ * and builds system prompt taking the mode into account: in t2v/flf forbids tags <Picture N>,
+ * <Video N>, <Subject N> (MiniMaxH3ReferenceToVideo node is not used),
+ * <Audio N> remains allowed for audio references.
+ * (fix 427) `chatMode` — CHAT mode ('generate' | 'extend'), not the form
+ * generation mode: extend chats get a separate system prompt
+ * (buildExtendSystemMessage) — previously 'extend' mode of the form fell through to
+ * ref branch with alien refs of "Generate" tab. Async: extend branch reads
+ * source metadata via /api/comfy/meta.
+ * (fix 502) 'controlnet' mode — its own system prompt
+ * (buildControlNetSystemMessage) and "ControlNet" tab references. */
 async function buildSystemMessage(
   videoVisionOn: boolean,
   chatMode: AssistantChatMode = 'generate',
   signal?: AbortSignal,
 ): Promise<string> {
-  // (правка 427) extend-чат — свой контекст (клипы, extend-рефы, мета исходника).
+  // (fix 427) extend chat — its own context (clips, extend refs, source metadata).
   if (chatMode === 'extend') return buildExtendSystemMessage(signal)
-  // (правка 502) controlnet-чат — свой контекст (контрольное видео,
-  // refImages вкладки «ControlNet», параметры контроля).
+  // (fix 502) controlnet chat — its own context (control video,
+  // refImages of "ControlNet" tab, control parameters).
   if (chatMode === 'controlnet') return buildControlNetSystemMessage(videoVisionOn)
   const v = useGenStore.getState().video
-  const mode = v.mode // (правка 150) 'ref' | 't2v' | 'flf' | 'extend'
+  const mode = v.mode // (fix 150) 'ref' | 't2v' | 'flf' | 'extend'
   const refs = v.refs
-  // (правка 138) дефолт 124 → 60: минимум 2.5 с (60 кадров при 24 fps)
+  // (fix 138) default 124 → 60: minimum 2.5 s (60 frames at 24 fps)
   const frames = v.videoLength || 60
   const seconds = Math.max(2.5, Math.round(frames / 24))
-  // Бюджет шотов из выставленной длины: шоту нужно ≥ ~2 с, чтобы «прочитаться».
-  // Без этого ограничения модель под запрос «эпичная сцена» выдавала план на
-  // 15 шотов, который физически не влезает в 5–10-секундный клип.
+  // Shot budget from configured duration: shot needs ≥ ~2 s to be "readable".
+  // Without this limit, for an "epic scene" query the model produced a plan for
+  // 15 shots, which physically does not fit in a 5–10-second clip.
   const maxShots = Math.max(1, Math.floor(seconds / 2))
 
-  // (правка 717) Спека — по формату вывода:
-  //   ref      → FORMAT B (шесть секций, теги <Subject N>) — нужен Ref2VA-гайд;
-  //   t2v/flf  → FORMAT A (три поля) — гайд НЕ нужен (лишние ~1k токенов);
-  //   extend   → вкладка «Генерация» в режиме продления: чат остаётся
-  //              обычной генерацией, но режим НЕЛЬЗЯ молча игнорировать
-  //              (раньше он проваливался в ветку t2v и давал модели
-  //              противоречивые указания «ФОРМАТ A» + «переключись на
-  //              Референсы»).
+  // (fix 717) Spec — by output format:
+  //   ref      → FORMAT B (six sections, <Subject N> tags) — Ref2VA guide needed;
+  //   t2v/flf  → FORMAT A (three fields) — guide NOT needed (extra ~1k tokens);
+  //   extend   → "Generate" tab in extend mode: chat remains
+  //              regular generation, but the mode CANNOT be silently ignored
+  //              (previously it fell into t2v branch and gave conflicting
+  //              instructions "FORMAT A" + "switch to
+  //              References").
   const isExtendMode = mode === 'extend'
   const H3_SPEC = isExtendMode ? H3_SPEC_A : mode === 'ref' ? H3_SPEC_B : H3_SPEC_A
 
-  // (правка 150) В t2v/flf из рефов уходят ТОЛЬКО аудио (картинки/видео не используются нодой).
-  // Ассистенту показываем только аудио-рефы, чтобы LLM не вписывала <Picture N>/<Video N>.
-  // (правка 168) рефы видны ВСЕГДА, без исключения для новых чатов (правка 166):
-  // поведение единое и предсказуемое — модель всегда видит текущий рабочий стол.
+  // (fix 150) In t2v/flf only audio is passed from refs (images/videos are not used by node).
+  // Show only audio refs to assistant so LLM does not write <Picture N>/<Video N>.
+  // (fix 168) refs are visible ALWAYS, without exception for new chats (fix 166):
+  // uniform and predictable behavior — model always sees the current workspace.
   const effectiveRefs = mode === 'ref' ? refs : refs.filter((r) => r.kind === 'audio')
 
   const images = effectiveRefs.filter((r) => r.kind === 'image')
@@ -122,70 +122,70 @@ async function buildSystemMessage(
   //  within its type — this is what MiniMax's ref_images/ref_videos/ref_audios expect)
   let attachedBlock: string
 
-  // (правка 150) Режим-специфичный префикс для system-промпта
-  // (правка 717) Режим 'extend' больше не проваливается в ветку 'ref':
-  // раньше он получал подпись «Референсы (ref, Ref2VA)», а следом — блок
-  // «референсы картинок и видео НЕ ИСПОЛЬЗУЮТСЯ, формат FORMAT A»
-  // (противоречие «FORMAT B / FORMAT A» в одном промпте).
+  // (fix 150) Mode-specific prefix for system prompt
+  // (fix 717) 'extend' mode no longer falls into 'ref' branch:
+  // previously it got the label "References (ref, Ref2VA)", followed by
+  // "image and video references ARE NOT USED, format FORMAT A"
+  // (conflict "FORMAT B / FORMAT A" in one prompt).
   const modeHint = isExtendMode
-    ? '⚠️ Вкладка «Генерация» сейчас в режиме ПРОДЛЕНИЯ. Этот чат — обычная генерация: пиши FORMAT A. Промпты для продления — в чате на вкладке «Продление».'
+    ? '⚠️ The "Generate" tab is currently in EXTEND mode. This chat is standard generation: write FORMAT A. Prompts for extension are in the chat on "Extend" tab.'
     : mode === 't2v'
-      ? '⚠️ ТЕКУЩИЙ РЕЖИМ ГЕНЕРАЦИИ: «Текст» (t2v). Метки <Picture N>, <Video N>, <Subject N> ЗАПРЕЩЕНЫ — референсы картинок и видео не используются. <Audio N> ДОПУСКАЕТСЯ ТОЛЬКО если аудио-рефы прикреплены ниже. Формат — FORMAT A.'
+      ? '⚠️ CURRENT GENERATION MODE: "Text" (t2v). Tags <Picture N>, <Video N>, <Subject N> are FORBIDDEN — image and video references are not used. <Audio N> is PERMITTED ONLY if audio refs are attached below. Format is FORMAT A.'
       : mode === 'flf'
-        ? '⚠️ ТЕКУЩИЙ РЕЖИМ ГЕНЕРАЦИИ: «Кадры» (flf, первый/последний кадр → видео). Метки <Picture N>, <Video N>, <Subject N> ЗАПРЕЩЕНЫ — кадры задаются полями формы, не референсами. <Audio N> ДОПУСКАЕТСЯ ТОЛЬКО если аудио-рефы прикреплены ниже. Формат — FORMAT A. Описывай движение/переход между первым и последним кадрами.'
-        : '⚠️ ТЕКУЩИЙ РЕЖИМ ГЕНЕРАЦИИ: «Референсы» (ref, Ref2VA).'
+        ? '⚠️ CURRENT GENERATION MODE: "Frames" (flf, first/last frame → video). Tags <Picture N>, <Video N>, <Subject N> are FORBIDDEN — frames are set by form fields, not references. <Audio N> is PERMITTED ONLY if audio refs are attached below. Format is FORMAT A. Describe motion/transition between first and last frames.'
+        : '⚠️ CURRENT GENERATION MODE: "References" (ref, Ref2VA).'
 
-  // (правка 151) В flf-режиме кадры (startFrame/endFrame) — это НЕ refs, но они
-  // прикреплены к LLM как изображения. Поэтому условие «нет референсов» должно
-  // учитывать кадры: если есть кадры или аудио → идём в ветку flf, не в «нет».
-  // (правка 168) кадры — живые из текущей формы генерации.
+  // (fix 151) In flf mode, frames (startFrame/endFrame) are NOT refs, but they
+  // are attached to LLM as images. Therefore "no references" condition must
+  // account for frames: if there are frames or audio → go to flf branch, not "none".
+  // (fix 168) frames — live from current generation form.
   const hasFlfFrames = mode === 'flf' && (!!v.startFrame?.path || !!v.endFrame?.path)
 
   if (effectiveRefs.length === 0 && !hasFlfFrames) {
     attachedBlock =
       modeHint + '\n' +
-      'Прикреплённых референсов НЕТ → это FORMAT A (text-to-video).\n' +
-      'ЗАПРЕЩЕНО использовать любые метки <Picture N>, <Video N>, <Audio N>, <Subject N>.'
+      'There are NO attached references → this is FORMAT A (text-to-video).\n' +
+      'FORBIDDEN to use any tags <Picture N>, <Video N>, <Audio N>, <Subject N>.'
   } else if (mode === 'ref') {
     const lines: string[] = []
-    // (правка 137) ЖЁСТКИЙ режим: референсы прикреплены → ТОЛЬКО FORMAT B
-    // с метками. Модели регулярно «забывали» про референсы и выдавали
-    // text-to-video промпт без единого тега — теперь это явно запрещено.
-    lines.push('⚠️ РЕЖИМ ГЕНЕРАЦИИ: прикреплены РЕФЕРЕНСЫ → промпт ТОЛЬКО в FORMAT B (Ref2VA).')
-    lines.push('ЗАПРЕЩЕНО выдавать FORMAT A (text-to-video) или промпт без меток, когда референсы прикреплены.')
-    lines.push('Первое поле fence — subject_definitions (НЕ integrated_multimodal_description).')
-    lines.push('Каждое ПРИКРЕПЛЁННОЕ ИЗОБРАЖЕНИЕ обязано попасть в промпт своей меткой <Picture N>: создай <Subject N> в subject_definitions, привяжи к <Picture N> и упомяни в описании кадра.')
-    lines.push('<Video N> — проставь метку, если в кадре используется движение/сцена из видео-референса; <Audio N> — если голос/звучание из аудио-референса (реплики персонажа — через него).')
-    lines.push('ПРОМПТ БЕЗ ЕДИНОЙ МЕТКИ РЕФЕРЕНСА при прикреплённых референсах = ОШИБКА. Перед выдачей проверь: каждая метка из списка ниже присутствует в промпте (или осознанно объяснено, почему референс не используется).')
+    // (fix 137) STRICT mode: references attached → ONLY FORMAT B
+    // with tags. Models regularly "forgot" about references and produced
+    // text-to-video prompt without a single tag — now explicitly forbidden.
+    lines.push('⚠️ GENERATION MODE: REFERENCES attached → prompt ONLY in FORMAT B (Ref2VA).')
+    lines.push('FORBIDDEN to output FORMAT A (text-to-video) or prompt without tags when references are attached.')
+    lines.push('First field of fence is subject_definitions (NOT integrated_multimodal_description).')
+    lines.push('Every ATTACHED IMAGE must get into the prompt with its <Picture N> tag: create <Subject N> in subject_definitions, link to <Picture N>, and mention in shot description.')
+    lines.push('<Video N> — include tag if shot uses motion/scene from video reference; <Audio N> — if voice/sound from audio reference (character lines via it).')
+    lines.push('A PROMPT WITHOUT A SINGLE REFERENCE TAG when references are attached = ERROR. Before responding verify: each tag from the list below is present in the prompt (or consciously explained why reference is not used).')
     lines.push('')
     if (images.length) {
-      lines.push('ИЗОБРАЖЕНИЯ — ты получаешь визуальное описание (digest) каждого изображения, сделанное по самому файлу (если файл приложен напрямую — видишь его):')
+      lines.push('IMAGES — you receive a visual description (digest) of each image, generated from the file itself (if file is directly attached — you see it):')
       images.forEach((r, i) => {
-        lines.push(`  <Picture ${i + 1}> = ${r.name}${r.imageIntent ? ` (используется как: ${r.imageIntent})` : ''}`)
+        lines.push(`  <Picture ${i + 1}> = ${r.name}${r.imageIntent ? ` (used as: ${r.imageIntent})` : ''}`)
       })
     }
     if (videos.length) {
       if (videoVisionOn) {
-        lines.push('ВИДЕО — ты получаешь визуальное описание (digest), сделанное по кадрам видео:')
-        videos.forEach((r, i) => lines.push(`  <Video ${i + 1}> = ${r.name}${r.includeAudio ? ' (есть звуковая дорожка — модель её НЕ слышит, см. правило по АУДИО)' : ''}`))
-        lines.push('  Описывай по факту digest: сцену, персонажей, ДВИЖЕНИЕ и поведение камеры по ходу ролика, а не только первый кадр. Не выдумывай деталей, которых нет в описании.')
+        lines.push('VIDEOS — you receive a visual description (digest) generated from video frames:')
+        videos.forEach((r, i) => lines.push(`  <Video ${i + 1}> = ${r.name}${r.includeAudio ? ' (has audio track — model does NOT hear it, see rule on AUDIO)' : ''}`))
+        lines.push('  Describe according to factual digest: scene, characters, MOTION and camera behavior over the clip, not just the first frame. Do not invent details not present in description.')
       } else {
-        // (правка 53) видение видео выключено: кадры НЕ прикреплены — модель
-        // знает только о НАЛИЧИИ видео. Строго запрещаем описывать/выдумывать.
-        lines.push('ВИДЕО — прикреплены ТОЛЬКО как теги (кадры НЕ прикреплены: видение видео ассистентом выключено, экономия контекста):')
-        videos.forEach((r, i) => lines.push(`  <Video ${i + 1}> = ${r.name}${r.includeAudio ? ' (есть звуковая дорожка — модель её НЕ слышит, см. правило по АУДИО)' : ''}`))
-        lines.push('  Ссылайся на <Video N> как на тег, когда пользователь просит (например, «motion from <Video 1>»). НЕ описывай, НЕ угадывай и НЕ выдумывай, что происходит внутри видео — ты его НЕ видишь.')
+        // (fix 53) video vision is off: frames NOT attached — model
+        // knows only about the PRESENCE of video. Strictly forbid describing/inventing.
+        lines.push('VIDEOS — attached ONLY as tags (frames NOT attached: assistant video vision is off, context saving):')
+        videos.forEach((r, i) => lines.push(`  <Video ${i + 1}> = ${r.name}${r.includeAudio ? ' (has audio track — model does NOT hear it, see rule on AUDIO)' : ''}`))
+        lines.push('  Reference <Video N> as a tag when user requests (e.g. "motion from <Video 1>"). Do NOT describe, guess or invent what happens inside the video — you do NOT see it.')
       }
     }
     if (audios.length) {
       if (v.audioGuide) {
-        lines.push('АУДИО — Audio Guide: оригинальная дорожка ведёт генерацию и подставляется в итоговое видео. Модель НЕ слышит её содержимое, но тайминг/характер звука уже задан:')
+        lines.push('AUDIO — Audio Guide: original track guides generation and is inserted into final video. Model does NOT hear its contents, but timing/sound character is already set:')
         audios.forEach((r, i) => lines.push(`  <Audio ${i + 1}> = ${r.name}`))
-        lines.push('  Ссылайся на <Audio 1> как на оригинальную дорожку/опору. Реплики и их текст бери ТОЛЬКО из запроса пользователя, не выдумывай «услышанное».')
+        lines.push('  Reference <Audio 1> as original track/guide. Take character lines and text ONLY from user query, do not invent "heard" words.')
       } else {
-        lines.push('АУДИО — прикреплены как референсы ГОЛОСА/звучания для MiniMax (ref_audios). Модель НЕ МОЖЕТ их прослушать и НЕ знает, какие там реплики:')
+        lines.push('AUDIO — attached as VOICE/sound references for MiniMax (ref_audios). Model CANNOT listen to them and does NOT know what lines are spoken:')
         audios.forEach((r, i) => lines.push(`  <Audio ${i + 1}> = ${r.name}`))
-        lines.push('  В промпте ссылайся на <Audio N> как на референс голоса/звучания (MiniMax сам использует файл). Конкретную реплику бери ТОЛЬКО из текста запроса пользователя — не выдумывай то, что «слышно» в аудио.')
+        lines.push('  In prompt reference <Audio N> as voice/sound reference (MiniMax uses file itself). Take specific line ONLY from user query text — do not invent what is "heard" in audio.')
       }
     }
     const forbidden: string[] = []
@@ -193,134 +193,133 @@ async function buildSystemMessage(
     if (!audios.length) forbidden.push('<Audio N>')
     lines.push('')
     if (forbidden.length) {
-      lines.push(`⚠️ ПРАВИЛО: в промпте ДОПУСКАЮТСЯ ТОЛЬКО метки из списка выше. Запрещено использовать ${forbidden.join(', ')} — таких референсов в этой сессии НЕТ, не выдумывай их.`)
+      lines.push(`⚠️ RULE: in prompt ONLY tags from the list above are PERMITTED. Forbidden to use ${forbidden.join(', ')} — no such references exist in this session, do not invent them.`)
     } else {
-      lines.push('⚠️ ПРАВИЛО: в промпте используй ТОЛЬКО те метки, которые перечислены выше (например, если есть только <Audio 1> — пиши <Audio 1>, а не <Audio 2>).')
+      lines.push('⚠️ RULE: in prompt use ONLY tags listed above (e.g. if only <Audio 1> exists — write <Audio 1>, not <Audio 2>).')
     }
-    if (!audios.length) lines.push('Голоса и реплики пиши в <d>...</d> БЕЗ привязки к <Audio N> (аудио не прикреплено). Не описывай голос как «referenced from <Audio N>» / «voice timbre from <Audio N>» — просто укажи тон/пол/возраст словами.')
-    if (!videos.length) lines.push('Движение и камеру описывай словами, а не как «from <Video N>» (видео не прикреплено).')
+    if (!audios.length) lines.push('Write voices and lines in <d>...</d> WITHOUT referencing <Audio N> (no audio attached). Do not describe voice as "referenced from <Audio N>" / "voice timbre from <Audio N>" — just specify tone/gender/age in words.')
+    if (!videos.length) lines.push('Describe motion and camera in words, not as "from <Video N>" (no video attached).')
     attachedBlock = lines.join('\n')
   } else if (mode === 'flf') {
-    // (правка 151) Режим «Кадры»: кадры (startFrame/endFrame) прикреплены как image-рефы —
-    // LLM их ВИДИТ и описывает словами. <Picture N> ЗАПРЕЩЁН (кадры не являются ref2va-рефами).
-    // Аудио-рефы также уходят (через MiniMaxH3AddGuide) — <Audio N> допустим.
+    // (fix 151) "Frames" mode: frames (startFrame/endFrame) attached as image refs —
+    // LLM SEES them and describes in words. <Picture N> is FORBIDDEN (frames are not ref2va refs).
+    // Audio refs are also sent (via MiniMaxH3AddGuide) — <Audio N> is allowed.
     const lines: string[] = [modeHint, '']
 
-    // (правка 151) Показываем кадры как «визуальные описания» (или сами
-    // приложенные файлы, если digest не удался).
+    // (fix 151) Show frames as "visual descriptions" (or actual
+    // attached files if digest failed).
     const hasStartFrame = !!v.startFrame?.path
     const hasEndFrame = !!v.endFrame?.path
     if (hasStartFrame || hasEndFrame) {
-      lines.push('КАДРЫ (ты получаешь их визуальное описание/видишь приложенный файл):')
+      lines.push('FRAMES (you receive their visual description / see attached file):')
       if (hasStartFrame) {
-        lines.push(`  ПЕРВЫЙ КАДР = ${v.startFrame!.name} — это стартовая точка видео. Опиши его содержимое словами (сцену, персонажей, композицию, освещение).`)
+        lines.push(`  FIRST FRAME = ${v.startFrame!.name} — video starting point. Describe its content in words (scene, characters, composition, lighting).`)
       }
       if (hasEndFrame) {
-        lines.push(`  ПОСЛЕДНИЙ КАДР = ${v.endFrame!.name} — это финальная точка видео. Опиши его содержимое словами.`)
+        lines.push(`  LAST FRAME = ${v.endFrame!.name} — video final point. Describe its content in words.`)
       }
-      lines.push('  ⚠️ ЗАПРЕЩЕНО использовать метку <Picture N> для этих кадров — они НЕ являются ref2va-референсами.')
-      lines.push('  В промпте описывай движение/переход МЕЖДУ первым и последним кадрами: что меняется, как камера движется, какие действия происходят.')
-      lines.push('  Если пользователь говорит «на основе рефа» или «скажи что на кадре» — опиши то, что видно в digest/на приложенном изображении.')
+      lines.push('  ⚠️ FORBIDDEN to use <Picture N> tag for these frames — they are NOT ref2va references.')
+      lines.push('  In prompt describe motion/transition BETWEEN first and last frames: what changes, camera movement, actions occurring.')
+      lines.push('  If user says "based on ref" or "tell what is in the frame" — describe what is seen in digest / attached image.')
       lines.push('')
     }
 
     if (audios.length) {
-      lines.push('АУДИО-РЕФЕРЕНСЫ (прикреплены, <Audio N> ДОПУСКАЕТСЯ):')
+      lines.push('AUDIO REFERENCES (attached, <Audio N> is ALLOWED):')
       audios.forEach((r, i) => lines.push(`  <Audio ${i + 1}> = ${r.name}`))
-      lines.push('  Ссылайся на <Audio N> для голоса/звучания. Конкретную реплику бери ТОЛЬКО из текста запроса пользователя.')
+      lines.push('  Reference <Audio N> for voice/sound. Take specific dialogue line ONLY from user request text.')
       lines.push('')
     }
 
     const forbidden = ['<Picture N>', '<Video N>', '<Subject N>']
-    lines.push(`⚠️ ЗАПРЕЩЕНО использовать метки ${forbidden.join(', ')} — кадры задаются полями формы, не референсами. Формат — FORMAT A.`)
-    if (!audios.length) lines.push('Голоса и реплики пиши в <d>...</d> БЕЗ привязки к <Audio N> (аудио не прикреплено).')
+    lines.push(`⚠️ FORBIDDEN to use tags ${forbidden.join(', ')} — frames are set by form fields, not references. Format — FORMAT A.`)
+    if (!audios.length) lines.push('Write voices and lines in <d>...</d> WITHOUT referencing <Audio N> (no audio attached).')
     attachedBlock = lines.join('\n')
   } else {
-    // (правка 150) t2v: только аудио-рефы, формат A (кадров нет)
+    // (fix 150) t2v: audio refs only, format A (no frames)
     const lines: string[] = [modeHint, '']
     if (audios.length) {
-      lines.push('АУДИО-РЕФЕРЕНСЫ (прикреплены, <Audio N> ДОПУСКАЕТСЯ):')
+      lines.push('AUDIO REFERENCES (attached, <Audio N> is ALLOWED):')
       audios.forEach((r, i) => lines.push(`  <Audio ${i + 1}> = ${r.name}`))
-      lines.push('  Ссылайся на <Audio N> для голоса/звучания. Конкретную реплику бери ТОЛЬКО из текста запроса пользователя.')
+      lines.push('  Reference <Audio N> for voice/sound. Take specific dialogue line ONLY from user request text.')
     }
     const forbidden = ['<Picture N>', '<Video N>', '<Subject N>']
     lines.push('')
-    lines.push(`⚠️ ЗАПРЕЩЕНО использовать метки ${forbidden.join(', ')} — в этом режиме референсы картинок и видео НЕ ИСПОЛЬЗУЮТСЯ. Если пользователь просит референс — скажи, что нужно переключить на режим «Референсы». Формат — FORMAT A.`)
-    if (!audios.length) lines.push('Голоса и реплики пиши в <d>...</d> БЕЗ привязки к <Audio N> (аудио не прикреплено).')
+    lines.push(`⚠️ FORBIDDEN to use tags ${forbidden.join(', ')} — in this mode image and video references ARE NOT USED. If user requests reference — tell them to switch to "References" mode. Format — FORMAT A.`)
+    if (!audios.length) lines.push('Write voices and lines in <d>...</d> WITHOUT referencing <Audio N> (no audio attached).')
     attachedBlock = lines.join('\n')
   }
 
   // ── Visual anchor: lock characters/objects by what the model actually sees ──
-  // (правка 717) Сжато: было 4 пункта по 200+ символов каждый.
+  // (fix 717) Compressed: previously 4 points over 200+ characters each.
   const anchorBlock = images.length
-    ? '\n=== ВИЗУАЛЬНЫЙ ЯКОРЬ ===\n' +
-      'Ты получаешь визуальное описание (digest) прикреплённых изображений. Для каждого персонажа/объекта, который должен попасть в кадр:\n' +
-      '1) Опиши по факту digest: черты лица, глаза, волосы, кожа, возраст, телосложение, одежда (цвет, фасон, детали), характерные признаки (шрамы, тату, очки, украшения).\n' +
-      '2) Создай <Subject N>, привяжи к его <Picture N>, в retention_analysis отметь fully_preserved с перечислением деталей.\n' +
-      '3) В detailed_description ссылайся на <Subject N> и повторяй ключевые детали — иначе MiniMax выдумает другого персонажа.\n' +
-      'Если на рефе нет персонажа (только локация или стиль) — якорь не нужен.'
+    ? '\n=== VISUAL ANCHOR ===\n' +
+      'You receive a visual description (digest) of attached images. For each character/object that must appear in shot:\n' +
+      '1) Describe from factual digest: facial features, eyes, hair, skin, age, physique, clothing (color, style, details), distinguishing marks (scars, tattoos, glasses, jewelry).\n' +
+      '2) Create <Subject N>, link to its <Picture N>, in retention_analysis mark fully_preserved listing details.\n' +
+      '3) In detailed_description reference <Subject N> and repeat key details — otherwise MiniMax invents a different character.\n' +
+      'If ref has no character (only location or style) — anchor is not needed.'
     : ''
 
-  // ── Audio anchor: reference voice/tone for MiniMax (правки 36: модель НЕ слышит) ──
-  // (правка 717) Пункты 3 и 4 слились с общим правилом «аудио не слышно»
-  // из honestyBlock — здесь осталось только специфичное для MiniMax.
+  // ── Audio anchor: reference voice/tone for MiniMax (fix 36: model does NOT hear) ──
+  // (fix 717) Points 3 and 4 merged with general "audio cannot be heard" rule
+  // from honestyBlock — only MiniMax-specific items remain here.
   const hasAudioRefs = audios.length > 0 || videos.some((r) => r.includeAudio)
   const audioAnchorBlock = hasAudioRefs
-    ? '\n=== АУДИО-ЯКОРЬ ===\n' +
-      'Аудио-референсы (и звуковые дорожки видео) прикреплены для MiniMax (ref_audios) — они задают ГОЛОС/ЗВУЧАНИЕ в генерации.\n' +
-      '1) Ссылайся на <Audio N> (или звуковую дорожку <Video N>) как на референс голоса/звучания — MiniMax использует сам файл.\n' +
-      '2) Реплику/текст бери ТОЛЬКО из запроса пользователя. Если он не дал текст — укажи, что персонаж говорит, и привяжи <Audio N>, но не выдумывай слова.\n' +
-      '3) Характер голоса (тон, пол, возраст) указывай словами, только если пользователь его описал.'
+    ? '\n=== AUDIO ANCHOR ===\n' +
+      'Audio references (and video audio tracks) are attached for MiniMax (ref_audios) — they set VOICE/SOUND in generation.\n' +
+      '1) Reference <Audio N> (or audio track of <Video N>) as voice/sound reference — MiniMax uses file itself.\n' +
+      '2) Take line/dialogue ONLY from user query. If not given — indicate character speaks and link <Audio N>, but do not invent words.\n' +
+      '3) Specify voice character (tone, gender, age) in words only if user described it.'
     : ''
 
-  // (правка 53) подсказка зависит от видения видео: при выключенном виде
-  // модель не должна «смотреть» видео, а только ссылаться на тег <Video N>.
+  // (fix 53) hint depends on video vision: when off,
+  // model should not "watch" video, only reference tag <Video N>.
   const rescanHint = videoVisionOn
     ? 'use the reference digests/attached images and the video digests; do not invent details beyond them'
     : 'look at images; videos are TAGS ONLY — you do NOT see their frames, so never describe, guess or invent their content'
 
-  // (правка 717) ОДИН блок вместо трёх: «СТРОГОЕ ПРАВИЛО ЧЕСТНОСТИ» +
-  // «НЕЗАВИСИМОСТЬ ЧАТОВ» + «CHAT ATTACHMENTS» + хвост «Chat behaviour».
-  // Пункты 1-3, 6 и 8 старых блоков говорили одно и то же разными словами
-  // (метки запрещены / текущий список — истина / аудио не слышно), из-за
-  // чего блок занимал ~2.4k токенов и правило «не слышишь аудио» повторялось
-  // ещё и в аудио-якоре.
+  // (fix 717) ONE block instead of three: "STRICT HONESTY RULE" +
+  // "INDEPENDENCE OF CHATS" + "CHAT ATTACHMENTS" + tail "Chat behaviour".
+  // Points 1-3, 6, and 8 of old blocks repeated the same thing in different words
+  // (tags forbidden / current list is truth / audio cannot be heard), taking
+  // ~2.4k tokens and repeating rule "cannot hear audio" in audio anchor too.
   const honestyBlock =
-    '\n=== ЧЕСТНОСТЬ И ГРАНИЦЫ ЧАТА ===\n' +
-    '1) Текущий список референсов выше — единственный источник правды. Описывай только их и только то, что в них реально есть. Чего не видишь или не уверен — прямо скажи «не вижу», не выдумывай.\n' +
-    '2) Референсов, которых нет в текущем списке, БОЛЬШЕ НЕ СУЩЕСТВУЕТ: не переноси их описания из прошлых реплик этого чата.\n' +
-    '3) Аудио ты НЕ слышишь: не цитируй и не описывай его содержимое, ссылайся только как <Audio N>; реплики бери из текста пользователя.\n' +
-    '4) Этот чат — независимый диалог: сообщений других чатов ты не видишь и не помнишь. Не переноси оттуда тему, персонажей, сцены, промпт или настройки.\n' +
-    '5) Черновик промпта из формы генерации тебе НЕ показан. Просят «улучшить текущий промпт», а текста нет — попроси нажать «Исправить мой промпт» или прислать текст. Не выдумывай его.\n' +
-    '6) Вложения из чата — только для описания/анализа, это НЕ референсы генерации: НИКОГДА не помечай их <Picture N>/<Video N>/<Audio N>. Если вложение должно попасть в видео — скажи добавить его в референсы на вкладке «Генерация».'
+    '\n=== HONESTY AND CHAT BOUNDARIES ===\n' +
+    '1) Current list of references above is the sole source of truth. Describe only them and only what actually exists in them. What you do not see or are unsure about — say plainly "cannot see", do not invent.\n' +
+    '2) References not in current list NO LONGER EXIST: do not carry over their descriptions from earlier turns in this chat.\n' +
+    '3) You CANNOT hear audio: do not quote or describe its contents, reference only as <Audio N>; take spoken lines from user text.\n' +
+    '4) This chat is an independent dialog: you do not see or remember messages from other chats. Do not transfer topics, characters, scenes, prompts, or settings from there.\n' +
+    '5) Prompt draft from generation form is NOT shown to you. If asked to "improve current prompt" and text is absent — ask user to click "Improve prompt" or send text. Do not invent it.\n' +
+    '6) Attachments from chat are only for description/analysis, NOT generation references: NEVER tag them <Picture N>/<Video N>/<Audio N>. If attachment should appear in video — instruct user to add it to references on "Generate" tab.'
 
-  // (правка 540) 3D-болванка → ControlNet: тогл и инструкции убраны
+  // (fix 540) 3D draft → ControlNet: toggle and instructions removed
   const guide3dBlock = ''
 
   return `${H3_SPEC}
 
 === SESSION CONTEXT ===
-Длительность клипа: ~${seconds} с (${frames} кадров @ 24 fps). Таймкоды внутри длительности.
-Бюджет шотов: не более ~${maxShots} (шот читается за ~2 с).${seconds <= 6 ? ' На такой длине — ОДИН непрерывный [Shot 1], без склеек.' : ' Посчитай [Shot N] до ответа: больше бюджета — объедини в более длинные шоты.'}
+Clip duration: ~${seconds} s (${frames} frames @ 24 fps). Timecodes within duration.
+Shot budget: no more than ~${maxShots} (shot is readable in ~2 s).${seconds <= 6 ? ' For this duration — ONE continuous [Shot 1], no cuts.' : ' Count [Shot N] before replying: if exceeds budget — merge into longer shots.'}
 
-=== РЕЖИМ И РЕФЕРЕНСЫ ===
+=== MODE AND REFERENCES ===
 ${attachedBlock}
 ${anchorBlock}${audioAnchorBlock}
 ${honestyBlock}
 ${guide3dBlock}
 
-Перед КАЖДЫМ промптом сверься с ТЕКУЩИМ списком референсов выше (${rescanHint}), но НЕ пересказывай его пользователю и не повторяй список идей. Про длительность не спрашивай — она указана.`
+Before EVERY prompt, consult the CURRENT list of references above (${rescanHint}), but do NOT recite it to the user or repeat idea lists. Do not ask about duration — it is specified.`
 }
 
 /**
- * (правка 427) Системный промпт чата режима «Продление» (extend).
- * Отдельный от генерации: контекст — клипы продления (extendClips), ОТДЕЛЬНЫЕ
- * картинки-рефы продления (extendImageRefs, НЕ v.refs!) и метаданные исходного
- * видео (.meta.json: промпт исходника + история продлений). Главные правила:
- * промпт каждого клипа — отдельным ```text fence с маркером `clip: N` первой
- * строкой (UI вставляет в карточку по маркеру); <Video 1> и camera-lock
- * ЗАПРЕЩЕНЫ — они добавляются автоматически при сабмите (extend-view.tsx,
- * правки 165/197), дублирование портит conditioning.
+ * (fix 427) System prompt for "Extend" mode chat.
+ * Separate from generation: context — extend clips (extendClips), SEPARATE
+ * extend image refs (extendImageRefs, NOT v.refs!) and metadata of the source
+ * video (.meta.json: source prompt + extend history). Main rules:
+ * each clip prompt in a separate ```text fence with marker `clip: N` on first
+ * line (UI inserts into card by marker); <Video 1> and camera-lock
+ * are FORBIDDEN — they are added automatically on submit (extend-view.tsx,
+ * fixes 165/197), duplicating breaks conditioning.
  */
 async function buildExtendSystemMessage(signal?: AbortSignal): Promise<string> {
   const v = useGenStore.getState().video
@@ -328,51 +327,51 @@ async function buildExtendSystemMessage(signal?: AbortSignal): Promise<string> {
   const refs = v.extendImageRefs
 
   const lines: string[] = []
-  lines.push('⚠️ РЕЖИМ ЧАТА: «Продление» (extend). Помогаешь писать промпты КЛИПОВ продления видео. Общего промпта здесь нет — каждый клип продолжает предыдущий (клип 1 продолжает исходное видео).')
+  lines.push('⚠️ CHAT MODE: "Extend". Helping write prompts for video EXTENSION CLIPS. There is no general prompt here — each clip continues the previous one (clip 1 continues the source video).')
 
-  // ── Клипы продления: номер, длительность, текущий промпт ──
+  // ── Extension clips: number, duration, current prompt ──
   lines.push('')
   if (clips.length) {
-    lines.push(`КЛИПЫ ПРОДЛЕНИЯ (всего ${clips.length}):`)
+    lines.push(`EXTENSION CLIPS (total ${clips.length}):`)
     clips.forEach((c, i) => {
       const p = c.prompt.trim()
-      lines.push(`  Клип ${i + 1}: ${c.duration} с, промпт: ${p ? `"${p}"` : '«пусто»'}`)
+      lines.push(`  Clip ${i + 1}: ${c.duration} s, prompt: ${p ? `"${p}"` : '"empty"'}`)
     })
   } else {
-    lines.push('Клипов продления пока НЕТ. Если пользователь просит промпт для клипа — скажи, что клип нужно добавить на вкладке «Продление», либо предложи промпты с номерами клипов, которые надо создать.')
+    lines.push('There are NO extension clips yet. If user asks for clip prompt — tell them to add a clip on "Extend" tab, or suggest prompts with clip numbers to create.')
   }
 
-  // ── Исходное видео ──
+  // ── Source video ──
   if (v.extendSourceVideoPath) {
-    lines.push(`Исходное видео: ${v.extendSourceName ?? v.extendSourceVideoPath}${v.extendSourceDuration > 0 ? ` (~${v.extendSourceDuration.toFixed(1)} с)` : ''}.`)
+    lines.push(`Source video: ${v.extendSourceName ?? v.extendSourceVideoPath}${v.extendSourceDuration > 0 ? ` (~${v.extendSourceDuration.toFixed(1)} s)` : ''}.`)
   } else {
-    lines.push('Исходное видео пока НЕ выбрано — без него продление не запустится; при необходимости подскажи пользователю выбрать его на вкладке «Продление».')
+    lines.push('Source video is NOT selected yet — extension cannot run without it; suggest user select it on "Extend" tab if needed.')
   }
 
-  // ── Референсы продления (extendImageRefs — своя нумерация <Picture N>) ──
+  // ── Extension references (extendImageRefs — its own <Picture N> numbering) ──
   lines.push('')
   if (refs.length) {
-    lines.push('РЕФЕРЕНСЫ ПРОДЛЕНИЯ (картинки; ты получаешь их визуальное описание/видишь приложенный файл):')
+    lines.push('EXTENSION REFERENCES (images; you receive their visual description / see attached file):')
     refs.forEach((r, i) => {
-      lines.push(`  <Picture ${i + 1}> = ${r.name}${r.imageIntent ? ` (используется как: ${r.imageIntent})` : ''}`)
+      lines.push(`  <Picture ${i + 1}> = ${r.name}${r.imageIntent ? ` (used as: ${r.imageIntent})` : ''}`)
     })
   } else {
-    lines.push('РЕФЕРЕНСОВ ПРОДЛЕНИЯ НЕТ → метки <Picture N> ЗАПРЕЩЕНЫ, не выдумывай их.')
+    lines.push('NO EXTENSION REFERENCES → tags <Picture N> are FORBIDDEN, do not invent them.')
   }
 
-  // ── Мета исходника: промпт оригинала + история продлений ──
-  // Читаем .meta.json сайдкар (как extend-view.tsx, правка 389): модель должна
-  // продолжать ИМЕННО эту сцену, а не выдумывать содержимое исходника.
+  // ── Source metadata: original prompt + extension history ──
+  // Read .meta.json sidecar (like extend-view.tsx, fix 389): model must
+  // continue THIS EXACT scene, not invent source contents.
   if (v.extendSourceName) {
     try {
       const metaPath = v.extendSourceSubfolder
         ? `${v.extendSourceSubfolder}/${v.extendSourceName}`
         : v.extendSourceName
       const mr = await fetch(`/api/comfy/meta?path=${encodeURIComponent(metaPath)}`, {
-        // (правка 717) Таймаут и сигнал отмены. Раньше этот запрос шёл без
-        // signal: зависший /api/comfy/meta навсегда подвешивал await, а
-        // значит — и весь цикл стрима: UI оставался в состоянии «стримит»,
-        // send() отказывал, и без «Стоп» чат было не разбудить.
+        // (fix 717) Timeout and abort signal. Previously this request went without
+        // signal: hung /api/comfy/meta permanently locked await, and
+        // therefore the entire stream loop: UI remained in "streaming" state,
+        // send() refused, and without "Stop" the chat could not be revived.
         signal: signal ?? AbortSignal.timeout(8000),
       })
       if (mr.ok) {
@@ -392,59 +391,59 @@ async function buildExtendSystemMessage(signal?: AbortSignal): Promise<string> {
           : []
         if (srcPrompt || history.length) {
           lines.push('')
-          lines.push('=== ИСХОДНОЕ ВИДЕО (из метаданных) ===')
-          if (srcPrompt) lines.push(`Промпт исходника: "${srcPrompt.slice(0, 2000)}"`)
+          lines.push('=== SOURCE VIDEO (from metadata) ===')
+          if (srcPrompt) lines.push(`Source prompt: "${srcPrompt.slice(0, 2000)}"`)
           if (history.length) {
-            lines.push('История продлений (уже сгенерированные клипы, от старых к новым):')
+            lines.push('Extension history (already generated clips, old to new):')
             history.forEach((p, i) => lines.push(`  ${i + 1}. "${p.trim().slice(0, 500)}"`))
           }
         }
       }
-    } catch { /* нет сайдкара/сеть — блок пропускаем, это не ошибка */ }
+    } catch { /* no sidecar/network — skip block, not an error */ }
   }
 
-  // (правка 717) Правила продления сжаты: 10 пунктов → 8 (было ~2.8k токенов).
-  // Что важно и ОСТАЛОСЬ: маркер clip: N, «не переписывай статику»,
-  // «метки <Picture N> только из списка», «один шот по умолчанию», «звук».
-  // Что УБРАНО как дубли: «честность» (перенесена в общий блок ниже),
-  // повтор «не переписывай статику» (было и в DETAIL_ACTION, и здесь),
-  // повтор «метки только из списка» (было и тут, и в блоке честности).
+  // (fix 717) Extension rules compressed: 10 points → 8 (was ~2.8k tokens).
+  // What is important and KEPT: clip: N marker, "do not rewrite static elements",
+  // "<Picture N> tags only from list", "one shot by default", "sound".
+  // What was REMOVED as duplicates: "honesty" (moved to general block below),
+  // repeated "do not rewrite static elements" (was in both DETAIL_ACTION and here),
+  // repeated "tags only from list" (was both here and in honesty block).
   const rulesBlock =
-    '\n=== ПРАВИЛА ПРОДЛЕНИЯ (строго) ===\n' +
-    '1) Промпт КАЖДОГО клипа — ОТДЕЛЬНЫМ fence. ПЕРВАЯ строка внутри fence — маркер `clip: N` (N = номер карточки клипа из списка выше, 1-based), дальше — только текст промпта. UI вставляет промпт в карточку ПО ЭТОМУ МАРКЕРУ — без него вставка невозможна.\n' +
-    '2) ЗАПРОС → ВСЕ КЛИПЫ: общий запрос пользователя распределяй последовательно на ВСЕ клипы из списка выше (clip: 1 … clip: N) с учётом длительности каждого. Меньше промптов, чем клипов, — только если пользователь явно просит конкретный клип («перепиши клип 2»).\n' +
-    '3) НИКОГДА не пиши в промпте клипа метку <Video 1> и указания вида «продолжай ту же сцену/камеру» (camera lock) — они добавляются в КАЖДЫЙ клип автоматически. Дублирование портит промпт.\n' +
-    '4) НЕ ПЕРЕОПИСЫВАЙ УЖЕ ДАННОЕ: модель видит хвост предыдущего видео и референсы — внешность, одежда, локация, свет и атмосфера УЖЕ заданы и продолжаются сами. Промпт клипа = НОВОЕ действие/движение/событие куска (и новые элементы, если появляются). Статику упоминай ТОЛЬКО если она меняется.\n' +
-    '5) МЕТКИ РЕФЕРЕНСОВ: если есть картинки-рефы — при ПЕРВОМ упоминании персонажа/объекта в КАЖДОМ клипе ставь его метку <Picture N> («<Picture 1> останавливается и оборачивается…»). Только из списка выше. Метки <Subject N>, <Character N> и т.п. ЗАПРЕЩЕНЫ — они не привязаны ни к чему, и референс не сработает.\n' +
-    '6) ОДИН ШОТ ПО УМОЛЧАНИЮ: всё продление — один непрерывный дубль (та же камера, то же действие разворачивается во времени). НЕ дроби клип на несколько шотов («[Shot 1]/[Shot 2]», «cut to») и не начинай клип «новым кадром». Мультишот — только по ЯВНОМУ просьбе («сделай мультишот», «другой ракурс»). Клипы продолжают друг друга бесшовно: клип 1 стартует с последнего кадра исходника, клип N — с последнего кадра клипа N−1; таймкоды укладывай в длительность клипа.\n' +
-    '7) ЗВУК: если речь/диалог/озвучка НЕ запрошены — в overall_soundscape ОБЯЗАТЕЛЬНО первым словом напиши «no voice, no speech, no dialogue, no narration», потом ambient-звуки сцены. non_diegetic_music: N/A. Голос, реплики, закадровый текст и музыку по умолчанию НЕ добавляй.\n' +
-    '8) Формат промпта клипа — как в спеке H3: integrated_multimodal_description / overall_soundscape / non_diegetic_music. Без camera-lock и без <Video 1>.'
+    '\n=== EXTENSION RULES (strict) ===\n' +
+    '1) Prompt of EACH clip — SEPARATE fence. FIRST line inside fence — marker `clip: N` (N = clip card number from list above, 1-based), then only prompt text. UI inserts prompt into card BY THIS MARKER — insertion is impossible without it.\n' +
+    '2) QUERY → ALL CLIPS: distribute user overall request sequentially across ALL clips from list above (clip: 1 … clip: N) taking duration of each into account. Fewer prompts than clips only if user explicitly asks for a specific clip ("rewrite clip 2").\n' +
+    '3) NEVER write tag <Video 1> or instructions like "continue same scene/camera" (camera lock) in clip prompt — they are added to EACH clip automatically. Duplication spoils the prompt.\n' +
+    '4) DO NOT RE-DESCRIBE WHAT IS ALREADY GIVEN: model sees tail of previous video and references — appearance, clothing, location, lighting, and atmosphere are ALREADY set and continue on their own. Clip prompt = NEW action/motion/event of chunk (and new elements if appearing). Mention static elements ONLY if they change.\n' +
+    '5) REFERENCE TAGS: if image refs exist — on FIRST mention of character/object in EACH clip place its tag <Picture N> ("<Picture 1> stops and turns around..."). Only from list above. Tags <Subject N>, <Character N>, etc. are FORBIDDEN — they are not bound to anything and reference will fail.\n' +
+    '6) ONE SHOT BY DEFAULT: entire extension is one continuous take (same camera, same action unfolding over time). DO NOT split clip into multiple shots ("[Shot 1]/[Shot 2]", "cut to") and do not start clip with a "new shot". Multishot — only on EXPLICIT request ("make multishot", "different angle"). Clips continue each other seamlessly: clip 1 starts from last frame of source, clip N — from last frame of clip N-1; fit timecodes within clip duration.\n' +
+    '7) SOUND: if speech/dialogue/voiceover NOT requested — in overall_soundscape MANDATORILY write "no voice, no speech, no dialogue, no narration" as first words, then ambient scene sounds. non_diegetic_music: N/A. Do NOT add voice, lines, narration, or music by default.\n' +
+    '8) Clip prompt format — as in H3 spec: integrated_multimodal_description / overall_soundscape / non_diegetic_music. No camera-lock and no <Video 1>.'
 
-  // (правка 717) Общий блок честности/границ — тот же, что в generate-режиме.
+  // (fix 717) General honesty/boundaries block — same as in generate mode.
   const honestyBlock =
-    '\n=== ЧЕСТНОСТЬ И ГРАНИЦЫ ЧАТА ===\n' +
-    '1) Описывай только то, что видишь на референсах или знаешь из метаданных выше. Чего не видишь — прямо скажи «не вижу / не знаю», не домысливай содержимое исходного видео.\n' +
-    '2) Клипы, референсы и исходник выше — ТЕКУЩЕЕ состояние вкладки «Продление» (общий рабочий стол), а не история чата. Клипы/рефы из прошлых реплик, которых нет в списках выше, больше НЕ существуют.\n' +
-    '3) Этот чат — независимый диалог режима «Продление»: сообщений других чатов ты не видишь. Не переноси оттуда тему, персонажей, сцены или промпт.\n' +
-    '4) Вложения из чата — только для описания, это НЕ референсы продления: НИКОГДА не помечай их <Picture N>. Если вложение должно попасть в видео — скажи добавить его в картинки-рефы на вкладке «Продление».'
+    '\n=== HONESTY AND CHAT BOUNDARIES ===\n' +
+    '1) Describe only what you see on references or know from metadata above. What you cannot see — state plainly "cannot see / do not know", do not speculate on source video content.\n' +
+    '2) Clips, references, and source above are CURRENT state of "Extend" tab (shared workspace), not chat history. Clips/refs from past turns not in lists above NO LONGER exist.\n' +
+    '3) This chat is an independent dialog of "Extend" mode: you do not see messages from other chats. Do not transfer topics, characters, scenes, or prompts from there.\n' +
+    '4) Attachments from chat are only for description, NOT extension references: NEVER tag them <Picture N>. If attachment should appear in video — instruct user to add it to image refs on "Extend" tab.'
 
   return `${H3_SPEC_EXTEND}
 
-=== SESSION CONTEXT (ПРОДЛЕНИЕ) ===
+=== SESSION CONTEXT (EXTENSION) ===
 ${lines.join('\n')}
 ${rulesBlock}
 ${honestyBlock}
 
-Промпт клипа — ТОЛЬКО в fence, первая строка — \`clip: N\`. Несколько клипов = несколько fence подряд. Короткая русская заметка до fence — ОК.
-Перед КАЖДЫМ промптом перечитывай ТЕКУЩИЕ списки клипов и референсов выше (look at attached images).`
+Clip prompt — ONLY in fence, first line — \`clip: N\`. Multiple clips = multiple consecutive fences. Short note before fence — OK.
+Before EVERY prompt reread CURRENT lists of clips and references above (look at attached images).`
 }
 
 /**
- * (правка 502) Системный промпт чата режима «ControlNet».
- * Контрольное видео подаётся как <Video 1> (ref_video_0) — это официальный
- * видео-референс. Промпт — FORMAT B: с <Video 1> и (опционально) <Picture N>.
- * Движение НЕ описывай словами — его задаёт контроль; промпт описывает
- * ТОЛЬКО внешний вид: сцену, персонажей, стиль, свет, звук.
+ * (fix 502) System prompt for "ControlNet" mode chat.
+ * Control video is passed as <Video 1> (ref_video_0) — this is official
+ * video reference. Prompt — FORMAT B: with <Video 1> and (optionally) <Picture N>.
+ * Do NOT describe motion in words — it is set by control; prompt describes
+ * ONLY appearance: scene, characters, style, lighting, sound.
  */
 function buildControlNetSystemMessage(videoVisionOn: boolean): string {
   const st = useControlNetTarget.getState()
@@ -453,60 +452,60 @@ function buildControlNetSystemMessage(videoVisionOn: boolean): string {
   const lines: string[] = []
   lines.push(
     direct
-      ? '⚠️ РЕЖИМ ГЕНЕРАЦИИ: «ControlNet» (direct). Это перенос анимации: движения, жестов, тайминга и камеры — из контрольного видео; новый вид создаётся по запросу. Промпт описывает внешний вид, а не пересказывает движение. Формат — FORMAT B.'
-      : '⚠️ РЕЖИМ ГЕНЕРАЦИИ: «ControlNet» (Ref2VA). Видео повторяет движение контрольного ролика; промпт описывает внешний вид. Формат — FORMAT B.',
+      ? '⚠️ GENERATION MODE: "ControlNet" (direct). This is animation transfer: motion, gestures, timing, and camera — from control video; new appearance created from prompt. Prompt describes appearance, not retelling motion. Format — FORMAT B.'
+      : '⚠️ GENERATION MODE: "ControlNet" (Ref2VA). Video repeats motion of control clip; prompt describes appearance. Format — FORMAT B.',
   )
 
-  // ── ПРИКРЕПЛЁННЫЕ РЕФЕРЕНСЫ ──
+  // ── ATTACHED REFERENCES ──
   lines.push('')
-  lines.push('=== ПРИКРЕПЛЁННЫЕ РЕФЕРЕНСЫ (available references) ===')
-  lines.push('⚠️ ТЕКУЩИЙ РЕЖИМ ГЕНЕРАЦИИ: «ControlNet» (Ref2VA).')
+  lines.push('=== ATTACHED REFERENCES (available references) ===')
+  lines.push('⚠️ CURRENT GENERATION MODE: "ControlNet" (Ref2VA).')
   if (st.source) {
     if (direct) {
-      lines.push(`<Video 1> = ${st.source.filename} — ПРИКРЕПЛЕНО как контрольное видео и источник анимации (ref_video_0): тайминг, движения тела, жесты, мимика, камера и монтажный ритм.`)
+      lines.push(`<Video 1> = ${st.source.filename} — ATTACHED as control video and animation source (ref_video_0): timing, body movements, gestures, facial expressions, camera, and editing rhythm.`)
       if (videoVisionOn) {
-        lines.push('Ты получаешь digest/кадры этого видео (сцена, персонажи, движение, камера). Используй их, чтобы понять перенос анимации, но НЕ пересказывай движение в промпте.')
+        lines.push('You receive digest/frames of this video (scene, characters, motion, camera). Use them to understand animation transfer, but do NOT retell motion in prompt.')
       } else {
-        lines.push('Кадры/digest не приложены: видение видео ассистентом выключено. Не угадывай содержимое; в промпте только сошлись на <Video 1> как на источник движения.')
+        lines.push('Frames/digest not attached: assistant video vision is off. Do not guess contents; in prompt only reference <Video 1> as motion source.')
       }
     } else {
-      lines.push(`<Video 1> = ${st.source.filename} — ПРИКРЕПЛЕНО как контрольное видео. Это официальный видео-референс: ОН ЕСТЬ в референсах.`)
-      lines.push('Ты не видишь КАДРЫ этого видео (оно видео, не картинка) — но оно ПРИКРЕПЛЕНО и УЧИТываетСЯ при генерации. Движение/камера НЕ описываются словами (их задаёт контроль), но <Video 1> ОБЯЗАНО быть упомянуто в detailed_description.')
+      lines.push(`<Video 1> = ${st.source.filename} — ATTACHED as control video. This is official video reference: IT IS in references.`)
+      lines.push('You do not see FRAMES of this video (it is video, not image) — but it IS ATTACHED and ACCOUNTED FOR during generation. Motion/camera NOT described in words (control sets them), but <Video 1> MUST be mentioned in detailed_description.')
     }
   } else {
-    lines.push('Контрольное видео пока НЕ выбрано — без него генерация не запустится; подскажи выбрать на вкладке «ControlNet».')
+    lines.push('Control video is NOT selected yet — generation cannot start without it; prompt user to select on "ControlNet" tab.')
   }
   if (st.refImages.length) {
-    lines.push('Изображения-референсы (ты получаешь их визуальное описание/видишь приложенный файл):')
+    lines.push('Reference images (you receive their visual description / see attached file):')
     st.refImages.forEach((r, i) => {
       lines.push(`  <Picture ${i + 1}> = ${r.name}`)
     })
   } else {
-    lines.push('Изображений-референсов НЕТ → метки <Picture N>, <Subject N> ЗАПРЕЩЕНЫ.')
+    lines.push('NO reference images → tags <Picture N>, <Subject N> are FORBIDDEN.')
   }
   lines.push('')
-  lines.push(`Тип контроля: ${st.params.controlType}. Длительность: ~${st.params.duration} с.`)
+  lines.push(`Control type: ${st.params.controlType}. Duration: ~${st.params.duration} s.`)
 
-  // ── Жёсткие правила режима ──
-  // (правка 717) Сжато: 7 пунктов → 5, блок «ЧЕСТНОСТЬ» и «НЕЗАВИСИМОСТЬ
-  // ЧАТОВ» объединены с «ЖЁСТКИМИ ПРАВИЛАМИ» (было ~1.3k токенов).
-  // Direct — отдельная ветка: это не «карта движения», а перенос анимации.
+  // ── Strict mode rules ──
+  // (fix 717) Compressed: 7 points → 5, "HONESTY" and "INDEPENDENCE OF
+  // CHATS" blocks merged with "STRICT RULES" (was ~1.3k tokens).
+  // Direct — separate branch: not "motion map", but animation transfer.
   const rulesBlock = direct
-    ? '\n=== ПРАВИЛА РЕЖИМА CONTROLNET (DIRECT: ПЕРЕНОС АНИМАЦИИ) ===\n' +
-      '1) ⚠️ <Video 1> — источник анимации: движения тела, жестов, мимики, тайминга, камеры и монтажного ритма. В detailed_description ОБЯЗАТЕЛЬНО одной фразой укажи: «The motion, timing, gestures and camera movement follow <Video 1>». Другие метки <Video N> ЗАПРЕЩЕНЫ.\n' +
-      '2) digest/кадры <Video 1> используй только чтобы понять перенос. НЕ расписывай движение и камеру по кадрам — контроль уже задаёт анимацию (это важнее общего требования базовой спеки описывать камеру). Если digest нет — не выдумывай содержимое видео.\n' +
-      '3) Новый вид создавай по запросу и <Picture N>: по умолчанию НЕ копируй из <Video 1> лицо, внешность, одежду и локацию. Сохранять их можно только по ЯВНОЙ просьбе. Каждое изображение — своей меткой <Picture N> (создай <Subject N>).\n' +
-      `4) Одна НЕПРЕРЫВНАЯ сцена (~${st.params.duration} с), английский, ОДИН fence (FORMAT B), БЕЗ clip: N.\n` +
-      '5) ЗВУК: если речь/диалог/озвучка НЕ запрошены — overall_soundscape: ambient/тишина, non_diegetic_music: N/A. Голос, реплики, закадровый текст и музыку по умолчанию НЕ добавляй.\n' +
-      '6) ЧЕСТНОСТЬ/ГРАНИЦЫ: список референсов выше — единственный источник правды; digest <Video 1> — только если приложен; деталей не выдумывай. Вложения чата — не референсы (никаких <Picture N>); другие чаты ты не видишь.'
-    : '\n=== ПРАВИЛА РЕЖИМА CONTROLNET ===\n' +
-      '1) ⚠️ ОБЯЗАТЕЛЬНО: <Video 1> — это контрольное видео, официальный видео-референс. УПОМЯНИ его в detailed_description («The camera and subject motion follow <Video 1>»). Другие метки <Video N> ЗАПРЕЩЕНЫ.\n' +
-      '2) Движение/камеру/позы НЕ описывай словами — их задаёт контроль. Текст о движении МЕШАЕТ контролю.\n' +
-      '3) Промпт описывает ТОЛЬКО: сцена/локация, внешность, одежда, стиль, свет, атмосфера, звук. Каждое прикреплённое изображение — со своей меткой <Picture N> (создай <Subject N>, привяжи к <Picture N>).\n' +
-      `4) Одна НЕПРЕРЫВНАЯ сцена (~${st.params.duration} с), промпт на английском, ОДНИМ fence (FORMAT B). БЕЗ clip: N.\n` +
-      '5) ЗВУК: если речь/диалог/озвучка НЕ запрошены — overall_soundscape: ambient/тишина, non_diegetic_music: N/A. Голос, реплики, закадровый текст и музыку по умолчанию НЕ добавляй.\n' +
-      '6) ЧЕСТНОСТЬ: текущий список референсов выше — единственный источник правды. Кадров <Video 1> ты НЕ видишь (это видео, не картинка) — не угадывай и не описывай его содержимое, но в промпте он ОБЯЗАТЕЛЬНО упоминается. Деталей, которых не видишь на картинках, не выдумывай — скажи «не вижу».\n' +
-      '7) Этот чат независим: сообщений других чатов ты не видишь. Источник, параметры и референсы выше — ТЕКУЩЕЕ состояние вкладки «ControlNet». Вложения из чата — только для описания, это НЕ референсы: НИКОГДА не помечай их <Picture N>.'
+    ? '\n=== CONTROLNET MODE RULES (DIRECT: ANIMATION TRANSFER) ===\n' +
+      '1) ⚠️ <Video 1> — source of animation: body movements, gestures, facial expressions, timing, camera, and editing rhythm. In detailed_description MANDATORILY state in one phrase: "The motion, timing, gestures and camera movement follow <Video 1>". Other tags <Video N> FORBIDDEN.\n' +
+      '2) Use digest/frames of <Video 1> only to understand transfer. DO NOT detail motion and camera frame by frame — control already sets animation (this overrides general base spec requirement to describe camera). If no digest — do not invent video content.\n' +
+      '3) Create new appearance from query and <Picture N>: by default DO NOT copy face, appearance, clothing, or location from <Video 1>. Preserving them allowed only on EXPLICIT request. Each image with its own <Picture N> tag (create <Subject N>).\n' +
+      `4) One CONTINUOUS scene (~${st.params.duration} s), English, ONE fence (FORMAT B), WITHOUT clip: N.\n` +
+      '5) SOUND: if speech/dialogue/voiceover NOT requested — overall_soundscape: ambient/silence, non_diegetic_music: N/A. Do NOT add voice, lines, narration, or music by default.\n' +
+      '6) HONESTY/BOUNDARIES: reference list above is sole source of truth; digest <Video 1> only if attached; do not invent details. Chat attachments are not references (no <Picture N>); you do not see other chats.'
+    : '\n=== CONTROLNET MODE RULES ===\n' +
+      '1) ⚠️ MANDATORY: <Video 1> is control video, official video reference. MENTION it in detailed_description ("The camera and subject motion follow <Video 1>"). Other tags <Video N> FORBIDDEN.\n' +
+      '2) Motion/camera/poses DO NOT describe in words — control sets them. Text about motion INTERFERES with control.\n' +
+      '3) Prompt describes ONLY: scene/location, appearance, clothing, style, lighting, atmosphere, sound. Each attached image with its own <Picture N> tag (create <Subject N>, link to <Picture N>).\n' +
+      `4) One CONTINUOUS scene (~${st.params.duration} s), English prompt, ONE fence (FORMAT B). WITHOUT clip: N.\n` +
+      '5) SOUND: if speech/dialogue/voiceover NOT requested — overall_soundscape: ambient/silence, non_diegetic_music: N/A. Do NOT add voice, lines, narration, or music by default.\n' +
+      '6) HONESTY: current reference list above is sole source of truth. You do NOT see frames of <Video 1> (it is video, not image) — do not guess or describe its content, but it MUST be mentioned in prompt. Details not seen in images do not invent — say "cannot see".\n' +
+      '7) This chat is independent: you do not see other chats. Source, parameters, and references above are CURRENT state of "ControlNet" tab. Chat attachments are only for description, NOT references: NEVER tag them <Picture N>.'
 
   return `${H3_SPEC_B}
 
@@ -514,13 +513,13 @@ function buildControlNetSystemMessage(videoVisionOn: boolean): string {
 ${lines.join('\n')}
 ${rulesBlock}
 
-Промпт — ОДИН \`\`\`text fence (FORMAT B), на английском. Русская заметка до fence — ОК.
-${direct ? 'Главная связка: новый вид — из запроса и <Picture N>; анимация, тайминг и камера — из <Video 1>.' : 'Перед промптом перечитывай ТЕКУЩИЙ список референсов выше.'}`
+Prompt — ONE \`\`\`text fence (FORMAT B), in English. Short note before fence — OK.
+${direct ? 'Main binding: new appearance from query and <Picture N>; animation, timing, and camera from <Video 1>.' : 'Before prompt reread CURRENT list of references above.'}`
 }
 /** Ensure roles alternate: merge consecutive same-role, and ensure first is user.
- *  Merge, NOT replace: два подряд user-сообщения появляются, когда прошлый
- *  запрос упал без ответа (409/503/сеть) — при замене терялся первый вопрос
- *  вместе с его контекстом; модель видела только последний. */
+ *  Merge, NOT replace: two consecutive user messages appear when previous
+ *  request failed without answer (409/503/network) — replacement lost first question
+ *  along with its context; model saw only the last one. */
 function sanitizeRoles(msgs: AssistantChatMessage[]): AssistantChatMessage[] {
   const out: AssistantChatMessage[] = []
   for (const m of msgs) {
@@ -550,14 +549,14 @@ function numberSelectionHint(msgs: AssistantChatMessage[], n: number): string | 
     const m = msgs[i]
     if (m.role !== 'assistant' || typeof m.content !== 'string') continue
     const named = new RegExp(
-      `(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:Идея|Вариант|Idea|Option)\\s*${n}\\b`,
+      `(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:Idea|Option)\\s*${n}\\b`,
       'i',
     )
     const numbered = new RegExp(
       `(?:^|\\n)\\s*\\*{0,2}${n}[.)]\\s+`,
     )
     if (named.test(m.content) || numbered.test(m.content)) {
-      return `[Выбор пользователя: вариант ${n} из твоего предыдущего списка. Выдай готовый промпт именно для него. Не повторяй список идей и не пересказывай референсы.]`
+      return `[User selection: option ${n} from your previous list. Output the completed prompt specifically for it. Do not repeat the list of ideas and do not retell references.]`
     }
     // Only the immediately preceding assistant turn is relevant.
     return null
@@ -567,28 +566,28 @@ function numberSelectionHint(msgs: AssistantChatMessage[], n: number): string | 
 
 /**
  * Build the multimodal reference list for the LLM: images, videos AND audios.
- * (правка 168) Источник — ЖИВОЕ состояние вкладки «Генерация» (gen-store):
- * модель видит контекст генерации автоматически, без ручных действий —
- * в том числе рефы, добавленные пользователем посреди диалога.
+ * (fix 168) Source — LIVE state of "Generate" tab (gen-store):
+ * model sees generation context automatically, without manual actions —
+ * including refs added by user in the middle of a dialog.
  * - images  → sharp-resized 512px JPEG  ({"type":"image"})
  * - videos  → whole downscaled video + its audio track when includeAudio
  * - audios  → 16 kHz mono WAV           ({"type":"audio"})
  * The server prepares the media (see src/lib/llm-media.ts).
- * (правка 427) В extend-чате источник — extendImageRefs вкладки «Продление».
- * (правка 502) В controlnet-чате — refImages вкладки «ControlNet»
- * (controlnet-target-store; пути — имена файлов в ComfyUI input/).
+ * (fix 427) In extend chat, source — extendImageRefs of "Extend" tab.
+ * (fix 502) In controlnet chat — refImages of "ControlNet" tab
+ * (controlnet-target-store; paths — filenames in ComfyUI input/).
  */
 /**
- * (правка 717) Лимиты референсов — как у самой модели H3 и как в UI
+ * (fix 717) Reference limits — matching H3 model itself and UI
  * (generate-view.tsx: FALLBACK_REF_LIMITS = image 9 / video 3 / audio 3,
- * всего 15).
+ * total 15).
  *
- * Раньше список референсов НИЧЕМ не ограничивался, а сервер на /api/llm/chat
- * обрезал его до 9 позиций ПО ПОРЯДКУ. Из-за этого системный промпт
- * перечислял <Picture 10>, <Video 2>…, которые на провод не уходили: модель
- * писала в промпт метки несуществующих референсов и описывала картинки,
- * которых НЕ ВИДЕЛА. Теперь лимит применяется ЗДЕСЬ, по видам, и промпт
- * нумерует ровно то, что уйдёт на провод.
+ * Previously the reference list was UNCONSTRAINED, while server at /api/llm/chat
+ * truncated it to 9 positions IN ORDER. Because of this, system prompt
+ * listed <Picture 10>, <Video 2>... which were never sent on the wire: model
+ * wrote tags of nonexistent references in prompt and described images
+ * it COULD NOT SEE. Now the limit is applied HERE, by type, and prompt
+ * numbers exactly what goes onto the wire.
  */
 const REF_LIMITS = { image: 9, video: 3, audio: 3, total: 15 } as const
 
@@ -600,14 +599,14 @@ function getReferences(chatMode: AssistantChatMode = 'generate'): Array<{
   includeAudio?: boolean
 }> {
   const v = useGenStore.getState().video
-  // (правка 502) controlnet-чат: референсы — картинки вкладки «ControlNet»:
-  // нумерация <Picture N> в системном промпте controlnet-чата идёт по ним.
+  // (fix 502) controlnet chat: references — images of "ControlNet" tab:
+  // <Picture N> numbering in controlnet chat system prompt follows them.
   //
-  // (direct) В режиме «Прямой» контрольное видео подаётся в H3 как
-  // ref_video_0 и является источником анимации. Добавляем его в refs, чтобы
-  // сервер построил digest по кадрам и закэшировал его по содержимому файла.
-  // Для depth/canny/pose оставляем прежнее поведение: ассистент видит только
-  // картинки, а движение задаёт карта.
+  // (direct) In "Direct" mode, control video is passed to H3 as
+  // ref_video_0 and serves as the animation source. We add it to refs so
+  // server builds digest from frames and caches it by file content.
+  // For depth/canny/pose keep former behavior: assistant sees only
+  // images, while motion is guided by map.
   if (chatMode === 'controlnet') {
     const cn = useControlNetTarget.getState()
     const out: Array<{
@@ -623,8 +622,8 @@ function getReferences(chatMode: AssistantChatMode = 'generate'): Array<{
       out.push({
         path: sourcePath,
         trigger: 'Video 1',
-        // inputSource — файл с диска, уже лежит в input/staging; иначе это
-        // галерейный output-файл, и resolver должен искать его в output.
+        // inputSource — file from disk, already in input/staging; otherwise it's
+        // a gallery output file, and resolver must search for it in output.
         intent: cn.source.inputSource ? 'control_source_input' : 'control_source',
         kind: 'video',
         includeAudio: false,
@@ -639,9 +638,9 @@ function getReferences(chatMode: AssistantChatMode = 'generate'): Array<{
     }
     return out
   }
-  // (правка 427) extend-чат: референсы — картинки вкладки «Продление»
-  // (extendImageRefs), а НЕ v.refs вкладки «Генерация»: нумерация <Picture N>
-  // в системном промпте extend-чата идёт по ним, и прикреплять надо именно их.
+  // (fix 427) extend chat: references — images of "Extend" tab
+  // (extendImageRefs), NOT v.refs of "Generate" tab: numbering <Picture N>
+  // in system prompt of extend chat follows them, and they are what must be attached.
   if (chatMode === 'extend') {
     return v.extendImageRefs.map((r, i) => ({
       path: r.path,
@@ -650,9 +649,9 @@ function getReferences(chatMode: AssistantChatMode = 'generate'): Array<{
       kind: 'image' as const,
     }))
   }
-  // (правка 150) В t2v/flf из рефов уходят ТОЛЬКО аудио (картинки/видео не используются нодой).
-  // (правка 151) В flf: кадры (startFrame/endFrame) прикрепляются как image-рефы,
-  // чтобы LLM их ВИДЕЛА и описала словами (запрет <Picture N> — см. system-промпт).
+  // (fix 150) In t2v/flf only audio is passed from refs (images/videos not used by node).
+  // (fix 151) In flf: frames (startFrame/endFrame) attached as image refs,
+  // so LLM SEES them and describes in words (forbidden <Picture N> — see system prompt).
   const refs = v.mode === 'ref' ? v.refs : v.refs.filter((r) => r.kind === 'audio')
   const out: Array<{
     path: string
@@ -663,24 +662,24 @@ function getReferences(chatMode: AssistantChatMode = 'generate'): Array<{
   }> = []
   const counters: Record<'image' | 'video' | 'audio', number> = { image: 0, video: 0, audio: 0 }
 
-  // (правка 151) В flf-режиме кадры идут ПЕРВЫМИ (они главные), затем аудио.
-  // LLM должна их увидеть и описать словами; <Picture N> запрещён в system-промпте.
+  // (fix 151) In flf mode, frames come FIRST (they are primary), then audio.
+  // LLM must see them and describe in words; <Picture N> is forbidden in system prompt.
   if (v.mode === 'flf') {
-    // (правка 717) Кадры занимают слоты <Picture 1..2> — учитываем их в
-    // лимите картинок, иначе общее число картинок могло превысить 9.
+    // (fix 717) Frames take slots <Picture 1..2> — count them in
+    // image limit, otherwise total image count could exceed 9.
     if (v.startFrame?.path && counters.image < REF_LIMITS.image) {
-      out.push({ path: v.startFrame.path, trigger: 'Первый кадр', intent: 'first_frame', kind: 'image' })
+      out.push({ path: v.startFrame.path, trigger: 'First frame', intent: 'first_frame', kind: 'image' })
       counters.image++
     }
     if (v.endFrame?.path && counters.image < REF_LIMITS.image) {
-      out.push({ path: v.endFrame.path, trigger: 'Последний кадр', intent: 'last_frame', kind: 'image' })
+      out.push({ path: v.endFrame.path, trigger: 'Last frame', intent: 'last_frame', kind: 'image' })
       counters.image++
     }
   }
 
   for (const r of refs) {
-    // (правка 717) Лимит по видам + общий потолок. Приоритет: картинки
-    // (их модель видит и они несут внешность), потом видео, потом аудио.
+    // (fix 717) Limit by type + overall ceiling. Priority: images
+    // (model sees them and they carry appearance), then videos, then audios.
     if (out.length >= REF_LIMITS.total) break
     if (r.kind === 'image') {
       if (counters.image >= REF_LIMITS.image) continue
@@ -704,14 +703,14 @@ interface StreamState {
   /** Accumulated assistant text of the in-flight reply. */
   text: string
   /**
-   * (правка 717) Идентификатор ЭКЗЕМПЛЯРА стрима (монотонный счётчик).
+   * (fix 717) Stream INSTANCE identifier (monotonic counter).
    *
-   * Раньше «это ещё мой стрим?» проверялось по chatId. Но после «Стоп» в том
-   * же чате мог начаться НОВЫЙ стрим, и finally СТАРОГО стрима (он выполняется
-   * асинхронно, на следующем тике) видел chatId === chatId и сбрасывал
-   * состояние ЖИВОГО нового стрима: текст нового ответа пропадал, а
-   * isStreamActive() становился false при running === true → следующее
-   * сообщение молча терялось. Идентификатор экземпляра снимает гонку.
+   * Previously "is this still my stream?" was checked by chatId. But after "Stop",
+   * in the same chat a NEW stream could start, and the finally of the OLD stream (which runs
+   * asynchronously on next tick) saw chatId === chatId and reset the
+   * state of the ACTIVE new stream: text of new response disappeared, while
+   * isStreamActive() became false when running === true → next
+   * message was silently lost. Instance identifier eliminates race condition.
    */
   runId: number
 }
@@ -724,12 +723,12 @@ export const useAssistantStream = create<StreamState>(() => ({
 
 let activeAbort: AbortController | null = null
 let running = false
-/** (правка 717) Счётчик экземпляров стрима. */
+/** (fix 717) Stream instance counter. */
 let runCounter = 0
 /**
- * (правка 717) id текущего запроса к LLM — передаётся в тело /chat и в
- * /abort, чтобы прерывание попало ровно в эту генерацию (без адресации
- * «Стоп» мог оборвать СЛЕДУЮЩИЙ запрос).
+ * (fix 717) Current LLM request id — passed in body of /chat and in
+ * /abort so cancellation targets specifically this generation (without targeting,
+ * "Stop" could abort the NEXT request).
  */
 let activeRequestId: string | null = null
 
@@ -743,21 +742,21 @@ export function isStreamActive(): boolean {
  * Module-level: keeps running after AssistantView unmounts.
  * No-op while another reply is already in flight (one at a time).
  */
-/** (правка 86; обновлено правкой 108) Вложение к сообщению чата:
- *  изображение или видео. (правка 108) Хранится в изолированном каталоге
- *  data/chat-attachments/ — файл существует ТОЛЬКО в чате и используется
- *  ТОЛЬКО для LLM-анализа/описания. НЕ смешивается с референсами генерации
- *  (<Picture N>/<Video N>), не лежит в ComfyUI/input/, не попадает в галерею,
- *  upscale и «чистку input». */
+/** (fix 86; updated by fix 108) Chat message attachment:
+ *  image or video. (fix 108) Stored in isolated directory
+ *  data/chat-attachments/ — file exists ONLY in chat and is used
+ *  ONLY for LLM analysis/description. NOT mixed with generation references
+ *  (<Picture N>/<Video N>), does not reside in ComfyUI/input/, does not appear in gallery,
+ *  upscale, or "clean input". */
 export interface ChatAttachment {
-  /** Имя файла в хранилище вложений (data/chat-attachments/, или legacy ComfyUI/input/). */
+  /** Filename in attachment storage (data/chat-attachments/, or legacy ComfyUI/input/). */
   path: string
-  /** Изначальное имя файла (для отображения). */
+  /** Original filename (for display). */
   name: string
-  /** Тип медиа. */
+  /** Media type. */
   kind: 'image' | 'video'
-  /** (правка 108) Legacy-вложение (правки 86–87) лежит в ComfyUI/input/ —
-   *  сервер читает его из input/, но оно ТОЖЕ не является ген-рефом. */
+  /** (fix 108) Legacy attachment (fixes 86–87) stored in ComfyUI/input/ —
+   *  server reads it from input/, but it ALSO is not a generation ref. */
   legacyComfy?: boolean
 }
 
@@ -770,69 +769,69 @@ export function runAssistantCompletion(
   running = true
   const ac = new AbortController()
   activeAbort = ac
-  // (правка 717) Идентификатор экземпляра стрима — по нему finally понимает,
-  // «это ещё мой стрим» (см. StreamState.runId).
+  // (fix 717) Stream instance identifier — finally uses it to know
+  // "is this still my stream" (see StreamState.runId).
   const runId = ++runCounter
-  // (правка 717) Адрес запроса для /abort.
+  // (fix 717) Request address for /abort.
   const requestId = `r${runId}_${Date.now().toString(36)}`
   activeRequestId = requestId
   useAssistantStream.setState({ chatId, text: '', runId })
 
   void (async () => {
     let final = ''
-    // false = сервер ответил ошибкой на сам POST (409/503/...): показываем
-    // ЭТУ ошибку; true = стрим начался и оборвался посередине
+    // false = server responded with error to POST itself (409/503/...): show
+    // THIS error; true = stream started and broke midway
     let streamStarted = false
-    // (клиентский idle-watchdog) объявлены ДО try: catch читает их даже если
-    // throw случился до открытия стрима.
+    // (client idle-watchdog) declared BEFORE try: catch reads them even if
+    // throw happened before stream opened.
     let idleTimedOut = false
-    // (правка 717) Ответ упёрся в лимит max_tokens (finish_reason='length'):
-    // ответ неполный, но и не «ошибка» — помечаем в тексте.
+    // (fix 717) Response hit max_tokens limit (finish_reason='length'):
+    // response is incomplete, but not an "error" — mark in text.
     let truncatedByLimit = false
-    // (правка 717) Ответ прерван пользователем («Стоп»).
+    // (fix 717) Response aborted by user ("Stop").
     let abortedByUser = false
-    // (правка 717) Текст ошибки запроса — попадёт в чат синтетической
-    // репликой ассистента (вместо «осиротевшего» сообщения пользователя).
+    // (fix 717) Request error text — will enter chat as a synthetic
+    // assistant turn (instead of "orphaned" user message).
     let errorMessage: string | null = null
     let idleTimer: ReturnType<typeof setTimeout> | null = null
-    // (правка 267) Таймаут ожидания ЗАГОЛОВКОВ ответа: fetch до res.headers не
-    // имеет ни таймаута, ни abort — зависший POST (VRAM-арбитр ждёт минутами)
-    // оставлял running=true навсегда и блокировал чат. Взводим ДО первого
-    // fetch, снимаем при получении заголовков; стоп пользователя (тот же
-    // ac.signal) прерывает ожидание молча, таймаут — с ошибкой.
-    // 10 минут: первый ход может сначала строить reference digests (несколько
-    // изолированных LLM-вызовов) — 5 минут было слишком близко к таймауту на
-    // наборе из 9 картинок + 3 видео.
+    // (fix 267) Timeout waiting for response HEADERS: fetch up to res.headers
+    // has neither timeout nor abort — hung POST (VRAM arbiter waiting for minutes)
+    // left running=true forever and blocked chat. Arm BEFORE first
+    // fetch, clear on receiving headers; user stop (same
+    // ac.signal) interrupts waiting silently, timeout — with error.
+    // 10 minutes: first turn may first build reference digests (multiple
+    // isolated LLM calls) — 5 minutes was too close to timeout on
+    // a set of 9 images + 3 videos.
     let headerTimedOut = false
     let headerTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
       headerTimedOut = true
       ac.abort()
     }, 10 * 60_000)
     try {
-      // (правка 427) Режим ЧАТА (generate/extend/controlnet (правка 502)) —
-      // из стора чатов по chatId:
-      // от него зависят системный промпт и набор прикрепляемых референсов
-      // (контексты вкладок «Генерация»/«Продление»/«ControlNet» не смешиваются).
+      // (fix 427) CHAT mode (generate/extend/controlnet (fix 502)) —
+      // from chats store by chatId:
+      // system prompt and set of attached references depend on it
+      // (contexts of "Generate" / "Extend" / "ControlNet" tabs do not mix).
       const chatMode: AssistantChatMode =
         useAssistantChats.getState().chats.find((c) => c.id === chatId)?.mode ?? 'generate'
-      // (правка 168) Рефы для прикрепления — из ЖИВОГО gen-store: модель видит
-      // контекст генерации автоматически, включая рефы, добавленные посреди
-      // диалога. Никаких ручных привязок.
+      // (fix 168) References to attach — from LIVE gen-store: model sees
+      // generation context automatically, including refs added mid-dialog.
+      // No manual bindings.
       const refs = getReferences(chatMode)
-      // (правка 108) Вложения чата — ОТДЕЛЬНО от рефов генерации: они существуют
-      // ТОЛЬКО в чате и нужны ТОЛЬКО для LLM-описания/анализа. В references
-      // (<Picture N>/<Video N>) они НЕ попадают — сервер получает их отдельным
-      // полем chatAttachments, прикрепляет как «Chat N» и запрещает тегирование
-      // в промпте (раньше они пушались в refs → LLM вписывала <Picture N> →
-      // MiniMax подтягивал файл из input/ в генерацию).
+      // (fix 108) Chat attachments — SEPARATE from generation refs: they exist
+      // ONLY in chat and are needed ONLY for LLM description/analysis. In references
+      // (<Picture N>/<Video N>) they DO NOT go — server receives them in separate
+      // chatAttachments field, attaches as "Chat N", and forbids tagging
+      // in prompt (previously they were pushed into refs → LLM wrote <Picture N> →
+      // MiniMax pulled file from input/ into generation).
       const chatAttachments = (() => {
-        // (правка 717) Вложения чата переприкрепляются на КАЖДЫЙ ход.
-        // Раньше attachments приходили только для того хода, где файл был
-        // загружен, и со следующего сообщения модель картинку НЕ ВИДЕЛА —
-        // хотя её вопрос («что на фото?») оставался в истории. Правило
-        // «не выдумывай, чего не видишь» толкало модель сказать «не вижу»
-        // или выдумать. Теперь берём вложения последних ходов из истории
-        // сообщений (там они сохранены вместе с текстом).
+        // (fix 717) Chat attachments are reattached on EVERY turn.
+        // Previously attachments came only for the turn where the file was
+        // uploaded, and on next message model COULD NOT SEE the image —
+        // even though its question ("what is in photo?") remained in history. Rule
+        // "do not invent what you do not see" drove model to say "cannot see"
+        // or invent. Now we take attachments of recent turns from message history
+        // (where they are saved together with text).
         const explicit = attachments?.length
           ? attachments.map((a) => ({
               path: a.path,
@@ -852,12 +851,12 @@ export function runAssistantCompletion(
             legacyComfy: m.attachment.src !== 'chat',
           })
         }
-        // Не больше 3 (лимит вложений на ход) — иначе раздувается префилл.
+        // No more than 3 (attachment limit per turn) — otherwise prefill balloons.
         return fromHistory.slice(-3)
       })()
-      // (правка 53) Свежее значение «видение видео» из конфига — системный
-      // промпт должен совпадать с тем, что сервер реально прикрепит.
-      // Лёгкий локальный GET; при ошибке остаёмся по умолчанию (выкл).
+      // (fix 53) Fresh "video vision" value from config — system
+      // prompt must match what server actually attaches.
+      // Lightweight local GET; on error stay with default (off).
       let videoVisionOn = true
       try {
         const cfgRes = await fetch('/api/config', { signal: ac.signal })
@@ -865,7 +864,7 @@ export function runAssistantCompletion(
           const cfg = await cfgRes.json()
           videoVisionOn = cfg.llm_video_vision !== false
         }
-      } catch { /* ignore — default ON (сжатый digest) */ }
+      } catch { /* ignore — default ON (compressed digest) */ }
       // The stored history is untouched; this copy may get a one-line
       // clarification for numeric selections ("1", "2", ...).
       const apiHistory = sanitizeRoles(history.slice(-HISTORY_LIMIT))
@@ -886,33 +885,33 @@ export function runAssistantCompletion(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // (правка 717) request_id — адрес прерывания: /abort с этим id
-          // останавливает именно эту генерацию.
+          // (fix 717) request_id — abort address: /abort with this id
+          // stops specifically this generation.
           request_id: requestId,
           messages: [
-            // (правка 168) Системный промпт строится по ЖИВОМУ состоянию
-            // вкладки «Генерация» (режим, рефы, кадры, длительность) — модель
-            // видит контекст генерации сама, без ручных действий. Черновик
-            // промпта сюда НЕ входит: это был канал утечки тем между чатами;
-            // при необходимости пользователь цитирует его в сообщении
-            // (кнопка «Улучшить мой промпт» делает это автоматически).
-            // (правка 427) Для extend-чата — системный промпт продления
-            // (клипы, extend-рефы, мета исходника); await: дочитывает мету.
+            // (fix 168) System prompt is built from LIVE state of
+            // "Generate" tab (mode, refs, frames, duration) — model
+            // sees generation context itself, without manual actions. Prompt
+            // draft is NOT included here: it was a channel of topic leakage between chats;
+            // if needed user quotes it in the message
+            // ("Improve my prompt" button does this automatically).
+            // (fix 427) For extend chat — extension system prompt
+            // (clips, extend refs, source metadata); await: reads metadata.
             { role: 'system', content: await buildSystemMessage(videoVisionOn, chatMode, ac.signal) },
             // Replay the (capped) chat history so the model "remembers"
             ...apiHistory,
           ],
           // Send image references so the server can inject them as vision
           ...(refs.length > 0 ? { references: refs } : {}),
-          // (правка 108) Вложения чата — отдельное поле (НЕ references):
-          // сервер читает их из data/chat-attachments/ (или legacy input/)
-          // и прикрепляет к LLM как «Chat N» с запретом тегов <Picture N>.
+          // (fix 108) Chat attachments — separate field (NOT references):
+          // server reads them from data/chat-attachments/ (or legacy input/)
+          // and attaches to LLM as "Chat N" forbidding <Picture N> tags.
           ...(chatAttachments ? { chatAttachments } : {}),
         }),
         signal: ac.signal,
       })
-      // (правка 267) Заголовки получены — header-таймаут снимаем; дальше
-      // сторожит idle-watchdog тела стрима.
+      // (fix 267) Headers received — clear header timeout; from here on
+      // stream body idle-watchdog guards.
       if (headerTimer) {
         clearTimeout(headerTimer)
         headerTimer = null
@@ -931,10 +930,10 @@ export function runAssistantCompletion(
       streamStarted = true
       const decoder = new TextDecoder()
       let buf = ''
-      // (клиентский idle-watchdog) Half-open соединение (сон/гибернация ПК,
-      // сдохший прокси) не разрешает reader.read() никогда — стрим висел
-      // вечно, чат блокировался до перезагрузки страницы. Зеркалим серверный
-      // сторож: 5 мин без единого чанка = принудительный abort с тостом.
+      // (client idle-watchdog) Half-open connection (PC sleep/hibernation,
+      // dead proxy) never resolves reader.read() — stream hung
+      // forever, chat blocked until page reload. Mirror server
+      // watchdog: 5 min without a single chunk = forced abort with toast.
       idleTimer = setTimeout(() => {
         idleTimedOut = true
         ac.abort()
@@ -957,15 +956,15 @@ export function runAssistantCompletion(
         for (const ev of events) {
           const line = ev.split('\n').find((l) => l.startsWith('data: '))
           if (!line) continue
-          // JSON.parse — в ОТДЕЛЬНОМ try: раньше фильтр «не JSON в сообщении»
-          // глотал и payload.error, если текст ошибки сервера упоминал JSON
-          // (например, исключения llama-cpp) — стрим «завершался» как успешный
-          // с обрезанным ответом.
-          // (правка 717) Сервер различает «дошли до конца» и «оборвалось»:
-          // финальный кадр несёт finish_reason и флаг aborted (см.
-          // tools/llm_server.py). Раньше клиент эти поля ИГНОРИРОВАЛ, и
-          // оборванный ответ коммитился в чат как ПОЛНЫЙ — пользователь видел
-          // готовый промпт, которого на самом деле нет.
+          // JSON.parse — in SEPARATE try: previously "not JSON in message" filter
+          // swallowed payload.error too if server error text mentioned JSON
+          // (e.g. llama-cpp exceptions) — stream "completed" as successful
+          // with truncated response.
+          // (fix 717) Server distinguishes "reached end" vs "aborted":
+          // final frame carries finish_reason and aborted flag (see
+          // tools/llm_server.py). Previously client IGNORED these fields, and
+          // aborted response committed to chat as COMPLETE — user saw
+          // finished prompt that did not actually exist.
           let payload: {
             delta?: string
             error?: string
@@ -976,24 +975,24 @@ export function runAssistantCompletion(
           try {
             payload = JSON.parse(line.slice(6))
           } catch {
-            continue // битый/незавершённый чанк — ждём следующий
+            continue // broken/incomplete chunk — wait for next
           }
           if (!payload) continue
           if (payload.error) throw new Error(payload.error)
           if (payload.aborted) {
-            throw new Error('Ответ прерван (остановлен пользователем или сбой сервера).')
+            throw new Error('Response aborted (stopped by user or server failure).')
           }
           if (payload.done && payload.finish_reason === 'length') {
-            // Ответ упёрся в max_tokens — это не «ошибка», но и не полный
-            // промпт. Помечаем, чтобы пользователь знал.
+            // Response hit max_tokens — not an "error", but not a complete
+            // prompt either. Mark so user knows.
             truncatedByLimit = true
           }
           if (payload.delta) {
             final += payload.delta
             const s = useAssistantStream.getState()
-            // (правка 717) Сверяем ЭКЗЕМПЛЯР стрима, а не чат: после «Стоп»
-            // в том же чате мог начаться новый стрим, и старый дописывал бы
-            // свой текст в его хвост.
+            // (fix 717) Check stream INSTANCE, not chat: after "Stop"
+            // in same chat a new stream could start, and old would write
+            // its text into its tail.
             if (s.runId === runId) useAssistantStream.setState({ text: final })
           }
         }
@@ -1006,41 +1005,41 @@ export function runAssistantCompletion(
         clearTimeout(headerTimer)
         headerTimer = null
       }
-      // (правка 717) AbortError БЕЗ header/idle-таймаутов = пользователь
-      // нажал «Стоп» (см. stopAssistantStream). Помечаем ответ как прерванный,
-      // чтобы обрывок не был закоммичен как готовый промпт.
+      // (fix 717) AbortError WITHOUT header/idle timeouts = user
+      // pressed "Stop" (see stopAssistantStream). Mark response as aborted
+      // so snippet is not committed as complete prompt.
       if ((err as Error).name === 'AbortError' && !idleTimedOut && !headerTimedOut) {
         abortedByUser = true
       }
       if ((err as Error).name !== 'AbortError' || idleTimedOut || headerTimedOut) {
-        // Ошибка ДО старта стрима = структурированный ответ сервера
-        // (409 «идёт генерация», 503 «не освободил VRAM», ...) — показываем
-        // её как есть, БЕЗ маскирующих «дружелюбных» подмен.
-        // Обрыв уже начавшегося ответа — отдельный случай.
+        // Error BEFORE stream start = structured server response
+        // (409 "generation in progress", 503 "did not free VRAM", ...) — show
+        // it as is, WITHOUT masking "friendly" substitutions.
+        // Interruption of already started response is a separate case.
         let msg = err instanceof Error ? err.message : String(err)
         if (headerTimedOut) {
-          // (правка 267) Сервер принял запрос и не отдал заголовки 5 мин
-          // (зависший VRAM-арбитраж/сервер) — освобождаем чат и сервер.
-          msg = 'Ассистент не ответил за 5 минут (сервер занят или завис) — запрос прерван. Отправьте сообщение ещё раз.'
+          // (fix 267) Server accepted request and did not return headers for 5 min
+          // (hung VRAM arbitration / server) — free chat and server.
+          msg = 'Assistant did not respond within 5 minutes (server busy or hung) — request cancelled. Please send message again.'
         } else if (idleTimedOut) {
-          msg = 'Ответ ассистента завис (нет данных 5 мин) — соединение прервано. Отправьте сообщение ещё раз.'
+          msg = 'Assistant response hung (no data for 5 min) — connection aborted. Please send message again.'
         } else if (streamStarted) {
           try {
             const s = (await fetch('/api/llm/status').then((r) => r.json())) as LlmStatusResp
             if (s && !s.running) {
-              msg = 'Соединение с ассистентом оборвалось (сервер остановился). Отправьте сообщение ещё раз — ассистент поднимется заново.'
+              msg = 'Connection to assistant lost (server stopped). Please send message again — assistant will start anew.'
             }
           } catch {
-            /* status unavailable — показываем исходную ошибку */
+            /* status unavailable — show original error */
           }
         }
-        toast.error('Ассистент', { description: msg })
+        toast.error('Assistant', { description: msg })
         if (idleTimedOut || headerTimedOut) void fetch('/api/llm/abort', { method: 'POST' }).catch(() => {})
-        // (правка 717) Ошибку фиксируем В ЧАТЕ, а не только тостом: тост
-        // исчезает через несколько секунд, и сообщение пользователя оставалось
-        // без ответа навсегда. На следующем ходу sanitizeRoles сливал два
-        // user-сообщения, и невыясненный вопрос смешивался со следующим.
-        // Синтетическая реплика ассистента делает сбой видимым и durable.
+        // (fix 717) Record error IN CHAT, not just via toast: toast
+        // disappears after a few seconds, and user message remained
+        // unanswered forever. On next turn sanitizeRoles merged two
+        // user messages, mixing unresolved question with next.
+        // Synthetic assistant turn makes failure visible and durable.
         errorMessage = msg
       }
     } finally {
@@ -1048,43 +1047,43 @@ export function runAssistantCompletion(
       // even when the view is UNMOUNTED — exactly what makes the answer
       // survive tab switches.
       //
-      // (правка 717) Прерванный ответ НЕ коммитится как готовый: раньше
-      // обрыв (abort, обрыв сокета, finish_reason='length') молча
-      // сохранял полупромпт в чат, и пользователь видел «готовый» ответ,
-      // которого нет. Теперь в текст добавляется явная пометка.
+      // (fix 717) Aborted response is NOT committed as complete: previously
+      // interruption (abort, socket break, finish_reason='length') silently
+      // saved half-prompt to chat, and user saw "ready" response
+      // that does not exist. Now an explicit marker is added to text.
       if (final.trim()) {
         const marker = abortedByUser
-          ? '\n\n_[Ответ прерван — показан обрывок.]_'
+          ? '\n\n_[Response aborted — partial snippet shown.]_'
           : truncatedByLimit
-            ? '\n\n_[Ответ обрезан лимитом длины ответа — показан обрывок.]_'
+            ? '\n\n_[Response truncated by token limit — partial snippet shown.]_'
             : errorMessage
-              ? '\n\n_[Соединение прервано — показан обрывок.]_'
+              ? '\n\n_[Connection interrupted — partial snippet shown.]_'
               : ''
         useAssistantChats.getState().appendMessage(chatId, {
           role: 'assistant',
           content: final + marker,
         })
       } else if (errorMessage) {
-        // (правка 717) Ответа не было вовсе — оставляем в чате явную
-        // реплику ассистента, чтобы не «осиротело» сообщение пользователя.
+        // (fix 717) No response at all — leave explicit assistant turn
+        // in chat so user message is not orphaned.
         useAssistantChats.getState().appendMessage(chatId, {
           role: 'assistant',
-          content: `_[Ошибка: ${errorMessage}]_`,
+          content: `_[Error: ${errorMessage}]_`,
         })
       }
-      // (правка 268) Сбрасываем running/activeAbort только если стрим всё ещё
-      // НАШ: stopAssistantStream теперь сбрасывает состояние синхронно, и новый
-      // стрим мог начаться ДО нашего finally — без guard он «погасил» бы чужой
-      // running и чужой AbortController.
+      // (fix 268) Reset running/activeAbort only if stream is still
+      // OURS: stopAssistantStream now resets state synchronously, and a new
+      // stream could start BEFORE our finally — without guard it would clear
+      // someone else's running and someone else's AbortController.
       if (activeAbort === ac) {
         running = false
         activeAbort = null
       }
-      // (правка 717) Сбрасываем живое состояние ТОЛЬКО своего экземпляра.
-      // Проверка по chatId была недостаточна: после «Стоп» в этом же чате
-      // мог начаться новый стрим, и finally старого гасил его (текст нового
-      // ответа пропадал, а running оставался true → следующее сообщение
-      // молча терялось). Сверяем runId.
+      // (fix 717) Reset live state of ONLY own instance.
+      // Checking by chatId was insufficient: after "Stop" in this same chat
+      // a new stream could start, and finally of old would clear it (text of new
+      // response disappeared, while running remained true → next message
+      // silently lost). Check runId.
       if (useAssistantStream.getState().runId === runId) {
         useAssistantStream.setState({ chatId: null, text: '', runId })
       }
@@ -1092,28 +1091,28 @@ export function runAssistantCompletion(
   })()
 }
 
-/** Stop the in-flight reply (user pressed «Стоп»). */
+/** Stop the in-flight reply (user pressed "Stop"). */
 export function stopAssistantStream(): void {
-  // (правка 268) Синхронный сброс состояния ДО abort: раньше running=false и
-  // сброс chatId происходили только в finally асинхронного цикла чтения, и
-  // send(), вызванный в это окно, проходил guard isStreamActive(), но молча
-  // отбрасывался (текст терялся). Теперь повторная отправка сразу видит
-  // свободный движок. Повторный вызов (activeAbort уже null) — no-op:
-  // /api/llm/abort не шлём дважды.
+  // (fix 268) Synchronous state reset BEFORE abort: previously running=false and
+  // chatId reset occurred only in finally of async read loop, and
+  // send() called in this window passed guard isStreamActive(), but was silently
+  // discarded (text was lost). Now retry immediately sees
+  // free engine. Repeat call (activeAbort already null) is a no-op:
+  // we do not send /api/llm/abort twice.
   const ac = activeAbort
   if (!ac) return
   activeAbort = null
   running = false
   const requestId = activeRequestId
   activeRequestId = null
-  // (правка 717) Сбрасываем Идентификатор экземпляра, чтобы finally старого
-  // стрима не счёл свой runId актуальным и не погасил новый стрим в этом чате.
+  // (fix 717) Reset instance identifier so finally of old stream
+  // does not consider its runId active and clear new stream in this chat.
   useAssistantStream.setState({ chatId: null, text: '', runId: 0 })
   ac.abort()
-  // (правка 717) /api/llm/abort — С request_id и с ожиданием ответа: раньше он
-  // был fire-and-forget и мог прийти ПОЗЖЕ следующего /chat, обрывая уже
-  // НОВУЮ генерацию. Теперь прерывание адресное, а клиент ждёт его завершения
-  // до возврата (кнопка «Стоп» гасит только текущий запрос).
+  // (fix 717) /api/llm/abort — WITH request_id and awaiting response: previously it
+  // was fire-and-forget and could arrive AFTER next /chat, aborting
+  // the NEW generation. Now abortion is targeted, and client waits for its completion
+  // before returning ("Stop" button cancels only current request).
   const abortUrl = requestId
     ? `/api/llm/abort?request_id=${encodeURIComponent(requestId)}`
     : '/api/llm/abort'
@@ -1121,7 +1120,7 @@ export function stopAssistantStream(): void {
 }
 
 /**
- * Stop the in-flight reply ONLY if it belongs to `chatId` (правка 32).
+ * Stop the in-flight reply ONLY if it belongs to `chatId` (fix 32).
  *
  * Used when deleting the chat that owns the stream: the engine's `finally`
  * runs its `appendMessage` AFTER the chat is already gone, so the partial

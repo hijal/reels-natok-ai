@@ -4,14 +4,14 @@ import path from 'path'
 import crypto from 'crypto'
 
 /**
- * (правка 74) POST /api/upscale/upload
- * FormData field `file` → стрим в data/upscale-input/<ts>-<name>.
- * Видео/фото для вкладки Upscale (DLSS-мост). Лимит 32 ГБ.
+ * (fix 74) POST /api/upscale/upload
+ * FormData field `file` → stream to data/upscale-input/<ts>-<name>.
+ * Video/photo for Upscale tab (DLSS bridge). 32 GB limit.
  *
- * ВАЖНО: req.formData() буферизует ВЕСЬ файл в памяти (undici собирает
- * multipart в Blob в RAM) — для гигабайтных видео это OOM всего сервера.
- * Поэтому тело запроса разбираем потоково: файл пишем на диск чанками,
- * лимит размера проверяем на лету.
+ * IMPORTANT: req.formData() buffers the ENTIRE file in memory (undici collects
+ * multipart into a Blob in RAM) — for gigabyte videos this causes an OOM for the whole server.
+ * Therefore the request body is parsed as a stream: the file is written to disk in chunks,
+ * size limit is checked on the fly.
  */
 export const dynamic = 'force-dynamic'
 export const maxDuration = 600
@@ -33,7 +33,7 @@ function sanitizeName(name: string): string {
   return base.length > 1 ? base : 'file'
 }
 
-/** boundary из Content-Type: multipart/form-data; boundary=... */
+/** boundary from Content-Type: multipart/form-data; boundary=... */
 function getBoundary(contentType: string | null): string | null {
   if (!contentType) return null
   const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType)
@@ -41,7 +41,7 @@ function getBoundary(contentType: string | null): string | null {
   return b || null
 }
 
-/** filename из content-disposition part-заголовков. */
+/** filename from content-disposition part headers. */
 function parseFileName(headers: string): string | null {
   const cd = headers
     .split(/\r?\n/)
@@ -58,26 +58,26 @@ interface UploadedFile {
   size: number
 }
 
-/** Ошибка валидации (клиентская) — отдавать как 400, а не 500. */
+/** Validation error (client-side) — return as 400, not 500. */
 class UploadError extends Error {}
 
 /**
- * Потоковый разбор multipart/form-data: находит part с filename и пишет его
- * тело в `dest` через переданный фабрикой write stream, не удерживая тело
- * запроса в памяти. Остальные part'ы (поля без filename) пропускаются.
- * Бросает ошибку при превышении MAX_UPLOAD_BYTES — файл удаляется вызывающим.
+ * Streaming parser for multipart/form-data: finds part with filename and writes its
+ * body to `dest` via factory write stream without keeping request body
+ * in memory. Other parts (fields without filename) are skipped.
+ * Throws an error on exceeding MAX_UPLOAD_BYTES — file is cleaned up by the caller.
  */
 async function streamMultipartFile(
   req: NextRequest,
   dest: string,
 ): Promise<UploadedFile> {
   const boundary = getBoundary(req.headers.get('content-type'))
-  if (!boundary) throw new Error('Ожидается multipart/form-data с boundary')
-  if (!req.body) throw new Error('Пустое тело запроса')
+  if (!boundary) throw new Error('multipart/form-data with boundary expected')
+  if (!req.body) throw new Error('Empty request body')
 
   const delim = Buffer.from(`\r\n--${boundary}`)
-  // Виртуальный ведущий CRLF: самый первый «--boundary» в начале тела
-  // матчится тем же разделителем, что и все последующие.
+  // Virtual leading CRLF: the very first "--boundary" at the start of the body
+  // matches the same delimiter as all subsequent ones.
   let carry = Buffer.from('\r\n')
   let phase: 'preamble' | 'headers' | 'body' | 'done' = 'preamble'
   let fileName: string | null = null
@@ -85,11 +85,11 @@ async function streamMultipartFile(
   let sawFile = false
 
   const out = createWriteStream(dest)
-  // (правка 587) 'error'-listener на write-стриме обязателен: ENOSPC/EPERM
-  // посреди записи эмитил 'error' с НУЛЁМ слушателей → uncaught exception
-  // валил весь сервер (колбэки out.write() слушателями не считаются).
-  // Ошибка запоминается в streamError и проваливает ближайший flush/end,
-  // а частичный файл чистит существующий путь отката (out.destroy + unlink).
+  // (fix 587) 'error' listener on the write stream is required: ENOSPC/EPERM
+  // in the middle of writing emitted 'error' with ZERO listeners → uncaught exception
+  // crashed the whole server (out.write() callbacks are not considered listeners).
+  // The error is recorded in streamError and fails the nearest flush/end,
+  // while the partial file is cleaned up by the existing rollback path (out.destroy + unlink).
   let streamError: Error | null = null
   out.on('error', (err: Error) => {
     streamError = err
@@ -103,21 +103,21 @@ async function streamMultipartFile(
 
   try {
     readLoop: for (;;) {
-      // ── разбор накопленного буфера по фазам ──
-      // («done» сюда не доходит: присвоение фазы done всегда сопровождается
-      // break readLoop ниже)
+      // ── parse accumulated buffer by phases ──
+      // ("done" does not reach here: setting phase to done is always accompanied
+      // by break readLoop below)
       for (;;) {
         if (phase === 'preamble') {
           const i = carry.indexOf(delim)
           if (i < 0) {
-            // оставляем хвост длиной delim-1: разделитель может быть разрезан границей чанков
+            // keep tail of length delim-1: delimiter might be split across chunk boundary
             if (carry.length > delim.length - 1) {
               carry = carry.subarray(carry.length - (delim.length - 1))
             }
             break
           }
           carry = carry.subarray(i + delim.length)
-          // после разделителя: «--» = финальный, иначе «\r\n» + заголовки part'а
+          // after delimiter: "--" = final, otherwise "\r\n" + part headers
           if (carry.subarray(0, 2).toString() === '--') {
             phase = 'done'
             break readLoop
@@ -128,7 +128,7 @@ async function streamMultipartFile(
 
         if (phase === 'headers') {
           const i = carry.indexOf('\r\n\r\n')
-          if (i < 0) break // ждём ещё данных
+          if (i < 0) break // wait for more data
           const headers = carry.subarray(0, i).toString('utf8')
           carry = carry.subarray(i + 4)
           fileName = parseFileName(headers)
@@ -138,14 +138,14 @@ async function streamMultipartFile(
         if (phase === 'body') {
           const i = carry.indexOf(delim)
           if (i < 0) {
-            // разделителя нет: всё, кроме потенциального хвоста, — тело part'а
+            // delimiter not found: everything except potential tail is part body
             const keep = delim.length - 1
             if (carry.length > keep) {
               const chunk = carry.subarray(0, carry.length - keep)
               if (fileName) {
                 fileBytes += chunk.length
                 if (fileBytes > MAX_UPLOAD_BYTES) {
-                  throw new UploadError('Файл больше 32 ГБ — слишком большой для обработки')
+                  throw new UploadError('File is larger than 32 GB — too large to process')
                 }
                 await flush(chunk)
               }
@@ -157,7 +157,7 @@ async function streamMultipartFile(
           if (fileName) {
             fileBytes += chunk.length
             if (fileBytes > MAX_UPLOAD_BYTES) {
-              throw new UploadError('Файл больше 32 ГБ — слишком большой для обработки')
+              throw new UploadError('File is larger than 32 GB — too large to process')
             }
             await flush(chunk)
             sawFile = true
@@ -178,10 +178,10 @@ async function streamMultipartFile(
     }
 
     if (!sawFile || !fileName) {
-      throw new UploadError('Файл не передан (ожидается поле "file")')
+      throw new UploadError('File not provided (expected field "file")')
     }
-    // (правка 587) Ошибка стрима могла прилететь между записями (не в
-    // колбэке write) — проверяем флаг и перед end.
+    // (fix 587) Stream error could arrive between writes (not in
+    // write callback) — check flag before end as well.
     if (streamError) throw streamError
     await new Promise<void>((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())))
     return { fileName, size: fileBytes }
@@ -204,11 +204,11 @@ export async function POST(req: NextRequest) {
     const ext = path.extname(uploaded.fileName).toLowerCase()
     if (!IMAGE_EXTS.has(ext) && !VIDEO_EXTS.has(ext)) {
       throw new UploadError(
-        `Формат ${ext || '(без расширения)'} не поддерживается. Поддерживаются изображения (PNG, JPEG, WebP, AVIF, RAW…) и видео (MP4, MOV, MKV, AVI…).`,
+        `Format ${ext || '(no extension)'} is not supported. Supported: images (PNG, JPEG, WebP, AVIF, RAW…) and videos (MP4, MOV, MKV, AVI…).`,
       )
     }
     if (uploaded.size > MAX_UPLOAD_BYTES) {
-      throw new UploadError('Файл больше 32 ГБ — слишком большой для обработки')
+      throw new UploadError('File is larger than 32 GB — too large to process')
     }
 
     const finalName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${sanitizeName(uploaded.fileName)}`
@@ -229,6 +229,6 @@ export async function POST(req: NextRequest) {
     }
     const msg = err instanceof Error ? err.message : String(err)
     const status = err instanceof UploadError ? 400 : 500
-    return NextResponse.json({ error: `Ошибка загрузки: ${msg}` }, { status })
+    return NextResponse.json({ error: `Upload error: ${msg}` }, { status })
   }
 }

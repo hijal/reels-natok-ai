@@ -5,34 +5,34 @@ import path from 'path'
 import { submitWorkflowJson } from '@/lib/comfy/minimax-h3-client'
 import { setActivePrompt } from '@/lib/comfy/progress-tracker'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 import { runGeneration, assertGenerationAllowed } from '@/lib/vram-arbiter'
 import { buildFpsWorkflow } from '@/lib/comfy/fps-template'
 import { recordPendingMetaRaw } from '@/lib/pending-meta'
 import { readPromptChain, readMetaImageRefs } from '@/lib/refine-meta'
 import { probeVideoFile } from '@/lib/video-probe'
-import { getVideoFormatSettings } from '@/lib/video-format-server' // (правка 386)
+import { getVideoFormatSettings } from '@/lib/video-format-server' // (fix 386)
 
 /**
- * POST /api/comfy/fps — frame interpolation (VFI): RIFE VFI / FILM VFI. (правка 268)
+ * POST /api/comfy/fps — frame interpolation (VFI): RIFE VFI / FILM VFI. (fix 268)
  *
  * Body:
- *   sourceFilename  — имя файла в папке output ComfyUI (или inputSource)
- *   sourceSubfolder — подпапка output
+ *   sourceFilename  — file name in ComfyUI output folder (or inputSource)
+ *   sourceSubfolder — output subfolder
  *   mode?           — 'rife' | 'film'. Default 'rife'.
- *   multiplier?     — множитель FPS (2–1000). Default 2.
- *   (правка 269) rifeModel/filmModel не принимаются: по одной модели на
- *   режим, зафиксированы в fps-template.ts (rife49.pth / film_net_fp32.pt).
+ *   multiplier?     — FPS multiplier (2–1000). Default 2.
+ *   (fix 269) rifeModel/filmModel are not accepted: one model per
+ *   mode, fixed in fps-template.ts (rife49.pth / film_net_fp32.pt).
  *   rifeBatchSize?  — RIFE batch_size (1–64). Default 4.
  *   rifeScale?      — RIFE scale_factor (0.25|0.5|1|2|4). Default 1.
  *   rifeDtype?      — RIFE dtype (float32|float16|bfloat16). Default 'float16'.
  *   rifeFastMode?   — RIFE fast_mode. Default false.
  *   rifeEnsemble?   — RIFE ensemble. Default true.
- *   clearCacheAfterNFrames? — анти-OOM (1–1000). Default 4.
- *   inputSource?    — имя файла уже в ComfyUI input/ (файл с диска).
+ *   clearCacheAfterNFrames? — anti-OOM (1–1000). Default 4.
+ *   inputSource?    — file name already in ComfyUI input/ (file from disk).
  *
- * Pipeline: копия output → input (или реюз), ffprobe (width/height/frames/fps),
- * сборка workflow (buildFpsWorkflow) и отправка через общий VRAM-арбитр.
+ * Pipeline: copy output → input (or reuse), ffprobe (width/height/frames/fps),
+ * assemble workflow (buildFpsWorkflow) and submit via shared VRAM arbiter.
  */
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!body?.sourceFilename && !body?.inputSource) {
-      return NextResponse.json({ error: 'sourceFilename (или inputSource) обязателен' }, { status: 400 })
+      return NextResponse.json({ error: 'sourceFilename (or inputSource) is required' }, { status: 400 })
     }
 
     const quickBlock = assertGenerationAllowed()
@@ -63,16 +63,16 @@ export async function POST(req: NextRequest) {
 
     const cfg = getAppConfig()
 
-    // ─── Копия output → input ───
-    // (правка 495) Вложенные папки: subfolder — многоуровневый относительный
-    // путь ('a/b'); сегменты '.'/'..' отбрасываются (правка 317).
+    // ─── Copy output → input ───
+    // (fix 495) Nested folders: subfolder — multi-level relative
+    // path ('a/b'); '.'/'..' segments are dropped (fix 317).
     const sub = sanitizeFolderPath(body.sourceSubfolder || '')
     const safeName = path.basename(body.sourceFilename ?? '')
 
     const workflowParams = {
       mode: body.mode,
       multiplier: body.multiplier,
-      // (правка 269) Модели RIFE/FILM зафиксированы в fps-template.ts.
+      // (fix 269) RIFE/FILM models are fixed in fps-template.ts.
       rifeBatchSize: body.rifeBatchSize,
       rifeScale: body.rifeScale,
       rifeDtype: body.rifeDtype,
@@ -82,12 +82,12 @@ export async function POST(req: NextRequest) {
       outputSubfolder: '',
     }
 
-    // (правка 722) Общие поля сайдкара FPS. Раньше в метаданных вставки
-    // кадров не было НИ пайплайна, НИ seed, НИ самих настроек RIFE — по
-    // сайдкару результата нельзя было понять, как именно он получен.
-    // Итоговую геометрию (кадры/разрешение/длительность) дописывает
-    // finalizePendingMeta — пробой самого файла (у FPS кадров в ×multiplier
-    // больше, чем в исходнике, плановые цифры не годились).
+    // (fix 722) Common FPS sidecar fields. Previously, frame interpolation
+    // metadata had NEITHER pipeline, NOR seed, NOR RIFE settings themselves — from the
+    // result sidecar it was impossible to tell how exactly it was produced.
+    // Final geometry (frames/resolution/duration) is added by
+    // finalizePendingMeta — via probe of the file itself (FPS has ×multiplier
+    // more frames than source, planned numbers were inadequate).
     const fpsCommonMeta = {
       pipeline: 'full',
       ...(body.mode === 'rife' && {
@@ -102,24 +102,24 @@ export async function POST(req: NextRequest) {
       }),
     }
 
-    // ─── Файл с диска (inputSource) ───
+    // ─── File from disk (inputSource) ───
     if (body.inputSource) {
       const inName = path.basename(body.inputSource)
       const inPath = path.join(cfg.inputDir, inName)
       if (!existsSync(inPath)) {
-        return NextResponse.json({ error: `Файл не найден в input: ${inName}` }, { status: 404 })
+        return NextResponse.json({ error: `File not found in input: ${inName}` }, { status: 404 })
       }
       let probe: { width: number; height: number; frames: number; durationSec: number; fps?: number }
       try {
         probe = await probeVideoFile(inPath)
       } catch (e) {
         return NextResponse.json(
-          { error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}` },
+          { error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}` },
           { status: 400 },
         )
       }
 
-      // (правка 268) fps из r_frame_rate (probe.fps), fallback — frames/duration.
+      // (fix 268) fps from r_frame_rate (probe.fps), fallback — frames/duration.
       const srcFps = probe.fps ?? Math.max(1, Math.min(120, Math.round((probe.frames / Math.max(probe.durationSec, 0.01)) * 100) / 100))
       const run = await runGeneration(() =>
         submitWorkflowJson(
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
           source_video: { filename: inName, subfolder: 'input' },
           source: { width: probe.width, height: probe.height, frames: probe.frames, fps: srcFps },
           input_source: true,
-          ...fpsCommonMeta, // (правка 722)
+          ...fpsCommonMeta, // (fix 722)
         })
       }
       return NextResponse.json({
@@ -151,15 +151,15 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ─── Файл из галереи (output) ───
+    // ─── File from gallery (output) ───
     const sourcePath = path.join(cfg.outputDir, sub, safeName)
-    // (правка 318) Страховка: итоговый путь обязан остаться внутри outputDir.
+    // (fix 318) Safeguard: target path must remain inside outputDir.
     const outputRoot = path.resolve(cfg.outputDir)
     if (!path.resolve(sourcePath).startsWith(outputRoot + path.sep)) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
     }
     if (!existsSync(sourcePath)) {
-      return NextResponse.json({ error: `Файл не найден: ${safeName}` }, { status: 404 })
+      return NextResponse.json({ error: `File not found: ${safeName}` }, { status: 404 })
     }
 
     await fs.mkdir(cfg.inputDir, { recursive: true })
@@ -168,15 +168,15 @@ export async function POST(req: NextRequest) {
     let n = 1
     while (true) {
       try {
-        // (правка 346) COPYFILE_EXCL — атомарно, без unlink-окна;
-        // ловим ТОЛЬКО EEXIST, остальные ошибки пробрасываем.
+        // (fix 346) COPYFILE_EXCL — atomically, without unlink window;
+        // catch ONLY EEXIST, rethrow other errors.
         await fs.copyFile(sourcePath, destPath, fs.constants.COPYFILE_EXCL)
         break
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
         const ext = path.extname(safeName)
         const stem = safeName.slice(0, safeName.length - ext.length)
-        // (правка 362) Старый паттерн пропускал _fps1 и давал коллизии без номера.
+        // (fix 362) Old pattern skipped _fps1 and gave collisions without number.
         destName = `${stem}_fps${n++}${ext}`
         destPath = path.join(cfg.inputDir, destName)
         if (n > 100) return NextResponse.json({ error: 'Too many duplicates' }, { status: 500 })
@@ -189,26 +189,26 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       await fs.unlink(destPath).catch(() => {})
       return NextResponse.json(
-        { error: `Не удалось прочитать видео: ${e instanceof Error ? e.message : String(e)}` },
+        { error: `Failed to read video: ${e instanceof Error ? e.message : String(e)}` },
         { status: 400 },
       )
     }
 
-    // (правка 319) Наследование из сайдкара исходника: цепочка промптов
-    // (для extend-combined — вся цепочка «исходник → клипы») и image-референсы.
-    // Нет меты / пусто — поля не добавляем.
+    // (fix 319) Inheritance from source sidecar: prompt chain
+    // (for extend-combined — entire chain "source → clips") and image references.
+    // No meta / empty — do not add fields.
     const fpsPrompt = readPromptChain(sub, safeName)
     const fpsMetaRefs = readMetaImageRefs(sub, safeName)
 
-    // (правка 268) fps из r_frame_rate (probe.fps), fallback — frames/duration.
+    // (fix 268) fps from r_frame_rate (probe.fps), fallback — frames/duration.
     const srcFps = probe.fps ?? Math.max(1, Math.min(120, Math.round((probe.frames / Math.max(probe.durationSec, 0.01)) * 100) / 100))
     const run = await runGeneration(() =>
       submitWorkflowJson(
-        buildFpsWorkflow({ sourceVideo: destName, sourceFps: srcFps, ...workflowParams, outputSubfolder: sub, videoFormat: getVideoFormatSettings() }), // (правка 367) результат — в папку оригинала
+        buildFpsWorkflow({ sourceVideo: destName, sourceFps: srcFps, ...workflowParams, outputSubfolder: sub, videoFormat: getVideoFormatSettings() }), // (fix 367) result into original folder
       ),
     )
     if (!run.ok) {
-      // (правка 344) Откат копии в input/ — иначе осиротевший файл.
+      // (fix 344) Rollback copy in input/ — otherwise orphaned file.
       await fs.unlink(destPath).catch(() => {})
       return NextResponse.json({ error: run.error }, { status: run.status })
     }
@@ -222,8 +222,8 @@ export async function POST(req: NextRequest) {
         fps_multiplier: body.multiplier ?? 2,
         source_video: { filename: safeName, subfolder: sub },
         source: { width: probe.width, height: probe.height, frames: probe.frames, fps: srcFps },
-        ...fpsCommonMeta, // (правка 722)
-        // (правка 319) наследуем промпт-цепочку и референсы исходника
+        ...fpsCommonMeta, // (fix 722)
+        // (fix 319) inherit prompt chain and references of source
         ...(fpsPrompt && { prompt: fpsPrompt }),
         ...(fpsMetaRefs.length > 0 && {
           references: fpsMetaRefs.map((r) => ({ type: 'image', path: r.path, role: r.role })),

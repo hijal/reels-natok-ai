@@ -1,22 +1,22 @@
 /**
- * (правка 123) Вставка изображений по Ctrl+V из буфера обмена.
+ * (fix 123) Paste images via Ctrl+V from clipboard.
  *
- * Общий хелпер: извлекает только файлы image/* из clipboardData,
- * работая и с `dt.files`, и с `dt.items` (getAsFile) — так покрываются
- * Chrome/Edge и Firefox (в Firefox вставленная картинка отдаётся
- * именно через items).
+ * Common helper: extracts only image/* files from clipboardData,
+ * working with both `dt.files` and `dt.items` (getAsFile) — covering
+ * Chrome/Edge and Firefox (in Firefox a pasted image is provided
+ * specifically via items).
  *
- * Дедупликация: буфер обмена Windows может содержать одно изображение в
- * нескольких форматах (PNG + BMP, PNG + EMF и т.д.), и браузер отдаёт их как
- * разные File-объекты. Чтобы не появлялось две копии одного скриншота,
- * берём ПЕРВЫЙ файл и отбрасываем все остальные — типичная вставка содержит
- * ровно одно изображение. Если у файла нет имени/расширения — подставляем
- * имя по MIME, чтобы `detectKind` и серверные загрузки работали как с
- * обычным файлом.
+ * Deduplication: the Windows clipboard may contain one image in
+ * multiple formats (PNG + BMP, PNG + EMF, etc.), and the browser returns them as
+ * distinct File objects. To prevent duplicate copies of a single screenshot,
+ * we take the FIRST file and discard the rest — a typical paste contains
+ * exactly one image. If the file has no name/extension — we substitute
+ * a name based on MIME type so `detectKind` and server uploads work like a
+ * normal file.
  */
 /**
- * Быстрая синхронная проверка: есть ли в буфере хотя бы одно изображение.
- * Нужно, чтобы `preventDefault` в onPaste вызывался синхронно (до await).
+ * Fast synchronous check: whether the clipboard contains at least one image.
+ * Needed so that `preventDefault` in onPaste is called synchronously (before await).
  */
 export function hasClipboardImage(dt: DataTransfer | null | undefined): boolean {
   if (!dt) return false
@@ -43,20 +43,20 @@ export async function getClipboardImageFiles(dt: DataTransfer | null | undefined
     seen.add(f)
     candidates.push(f)
   }
-  // items — сначала (надёжнее для «чистой» вставки из скриншотов/пейджера)
+  // items — first (more reliable for "clean" paste from screenshots/pager)
   try {
     if (dt.items && dt.items.length) {
       for (const it of Array.from(dt.items)) {
         if (it.kind === 'file') push(it.getAsFile())
       }
     }
-  } catch { /* некоторые браузеры не дают итерации — просто переходим к files */ }
+  } catch { /* some browsers don't allow iteration — simply fall through to files */ }
   for (const f of Array.from(dt.files ?? [])) push(f)
   if (candidates.length === 0) return []
 
-  // Дедупликация по содержимому: берём hash первых 64 КБ каждого файла.
-  // Альтернативные представления одного изображения (PNG+BMP) имеют разные
-  // байты, но обычно одинаковый размер — дедуплицируем по (size, type).
+  // Deduplicate by content: take hash of first 64 KB of each file.
+  // Alternative representations of one image (PNG+BMP) have different
+  // bytes, but usually the same size — deduplicate by (size, type).
   const unique: File[] = []
   const seenSizeType = new Set<string>()
   for (const f of candidates) {
@@ -66,7 +66,7 @@ export async function getClipboardImageFiles(dt: DataTransfer | null | undefined
     unique.push(f)
   }
   
-  // Если остался только один кандидат — возвращаем его (с нормализацией имени).
+  // If only one candidate remains — return it (with normalized name).
   if (unique.length === 1) {
     const f = unique[0]
     if (f.name && /\.[a-z0-9]{2,5}$/i.test(f.name)) return [f]
@@ -75,7 +75,7 @@ export async function getClipboardImageFiles(dt: DataTransfer | null | undefined
     return [new File([f], name, { type: f.type })]
   }
   
-  // Несколько уникальных изображений — возвращаем все (с нормализацией имён).
+  // Multiple unique images — return all (with normalized names).
   const ts = Date.now()
   return unique.map((f, i) => {
     if (f.name && /\.[a-z0-9]{2,5}$/i.test(f.name)) return f
@@ -86,13 +86,13 @@ export async function getClipboardImageFiles(dt: DataTransfer | null | undefined
 }
 
 /**
- * (правка 125) Чтение изображения из буфера через асинхронный Clipboard API.
+ * (fix 125) Read image from clipboard via async Clipboard API.
  *
- * Фолбэк на случай, когда браузер НЕ диспатчит `paste`-событие
- * (фокус на кнопке/не-editable элементе или вне дерева вкладки).
- * Вызывается из обработчика keydown Ctrl+V — это user gesture, поэтому
- * `navigator.clipboard.read()` разрешён. Возвращает null, если в буфере
- * нет картинок или API недоступно (тогда сработает обычный `paste`).
+ * Fallback for cases where the browser does NOT dispatch a `paste` event
+ * (focus on a button/non-editable element or outside the tab tree).
+ * Called from the keydown Ctrl+V handler — this is a user gesture, so
+ * `navigator.clipboard.read()` is permitted. Returns null if there are no
+ * images in the clipboard or the API is unavailable (then regular `paste` triggers).
  */
 export async function getClipboardImageFromApi(): Promise<File | null> {
   try {
@@ -109,8 +109,8 @@ export async function getClipboardImageFromApi(): Promise<File | null> {
       return new File([blob], name, { type: imgTypes[0] })
     }
   } catch {
-    // Нет разрешения / API недоступен — молча игнорируем,
-    // вставкой займётся обычный paste-событие.
+    // Permission denied / API unavailable — silently ignore,
+    // normal paste event will handle it.
   }
   return null
 }

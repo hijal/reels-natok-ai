@@ -1,24 +1,24 @@
 /**
- * (правка 718) Сверка персистентного состояния «генерация идёт» с живым
- * ComfyUI при запуске приложения.
+ * (fix 718) Reconciliation of persistent "generation in progress" state with
+ * live ComfyUI on app startup.
  *
- * Проблема: стор `gen-progress` (и очередь `gen-queue`) сохраняются в
- * localStorage. При перезапуске приложения они восстанавливают фазу
- * 'running'/'queued' — и карточка «Генерация идёт» сразу показывается,
- * хотя генерации давно нет (ComfyUI был перезапущен, задача упала, компьютер
- * перезагрузили). Пользователь видит «идёт генерация», хотя ничего не
- * происходит, и кнопка «Сгенерировать» заблокирована.
+ * Problem: the `gen-progress` store (and `gen-queue` queue) are saved in
+ * localStorage. On app restart they restore the 'running'/'queued' phase — and
+ * the "Generation in progress" card is immediately shown, even though the generation
+ * ended long ago (ComfyUI restarted, job crashed, computer rebooted).
+ * The user sees "generation in progress" while nothing is happening,
+ * and the "Generate" button is blocked.
  *
- * Что делаем: один раз за сессию спрашиваем ComfyUI, какие prompt_id
- * реально в очереди/выполняются, и снимаем «зависшее» состояние.
+ * What we do: once per session, ask ComfyUI which prompt_ids are
+ * actually queued/running, and clear any "stuck" state.
  *
- * Важные правила:
- *   • Если ComfyUI НЕ ОТВЕЧАЕТ (поднимается) — состояние НЕ трогаем:
- *     мы не знаем, что происходит, и не имеем права врать.
- *   • Если задача в ComfyUI есть — оставляем «идёт» как есть, поллеры
- *     переподключатся и сами доведут задачу до конца.
- *   • Если задачи в ComfyUI нет — снимаем фазу «идёт» и помечаем элемент
- *     очереди как прерванный (с понятным текстом, а не молчаливый висяк).
+ * Important rules:
+ *   • If ComfyUI DOES NOT RESPOND (booting up) — DO NOT touch state:
+ *     we don't know what is happening and shouldn't guess.
+ *   • If the task exists in ComfyUI — leave "in progress" as is; pollers
+ *     will reconnect and track the task to completion.
+ *   • If the task is not in ComfyUI — clear the "in progress" phase and mark
+ *     the queue item as interrupted (with clear error text, not a silent hang).
  */
 import { useGenProgress } from './gen-progress-store'
 import { useGenQueue } from './gen-queue-store'
@@ -27,36 +27,36 @@ import { useFpsJob } from './fps-job-store'
 import { useTileUpscaleJob } from './tile-upscale-job-store'
 import { useFaceRefineJob } from './face-refine-job-store'
 
-/** Фазы, в которых карточка показывает «генерация идёт». */
+/** Phases in which the card shows "generation in progress". */
 const ACTIVE_PHASES = ['submitting', 'queued', 'running'] as const
 
-/** Запущено ли уже (за сессию) — повторно не сверяем. */
+/** Whether already started (per session) — do not reconcile repeatedly. */
 let started = false
-/** Отменён ли (компонент размонтировался до ответа). */
+/** Whether cancelled (component unmounted before response). */
 let cancelled = false
 
 /**
- * Сверить состояние. Возвращает промис, который резолвится, когда сверка
- * завершена (успешной ИЛИ окончательно невозможной).
+ * Reconciles state. Returns a promise that resolves when reconciliation
+ * completes (successfully OR definitively impossible).
  */
 export function reconcileGenerationOnStartup(): Promise<void> {
   if (started) return Promise.resolve()
   started = true
   cancelled = false
   return run().catch(() => {
-    /* сверка не критична — молча продолжаем */
+    /* reconciliation is non-critical — silently proceed */
   })
 }
 
 async function run(): Promise<void> {
-  // ComfyUI поднимается ~30-60 с. Пока он не отвечает — сверять нечего, но и
-  // сбрасывать нельзя. Ждём до 5 минут и сверяем на ПЕРВЫЙ удачный ответ.
+  // ComfyUI takes ~30-60s to boot. While it is unresponsive — there's nothing to reconcile,
+  // but we shouldn't reset either. Wait up to 5 minutes and reconcile on FIRST successful response.
   const deadline = Date.now() + 5 * 60_000
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
   for (;;) {
     if (cancelled) return
-    // Кандидаты на проверку: карточка прогресса + активные элементы очереди.
+    // Candidates to check: progress card + active queue items.
     const candidates = collectCandidates()
     const answer = await fetchActive(candidates)
     if (answer) {
@@ -68,7 +68,7 @@ async function run(): Promise<void> {
   }
 }
 
-/** prompt_id, которые могут выглядеть «висящими». */
+/** prompt_ids that might appear "hung". */
 function collectCandidates(): string[] {
   const out = new Set<string>()
   const video = useGenProgress.getState().video
@@ -79,8 +79,8 @@ function collectCandidates(): string[] {
     if (it.status !== 'queued' && it.status !== 'running') continue
     if (it.promptId) out.add(it.promptId)
   }
-  // Отдельные сторы вкладок ControlNet / FPS / Tile Upscale — у них свой
-  // персистентный 'busy' и своя карточка статуса.
+  // Dedicated stores for ControlNet / FPS / Tile Upscale tabs — they have their own
+  // persistent 'busy' flag and their own status card.
   const cn = useControlNetJob.getState()
   if (cn.busy && cn.promptId) out.add(cn.promptId)
   const fps = useFpsJob.getState()
@@ -93,13 +93,13 @@ function collectCandidates(): string[] {
 }
 
 interface ActiveAnswer {
-  /** prompt_id, реально живые в очереди ComfyUI. */
+  /** prompt_ids actually alive in the ComfyUI queue. */
   alive: Set<string>
-  /** Уточнённое состояние запрошенных промптов. */
+  /** Detailed state of requested prompts. */
   states: Record<string, 'alive' | 'done' | 'gone'>
 }
 
-/** Состояние ComfyUI. null — ComfyUI не ответил (сверять нельзя). */
+/** ComfyUI state. null — ComfyUI did not respond (cannot reconcile). */
 async function fetchActive(candidates: string[]): Promise<ActiveAnswer | null> {
   try {
     const qs = candidates.length ? `?check=${encodeURIComponent(candidates.join(','))}` : ''
@@ -110,7 +110,7 @@ async function fetchActive(candidates: string[]): Promise<ActiveAnswer | null> {
       prompts?: string[]
       states?: Record<string, 'alive' | 'done' | 'gone'>
     }
-    // ok === false → ComfyUI недоступен, ответ неинформативен.
+    // ok === false → ComfyUI is unavailable, response is uninformative.
     if (data.ok !== true) return null
     return {
       alive: new Set(Array.isArray(data.prompts) ? data.prompts : []),
@@ -125,24 +125,24 @@ function applyReconciliation(answer: ActiveAnswer): void {
   const { alive, states } = answer
   const gone = (id: string) => states[id] === 'gone'
 
-  // ── 1) Карточка «Генерация идёт» ──
+  // ── 1) "Generation in progress" card ──
   const video = useGenProgress.getState().video
   if (video.promptId && (ACTIVE_PHASES as readonly string[]).includes(video.phase)) {
-    // «Нет в очереди» ещё не значит «прервана»: задача могла только что
-    // завершиться (ComfyUI переносит её в history). Сбрасываем только когда
-    // ComfyUI о таком промпте вообще не знает ('gone').
+    // "Not in queue" doesn't mean "interrupted" yet: the task may have just
+    // finished (ComfyUI moves it to history). Only reset when
+    // ComfyUI has no knowledge of this prompt at all ('gone').
     if (!alive.has(video.promptId) && gone(video.promptId)) {
       console.log(
-        `[reconcile] генерация ${video.promptId} в ComfyUI отсутствует — снимаем фазу «${video.phase}»`,
+        `[reconcile] generation ${video.promptId} missing from ComfyUI — resetting phase "${video.phase}"`,
       )
       useGenProgress.getState().resetVideoGen()
     }
   }
 
-  // ── 2) Элементы очереди в активных статусах ──
-  // «submitting» без prompt_id — это задача, чей POST /generate был в полёте
-  // на момент закрытия приложения. Её разбирает существующая логика
-  // восстановления через журнал inflight (use-video-gen) — не трогаем.
+  // ── 2) Queue items in active statuses ──
+  // "submitting" without prompt_id is a task whose POST /generate was inflight
+  // when the application closed. Handled by existing inflight recovery
+  // logic (use-video-gen) — do not touch.
   const items = useGenQueue.getState().items
   for (const it of items) {
     if (it.status !== 'queued' && it.status !== 'running') continue
@@ -150,68 +150,67 @@ function applyReconciliation(answer: ActiveAnswer): void {
     if (alive.has(it.promptId)) continue
     if (!gone(it.promptId)) continue
     console.log(
-      `[reconcile] задача ${it.promptId} в ComfyUI отсутствует — помечаем прерванной`,
+      `[reconcile] task ${it.promptId} missing from ComfyUI — marking interrupted`,
     )
     useGenQueue
       .getState()
-      .setStatus(it.id, 'error', 'Прервана: приложение было перезапущено, генерации в ComfyUI нет')
+      .setStatus(it.id, 'error', 'Interrupted: application was restarted, generation not found in ComfyUI')
   }
 
-  // ── 3) Отдельные сторы вкладок ControlNet / FPS / Tile Upscale ──
-  // У них свой персистентный 'busy': после перезапуска вкладка тоже показывала
-  // «генерация идёт», пока их поллер не набирал неизвестных ответов.
+  // ── 3) Dedicated stores for ControlNet / FPS / Tile Upscale tabs ──
+  // They have their own persistent 'busy': after restart the tab also showed
+  // "generation in progress" until their poller hit unknown responses.
   const cn = useControlNetJob.getState()
   if (cn.busy && cn.promptId && !alive.has(cn.promptId) && gone(cn.promptId)) {
-    console.log(`[reconcile] ControlNet ${cn.promptId} в ComfyUI отсутствует — снимаем busy`)
+    console.log(`[reconcile] ControlNet ${cn.promptId} missing from ComfyUI — clearing busy`)
     useControlNetJob.getState().reset()
   }
   const fps = useFpsJob.getState()
   if (fps.busy && fps.promptId && !alive.has(fps.promptId) && gone(fps.promptId)) {
-    console.log(`[reconcile] FPS ${fps.promptId} в ComfyUI отсутствует — снимаем busy`)
+    console.log(`[reconcile] FPS ${fps.promptId} missing from ComfyUI — clearing busy`)
     useFpsJob.getState().reset()
   }
   const tu = useTileUpscaleJob.getState()
   if (tu.busy && tu.promptId && !alive.has(tu.promptId) && gone(tu.promptId)) {
-    console.log(`[reconcile] Tile Upscale ${tu.promptId} в ComfyUI отсутствует — снимаем busy`)
+    console.log(`[reconcile] Tile Upscale ${tu.promptId} missing from ComfyUI — clearing busy`)
     useTileUpscaleJob.getState().reset()
   }
   const fr = useFaceRefineJob.getState()
   if (fr.busy && fr.promptId && !alive.has(fr.promptId) && gone(fr.promptId)) {
-    console.log(`[reconcile] Face Refine ${fr.promptId} в ComfyUI отсутствует — снимаем busy`)
+    console.log(`[reconcile] Face Refine ${fr.promptId} missing from ComfyUI — clearing busy`)
     useFaceRefineJob.getState().reset()
   }
 }
 
-/** Отменить ожидание (вызывается при размонтировании). */
+/** Cancel waiting (called on unmount). */
 export function cancelReconcile(): void {
   cancelled = true
 }
 
 /**
- * Почистить элементы общей очереди, которые после перезапуска приложения
- * уже некому отправить. Очередь persisted, а payload/ожидающие промисы живут
- * только в памяти страницы. У видео есть отдельное inflight-восстановление
- * через clientToken, поэтому `submitting`-видео не трогаем; `queued`-видео
- * означает, что оно ждало ход и не было отправлено.
+ * Cleans up items from general queue that no longer have a runner after app restart.
+ * The queue is persisted, but payloads/waiting promises live only in page memory.
+ * Video has separate inflight recovery via clientToken, so `submitting` video is
+ * untouched; `queued` video means it was waiting its turn and was never dispatched.
  */
 export function cleanupLostPendingQueueItems(): void {
   const { items, setStatus } = useGenQueue.getState()
   for (const item of items) {
     if (item.promptId) continue
-    if (item.type === 'upscale') continue // DLSS живёт отдельно
+    if (item.type === 'upscale') continue // DLSS lives separately
     if (item.status !== 'submitting' && item.status !== 'queued') continue
     if (item.type === 'video' && item.status === 'submitting') continue
 
     setStatus(
       item.id,
       'error',
-      'Приложение было перезапущено — задача не была отправлена. Запустите её заново.',
+      'The application was restarted — task was not dispatched. Please submit it again.',
     )
   }
 
-  // Если потерянная задача была видео, карточка «Отправка…/В очереди» могла
-  // остаться в persisted gen-progress. Не сбрасываем её, пока есть шанс
-  // восстановить POST через clientToken (`submitting` без promptId).
+  // If the lost task was video, the "Submitting.../Queued" card could remain
+  // in persisted gen-progress. Do not reset it while there's a chance to recover
+  // the POST via clientToken (`submitting` without promptId).
   const itemsNow = useGenQueue.getState().items
   const hasRecoverableVideo = itemsNow.some(
     (item) =>

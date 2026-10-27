@@ -1,111 +1,110 @@
-# Установщик зависимостей
+# Dependency Installer
 
-Восстанавливает рабочее окружение студии на чистой машине Windows x64.
-Запускается одним файлом `install.bat` в корне проекта.
+Restores the studio's working environment on a clean Windows x64 machine.
+Launched with a single file `install.bat` at the project root.
 
-## Что делает
+## What it does
 
-| Шаг | Что устанавливает |
+| Step | What it installs |
 | --- | --- |
-| 1 | Проверки: Windows x64, свободное место, интернет, драйвер NVIDIA |
-| 2 | Node.js 22 (портативный в `runtime\`) — если в системе нет 18+ |
-| 3 | `node_modules` (`npm ci`) + production-сборка `.next` |
-| 4 | ComfyUI (сборка `5f0c4e1` + патчи проекта) + Python **3.12.10** (embedded) |
-| 5 | torch **2.11.0+cu130** и 288 пакетов по зафиксированным версиям |
-| 6 | 22 кастомные ноды по зафиксированным коммитам + 4 собственные ноды студии |
-| 7 | Папки моделей, `extra_model_paths.yaml`, блокировка автообновления |
-| 8 | Пробный запуск ComfyUI и проверка импорта всех нод |
+| 1 | Checks: Windows x64, free disk space, internet, NVIDIA driver |
+| 2 | Node.js 22 (portable in `runtime\`) — if 18+ is not present on the system |
+| 3 | `node_modules` (`npm ci`) + production build `.next` |
+| 4 | ComfyUI (build `5f0c4e1` + project patches) + Python **3.12.10** (embedded) |
+| 5 | torch **2.11.0+cu130** and 288 pinned-version packages |
+| 6 | 22 custom nodes at pinned commits + 4 studio internal nodes |
+| 7 | Model directories, `extra_model_paths.yaml`, auto-update lock |
+| 8 | ComfyUI test run and verification of all node imports |
 
-**Модели не скачиваются.** После установки запустите `start.bat` и скачайте
-модели через UI: Настройки → Модели.
+**Models are not downloaded.** After installation, run `start.bat` and download
+models via the UI: Settings → Models.
 
-## Требования
+## Requirements
 
 - Windows 10/11 x64
-- 25 ГБ свободного места (само окружение — ~12 ГБ, плюс место под модели)
-- Интернет: при установке скачивается ~9 ГБ
-- NVIDIA GPU + драйвер CUDA 12.x (без него студия запустится, но генерировать не сможет)
+- 25 GB free disk space (environment itself is ~12 GB, plus space for models)
+- Internet connection: ~9 GB downloaded during installation
+- NVIDIA GPU + CUDA 12.x driver (without it the studio will start, but cannot generate)
 
-## Запуск
+## Running
 
 ```
 install.bat
 ```
 
-Или с параметрами (PowerShell):
+Or with parameters (PowerShell):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Force
 ```
 
-| Параметр | Что делает |
+| Parameter | Description |
 | --- | --- |
-| `-Force` | Переустановить всё заново (удаляет `node_modules`, ComfyUI, ноды, кэш) |
-| `-SkipApp` | Не трогать Node.js и сборку приложения |
-| `-SkipComfy` | Не трогать ComfyUI (Python, пакеты, ноды) |
-| `-KeepCache` | Оставить скачанные архивы и pip-кэш |
-| `-NoPause` | Не ждать Enter в конце |
-| `-Root <путь>` | Другая папка проекта |
+| `-Force` | Reinstall everything from scratch (removes `node_modules`, ComfyUI, nodes, cache) |
+| `-SkipApp` | Do not touch Node.js or the app build |
+| `-SkipComfy` | Do not touch ComfyUI (Python, packages, nodes) |
+| `-KeepCache` | Keep downloaded archives and pip cache |
+| `-NoPause` | Do not wait for Enter at the end |
+| `-Root <path>` | Custom project root directory |
 
-Скрипт можно запускать повторно: уже установленные компоненты пропускаются,
-поэтому он же работает как «починка» после сбоя.
+The script can be run repeatedly: already installed components are skipped,
+so it also functions as a "repair" tool after failures.
 
-## Что НЕ восстанавливается
+## What is NOT restored
 
-Эти папки не входят в git (слишком большие и/или проприетарные), установщик
-про них только предупреждает:
+These folders are not included in git (too large and/or proprietary); the installer
+only displays a warning for them:
 
-| Папка | Размер | Что будет без неё |
+| Folder | Size | Impact if missing |
 | --- | --- | --- |
-| `upscale\bin\` | ~1.1 ГБ | вкладка **Upscale** (DLSS 5) не запустится |
-| `stt\` | ~168 МБ | не работает **голосовой ввод** |
+| `upscale\bin\` | ~1.1 GB | **Upscale** tab (DLSS 5) will not work |
+| `stt\` | ~168 MB | **Voice input** will not work |
 
-Их нужно скопировать с рабочей машины вручную: положить папки рядом с
-`start.bat`. Всё остальное (генерация, продление, refine, FPS, Face Refine,
-ControlNet, галерея) работает без них.
+They need to be copied manually from a working machine: place the folders next to
+`start.bat`. Everything else (generation, extension, refine, FPS, Face Refine,
+ControlNet, gallery) works without them.
 
-## Версия ComfyUI и патчи проекта
+## ComfyUI version and project patches
 
-Ядро ComfyUI скачивается не из тега, а из конкретного коммита
-`5f0c4e18cb7e98f0e7c46c2c7ce928d641351e67` (25.08.2026) — именно на нём
-построена рабочая установка студии (`__version__` при этом остаётся `0.33.0`).
+ComfyUI core is downloaded not from a tag, but from a specific commit
+`5f0c4e18cb7e98f0e7c46c2c7ce928d641351e67` (2026-08-25) — the studio's working setup
+is built specifically on it (`__version__` remains `0.33.0`).
 
-Поверх ядра установщик при каждом запуске копирует 4 файла из
-`install/comfy-patches/`:
+On top of the core, the installer copies 4 files from `install/comfy-patches/` on every run:
 
-| Файл | Зачем |
+| File | Purpose |
 | --- | --- |
-| `comfy/ldm/minimax/model.py` | слой `to_gate_compress` для VSA-весов, `minimax_h3_layout` и `block_index` для Veda sparse attention |
-| `comfy/model_detection.py` | определение `gate_compress` в VSA-чекпоинтах |
-| `comfy_extras/nodes_minimax_h3.py` | правки keyframe-latent (правки 146/149) + ноды `MiniMaxH3AudioOrSilent` / `MiniMaxH3AudioSliceFrom` (аудио исходника/тишина и срез хвоста — нужны рефайну, face-refine и продлению) |
-| `utils/extra_config.py` | списки путей в `extra_model_paths.yaml` (студия пишет их списками) |
+| `comfy/ldm/minimax/model.py` | `to_gate_compress` layer for VSA weights, `minimax_h3_layout` and `block_index` for Veda sparse attention |
+| `comfy/model_detection.py` | detection of `gate_compress` in VSA checkpoints |
+| `comfy_extras/nodes_minimax_h3.py` | keyframe-latent fixes (patches 146/149) + nodes `MiniMaxH3AudioOrSilent` / `MiniMaxH3AudioSliceFrom` (source audio / silence and tail slice — required for refine, face-refine, and extension) |
+| `utils/extra_config.py` | list of paths in `extra_model_paths.yaml` (studio writes them as lists) |
 
-Копирование идемпотентно: повторный запуск установщика восстанавливает патчи,
-даже если ComfyUI уже был установлен или обновлён.
+The copying is idempotent: re-running the installer restores the patches even if
+ComfyUI was already installed or updated.
 
-## Если что-то пошло не так
+## Troubleshooting
 
-1. Откройте `install.log` в корне проекта — там пошаговый лог с ошибками.
-2. Повторите запуск `install.bat`: скрипт продолжит с места сбоя.
-3. Если ошибка в конкретной ноде — её можно исключить из `install/nodes.json`
-   и запустить установку снова.
+1. Open `install.log` in the project root — it contains a step-by-step log with error details.
+2. Re-run `install.bat`: the script will resume from where it failed.
+3. If an error is in a specific node, it can be excluded from `install/nodes.json`
+   and installation can be run again.
 
-Частые причины:
+Common issues:
 
-| Ошибка | Решение |
+| Error | Solution |
 | --- | --- |
-| `Недостаточно места` | Освободите диск или перенесите проект на другой |
-| `Нет доступа к интернету` | Проверьте VPN/прокси, попробуйте снова |
-| `torch не импортируется` | Повторите шаг: `pip` мог скачать битый файл, запустите с `-Force` |
-| ComfyUI не поднялся | Смотрите `install.log`: чаще всего не хватает прав или антивирус блокирует `python.exe` |
+| `Not enough disk space` | Free up disk space or move the project to another drive |
+| `No internet access` | Check VPN/proxy, try again |
+| `torch cannot be imported` | Retry the step: `pip` might have downloaded a corrupt file, run with `-Force` |
+| ComfyUI failed to start | Check `install.log`: most commonly insufficient permissions or antivirus blocking `python.exe` |
 
-## Как обновить версии
+## How to update versions
 
-Все версии зафиксированы в трёх файлах:
+All versions are pinned across three files:
 
-- `install/requirements.lock.txt` — Python-пакеты (288)
-- `install/requirements.sdist.txt` — пакеты, собираемые из исходников (8)
-- `install/nodes.json` — репозиторий + коммит каждой кастомной ноды
+- `install/requirements.lock.txt` — Python packages (288)
+- `install/requirements.sdist.txt` — packages built from source (8)
+- `install/nodes.json` — repository + commit for each custom node
 
-Чтобы обновить ноду: поменяйте `sha` на нужный коммит и запустите
+To update a node: change `sha` to the target commit and run
 `install.bat -Force`.

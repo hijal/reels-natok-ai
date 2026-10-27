@@ -1,12 +1,12 @@
 'use client'
 
 /**
- * FaceRefineJobStore — состояние джоба Face Refine ВНЕ React.
+ * FaceRefineJobStore — Face Refine job state OUTSIDE React.
  *
- * Паттерн tile-upscale-job-store: promptId/phase/progress/error живут в
- * zustand-сторе, модульный цикл опроса /api/comfy/status переживает unmount
- * вкладки, по завершении — useGalleryRefresh.bump() (staggered-перезагрузки
- * галереи встроены в useVideoGallery по bump).
+ * Pattern tile-upscale-job-store: promptId/phase/progress/error live in
+ * zustand store, modular polling loop for /api/comfy/status survives unmount
+ * of the tab, upon completion — useGalleryRefresh.bump() (staggered reloads
+ * of gallery are built into useVideoGallery upon bump).
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -41,21 +41,21 @@ interface FaceRefineJobState {
 
 const ACTIVE: ReadonlySet<FaceRefinePhase> = new Set(['submitting', 'running'])
 
-/** Эпоха отмены: cancel() во время 'submitting' ломает эпоху, и submit()
- *  отменяет принятую сервером задачу сам. */
+/** Cancellation epoch: cancel() during 'submitting' breaks the epoch, and submit()
+ *  cancels the task accepted by the server itself. */
 let cancelEpoch = 0
 
-/** promptId, для которого пользователь запросил отмену. ComfyUI докладывает
- *  прерванную задачу как 'error' (execution_interrupted) — без пометки поллер
- *  рисовал бы собственную отмену красным баннером «Ошибка». */
+/** promptId for which the user requested cancellation. ComfyUI reports
+ *  an interrupted task as 'error' (execution_interrupted) — without this mark the poller
+ *  would display its own cancellation with a red "Error" banner. */
 let cancelRequestedFor: string | null = null
 
-/** queue-item, владеющий состоянием вкладки; защищает от запоздавшего
- *  ответа отменённого POST, когда следующая задача уже стартовала. */
+/** queue-item owning the tab state; protects against delayed
+ *  response of a cancelled POST when the next task has already started. */
 let activeQid: string | null = null
 
-/** Отмена из общей очереди: прерванный ComfyUI-промпт не должен рисоваться
- *  красным баннером ошибки. */
+/** Cancellation from general queue: interrupted ComfyUI prompt should not be drawn
+ *  with a red error banner. */
 export function markFaceRefineCancelRequested(promptId: string) {
   cancelRequestedFor = promptId
 }
@@ -76,14 +76,14 @@ export const useFaceRefineJob = create<FaceRefineJobState>()(
           : 'Face Refine'
         const qid = useGenQueue.getState().enqueue('face-refine', label)
 
-        // Единый FIFO: несколько задач можно ставить в очередь; состояние
-        // вкладки меняем только после получения хода.
+        // Unified FIFO: multiple tasks can be queued; tab state
+        // is changed only after acquiring turn.
         const granted = await acquireComfyTurn(qid)
         if (!granted || !isComfyTurnActive(qid)) return
 
-        // Эпоху отмены фиксируем только на старте своей задачи, а не в
-        // момент постановки: Cancel текущего джоба не должен отменять все
-        // задачи, которые ещё стоят в очереди.
+        // Capture cancellation epoch only when starting own task, not at
+        // enqueue time: Cancel of the current job must not cancel all
+        // tasks still waiting in queue.
         const myEpoch = cancelEpoch
         cancelRequestedFor = null
         activeQid = qid
@@ -97,11 +97,11 @@ export const useFaceRefineJob = create<FaceRefineJobState>()(
           })
           const data = await res.json()
           if (!res.ok) {
-            useGenQueue.getState().setStatus(qid, 'error', data.error || `Ошибка ${res.status}`)
-            throw new Error(data.error || `Ошибка ${res.status}`)
+            useGenQueue.getState().setStatus(qid, 'error', data.error || `Error ${res.status}`)
+            throw new Error(data.error || `Error ${res.status}`)
           }
           if (!data.prompt_id) {
-            const msg = 'ComfyUI не вернул prompt_id'
+            const msg = 'ComfyUI did not return prompt_id'
             useGenQueue.getState().setStatus(qid, 'error', msg)
             throw new Error(msg)
           }
@@ -123,7 +123,7 @@ export const useFaceRefineJob = create<FaceRefineJobState>()(
           set({ promptId: data.prompt_id ?? null, phase: 'running' })
           useGenQueue.getState().setPromptId(qid, data.prompt_id)
           useGenQueue.getState().setStatus(qid, 'running')
-          toast.success('Face Refine запущен')
+          toast.success('Face Refine started')
           ensurePolling()
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
@@ -142,7 +142,7 @@ export const useFaceRefineJob = create<FaceRefineJobState>()(
         if (!promptId) {
           if (phase === 'submitting') {
             set({ phase: 'idle', busy: false, progress: 0, startedAt: null })
-            toast.info('Отменено')
+            toast.info('Cancelled')
           }
           return
         }
@@ -166,10 +166,10 @@ export const useFaceRefineJob = create<FaceRefineJobState>()(
             stopPolling()
             set({ phase: 'idle', progress: 0, busy: false, promptId: null, startedAt: null })
           }
-          toast.info('Отменено')
+          toast.info('Cancelled')
         } else {
           cancelRequestedFor = null
-          toast.error('Отмена не подтверждена сервером — проверьте, что ComfyUI запущен')
+          toast.error('Cancellation not confirmed by server — check that ComfyUI is running')
         }
       },
 
@@ -196,13 +196,13 @@ export const useFaceRefineJob = create<FaceRefineJobState>()(
   ),
 )
 
-/* ─── Модульный поллинг /api/comfy/status (живёт вне React) ─── */
+/* ─── Modular polling /api/comfy/status (lives outside React) ─── */
 
 const POLL_MS = 2000
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let pollInFlight = false
-/** Счётчик подряд идущих 'unknown' — prompt мог умереть вместе с
- *  перезапуском ComfyUI. */
+/** Counter of consecutive 'unknown' responses — prompt could have died along with
+ *  a ComfyUI restart. */
 let unknownStreak = 0
 
 function ensurePolling() {
@@ -235,11 +235,11 @@ async function pollOnce() {
       if (unknownStreak >= 10) {
         useFaceRefineJob.setState({
           phase: 'error',
-          error: 'ComfyUI не отвечает (сервер остановлен или перезапущен) — отслеживание остановлено',
+          error: 'ComfyUI is not responding (server stopped or restarted) — tracking stopped',
           busy: false,
         })
         const qi = useGenQueue.getState().items.find((i) => i.promptId === promptId)
-        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'ComfyUI не отвечает — отслеживание остановлено')
+        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'ComfyUI is not responding — tracking stopped')
         stopPolling()
       }
       return
@@ -275,10 +275,10 @@ async function pollOnce() {
       } else {
         useFaceRefineJob.setState({
           phase: 'error',
-          error: data.error || data.detail || 'Ошибка Face Refine',
+          error: data.error || data.detail || 'Face Refine error',
           busy: false,
         })
-        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', data.error || data.detail || 'Ошибка Face Refine')
+        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', data.error || data.detail || 'Face Refine error')
       }
       stopPolling()
     } else if (data.status === 'unknown') {
@@ -294,10 +294,10 @@ async function pollOnce() {
       if (unknownStreak >= 10) {
         useFaceRefineJob.setState({
           phase: 'error',
-          error: 'Задача не найдена в ComfyUI (сервер был перезапущен) — отслеживание остановлено',
+          error: 'Task not found in ComfyUI (server was restarted) — tracking stopped',
           busy: false,
         })
-        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'Задача не найдена в ComfyUI — отслеживание остановлено')
+        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'Task not found in ComfyUI — tracking stopped')
         stopPolling()
       }
     } else {
@@ -315,7 +315,7 @@ async function pollOnce() {
       } catch { /* non-critical */ }
     }
   } catch {
-    /* transient — следующий тик попробует снова */
+    /* transient — next tick will try again */
   } finally {
     pollInFlight = false
   }

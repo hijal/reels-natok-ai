@@ -1,14 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-// (правка 562) тонкая шапка окна в Electron-режиме (в браузере не рендерится)
+// (fix 562) slim window header in Electron mode (not rendered in browser)
 import { DesktopTitleBar } from "@/components/h3/desktop-titlebar";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "MiniMax H3 Studio 7",
   description:
-    "Генерация видео со звуком через MiniMax H3 на локальном ComfyUI",
+    "Video generation with audio via MiniMax H3 on local ComfyUI",
   icons: [{ rel: "icon", url: "/logo.svg", type: "image/svg+xml" }],
 };
 
@@ -22,17 +22,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased bg-background text-foreground flex flex-col">
-        {/* (правка 562) Electron: шапка окна + контент колонкой. В браузере
-            шапка не рендерится, обёртка flex-1 занимает всю высоту как раньше. */}
+        {/* (fix 562) Electron: window header + content in a column. In browser
+            header is not rendered, flex-1 wrapper occupies full height as before. */}
         <DesktopTitleBar />
         <div className="flex-1 min-h-0 flex flex-col">
           <ThemeProvider attribute="class" defaultTheme="dark-gray" enableSystem={false} themes={["dark", "dark-gray", "dark-calm"]}>
-          {/* (правка 61) тема «Аврора» удалена; (правка 98) светлая тоже —
-              если одна из них сохранена в браузере, миграция на дефолтную
-              серую тему до первого рендера — иначе next-themes наложит
-              несуществующий класс и страница откроется без темы. */}
+          {/* (fix 61) "Aurora" theme removed; (fix 98) light as well —
+              if one of them is stored in browser, migrate to default
+              gray theme before first render — otherwise next-themes will apply
+              a non-existent class and the page will open without a theme. */}
           <script
             suppressHydrationWarning
             dangerouslySetInnerHTML={{

@@ -1,15 +1,15 @@
 /**
- * restoreFromMeta — восстанавливает ВСЕ параметры генерации из .meta.json
- * в useGenStore и переключает на вкладку «Генерация».
+ * restoreFromMeta — restores ALL generation parameters from .meta.json
+ * into useGenStore and switches to the "Generation" tab.
  *
- * Используется кнопкой «Повторить» на карточках галереи и в диалоге метаданных.
+ * Used by the "Retry" button on gallery cards and in the metadata dialog.
  */
 import { toast } from 'sonner'
 import { useGenStore, type VideoRefItem } from './gen-store'
 import { FALLBACK_H3_PRESETS, collectResolutionValues } from '@/components/h3/video-shared'
 
-/** (правка 124) Все номиналы пресетов — чтобы «Повторить» вернул режим
- *  пресета, а не свободный MP (иначе итог снова не был бы точным). */
+/** (edit 124) All preset nominals — so "Retry" returns preset mode
+ *  rather than free MP (otherwise the result wouldn't be exact). */
 const PRESET_RESOLUTIONS = new Set<string>(collectResolutionValues(FALLBACK_H3_PRESETS))
 
 /* ─── Meta JSON shape (sidecar written by use-video-gen) ─── */
@@ -20,9 +20,9 @@ interface MetaReference {
   image_intent?: string
   audio_intent?: string
   include_audio?: boolean
-  /** (правка 493) Видео-реф: сжатие до 480p. */
+  /** (edit 493) Video ref: compression to 480p. */
   compress?: boolean
-  /** (правка 1) Обрезка аудио-рефа, секунды (trim_end null/0 = до конца). */
+  /** (edit 1) Audio ref trimming, seconds (trim_end null/0 = to end). */
   trim_start?: number
   trim_end?: number | null
 }
@@ -30,20 +30,20 @@ interface MetaReference {
 interface MetaJson {
   prompt?: string
   seed?: number
-  /** (правка 146) Режим генерации: 'ref' | 't2v' | 'flf'. */
+  /** (edit 146) Generation mode: 'ref' | 't2v' | 'flf'. */
   generation_mode?: string
-  /** ref + аудио-гайд; keep_original_audio — серверная замена дорожки. */
+  /** ref + audio guide; keep_original_audio — server audio track swap. */
   audio_guide?: boolean
   keep_original_audio?: boolean
-  /** (правка 146) FL2VA: имя файла первого кадра в ComfyUI input/. */
+  /** (edit 146) FL2VA: filename of first frame in ComfyUI input/. */
   first_frame?: string | null
-  /** (правка 146) FL2VA: имя файла последнего кадра в ComfyUI input/. */
+  /** (edit 146) FL2VA: filename of last frame in ComfyUI input/. */
   last_frame?: string | null
-  /** (правка 157) FL2VA: ширина первого кадра (px) — для «Повторить». */
+  /** (edit 157) FL2VA: width of first frame (px) — for "Retry". */
   first_frame_width?: number | null
-  /** (правка 157) FL2VA: высота первого кадра (px) — для «Повторить». */
+  /** (edit 157) FL2VA: height of first frame (px) — for "Retry". */
   first_frame_height?: number | null
-  /** (правка 158) FL2VA: итоговый номинал WxH — «Повторить» восстанавливает точные размеры. */
+  /** (edit 158) FL2VA: final nominal WxH — "Retry" restores exact dimensions. */
   flf_resolution?: string | null
   model_type?: string
   resolution?: string
@@ -54,12 +54,12 @@ interface MetaJson {
   duration_seconds?: number
   fps?: number
   pass1_steps?: number
-  /** Всего шагов в расписании pass 1 (для «6 из 6»; старые сайдкары без поля). */
+  /** Total steps in pass 1 schedule (for "6 of 6"; old sidecars lacked this field). */
   pass1_total_steps?: number
   pass2_steps?: number
-  /** (правка 722) Пайплайн генерации: 'draft' (один проход) | 'full'. */
+  /** (edit 722) Generation pipeline: 'draft' (single pass) | 'full'. */
   pipeline?: string
-  /** (правка 722) Шаги единственного прохода в режиме «Драфт». */
+  /** (edit 722) Steps for single pass in "Draft" mode. */
   draft_steps?: number
   sigma_variant?: string
   pass2_sampler?: string
@@ -67,18 +67,18 @@ interface MetaJson {
   pass1_scheduler?: string
   turbo_lora_strength?: number
   minimax_h3_reference_detail?: string
-  sparse_attention?: boolean // (правка 168)
-  sparse_tau?: number // (правка 466)
-  sparse_start_percent?: number // (правка 466)
-  sparse_end_percent?: number // (правка 466)
-  sparse_min_tokens?: number // (правка 466)
-  sparse_extra_tokens?: number // (правка 466)
-  veda_attention?: boolean // (правка 301)
-  veda_generated_sparsity?: string // (правка 405)
-  veda_reference_sparsity?: string // (правка 405)
-  veda_full_attention_layers?: string // (правка 405)
-  veda_full_attention_steps?: string // (правка 405)
-  veda_verbose?: boolean // (правка 405)
+  sparse_attention?: boolean // (edit 168)
+  sparse_tau?: number // (edit 466)
+  sparse_start_percent?: number // (edit 466)
+  sparse_end_percent?: number // (edit 466)
+  sparse_min_tokens?: number // (edit 466)
+  sparse_extra_tokens?: number // (edit 466)
+  veda_attention?: boolean // (edit 301)
+  veda_generated_sparsity?: string // (edit 405)
+  veda_reference_sparsity?: string // (edit 405)
+  veda_full_attention_layers?: string // (edit 405)
+  veda_full_attention_steps?: string // (edit 405)
+  veda_verbose?: boolean // (edit 405)
   low_vram_attention?: boolean
   chunk_feed_forward?: boolean
   chunk_ff_chunks?: number
@@ -116,8 +116,8 @@ function mapRefs(metaRefs: MetaReference[]): VideoRefItem[] {
         role,
         imageIntent: (r.image_intent || r.role || 'identity') as VideoRefItem['imageIntent'],
         includeAudio: r.include_audio !== false,
-        compress: r.compress === true, // (правка 493)
-        // (правка 1) Восстановление обрезки аудио-рефа из меты.
+        compress: r.compress === true, // (edit 493)
+        // (edit 1) Restore audio ref trim from meta.
         trimStart: typeof r.trim_start === 'number' ? r.trim_start : undefined,
         trimEnd: typeof r.trim_end === 'number' ? r.trim_end : (r.trim_end ?? undefined),
       }
@@ -190,17 +190,17 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
       patch.firstSamplerTotalSteps = params.pass1_total_steps
     }
 
-    // (правка 722) Пайплайн «Драфт»/«Полное» — из сайдкара. Раньше он туда
-    // записывался, но НЕ восстанавливался: «Повторить» драфтового ролика
-    // открывал форму в режиме «Полное» (два прохода вместо одного) — то
-    // есть повтор был совсем другой генерацией.
+    // (edit 722) Pipeline "Draft"/"Full" — from sidecar. Previously it was
+    // written there but NOT restored: "Retry" on a draft clip opened the form
+    // in "Full" mode (two passes instead of one) — meaning the retry was a
+    // completely different generation.
     if (params.pipeline === 'draft' || params.pipeline === 'full') {
       patch.pipeline = params.pipeline
     }
 
-    // (правка 722) Шаги ЕДИНСТВЕННОГО прохода драфта. Сайдкар их хранил,
-    // но форма их не подхватывала — драфт повторялся с дефолтными 4 шагами
-    // вместо использованных.
+    // (edit 722) Steps of the SINGLE pass in draft. Sidecar stored them,
+    // but the form did not pick them up — draft was retried with default 4 steps
+    // instead of the ones actually used.
     if (typeof params.draft_steps === 'number' && params.draft_steps > 0) {
       patch.draftSteps = params.draft_steps
     }
@@ -228,18 +228,18 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
 
     // VRAM / chunking
     if (typeof params.sparse_attention === 'boolean') {
-      patch.sparseAttention = params.sparse_attention // (правка 168)
+      patch.sparseAttention = params.sparse_attention // (edit 168)
     }
-    // (правка 466) настройки Sol-Attn — «Повторить» восстанавливает параметры ноды
+    // (edit 466) Sol-Attn settings — "Retry" restores node parameters
     if (typeof params.sparse_tau === 'number') patch.sparseTau = params.sparse_tau
     if (typeof params.sparse_start_percent === 'number') patch.sparseStartPercent = params.sparse_start_percent
     if (typeof params.sparse_end_percent === 'number') patch.sparseEndPercent = params.sparse_end_percent
     if (typeof params.sparse_min_tokens === 'number') patch.sparseMinTokens = params.sparse_min_tokens
     if (typeof params.sparse_extra_tokens === 'number') patch.sparseExtraTokens = params.sparse_extra_tokens
     if (typeof params.veda_attention === 'boolean') {
-      patch.vedaAttention = params.veda_attention // (правка 301)
+      patch.vedaAttention = params.veda_attention // (edit 301)
     }
-    // (правка 405) veda-настройки — «Повторить» восстанавливает параметры ноды
+    // (edit 405) veda settings — "Retry" restores node parameters
     if (typeof params.veda_generated_sparsity === 'string') {
       patch.vedaGeneratedSparsity = params.veda_generated_sparsity
     }
@@ -268,19 +268,19 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
       patch.chunkFFThreshold = params.chunk_ff_threshold
     }
 
-    // Resolution (правка 124): известный номинал → режим пресета
-    // (freeResolution off, MP = 0) — повтор воспроизводит ТОЧНЫЕ размеры
-    // (16:9 1080p → 1920×1080). Иначе — свободное разрешение по MP.
-    // (правка 158) FL2VA: номинал из flfNominalDimensions (кадр + пресет UI) —
-    // он НЕ входит в PRESET_RESOLUTIONS (напр. 854x480 для кадра 16:9), но это
-    // РЕАЛЬНЫЙ размер генерации. Восстанавливаем как свободное разрешение (MP),
-    // чтобы UI-бейдж совпадал с реальным.
+    // Resolution (edit 124): known nominal → preset mode
+    // (freeResolution off, MP = 0) — retry reproduces EXACT dimensions
+    // (16:9 1080p → 1920×1080). Otherwise — free resolution by MP.
+    // (edit 158) FL2VA: nominal from flfNominalDimensions (frame + UI preset) —
+    // not in PRESET_RESOLUTIONS (e.g. 854x480 for 16:9 frame), but this is
+    // the REAL generation size. Restore as free resolution (MP) so UI badge
+    // matches the actual one.
     const metaRes = typeof params.resolution === 'string' ? params.resolution.trim() : ''
     const metaFlfRes = typeof params.flf_resolution === 'string' ? params.flf_resolution.trim() : ''
     const isFlfMode = (params.generation_mode || '').toLowerCase() === 'flf'
 
     if (isFlfMode && metaFlfRes) {
-      // FL2VA: точный номинал из метаданных → свободное разрешение по MP
+      // FL2VA: exact nominal from metadata → free resolution by MP
       const flfMatch = metaFlfRes.match(/(\d+)\s*x\s*(\d+)/i)
       if (flfMatch) {
         const fw = parseInt(flfMatch[1], 10)
@@ -289,7 +289,7 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
           const flfMP = Math.round((fw * fh) / 1e6 * 100) / 100
           patch.finalResolution = flfMP
           patch.freeResolution = true
-          // resolution = номинал flf (ориентация из кадра)
+          // resolution = flf nominal (orientation from frame)
           patch.resolution = metaFlfRes
         }
       }
@@ -307,41 +307,41 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
       patch.lowResMP = params.low_res_mp
     }
 
-    // (правка 147) Режим генерации — восстанавливаем ДО референсов, чтобы
-    // отфильтровать рефы под режим (в t2v/flf поддерживаются только аудио).
+    // (edit 147) Generation mode — restore BEFORE references in order to
+    // filter refs for the mode (t2v/flf support audio only).
     const metaMode = typeof params.generation_mode === 'string'
       ? params.generation_mode.trim().toLowerCase()
       : ''
     if (metaMode === 't2v' || metaMode === 'flf' || metaMode === 'ref') {
       patch.mode = metaMode
     } else {
-      // Старые метаданные без generation_mode — всегда были ref-режимом.
+      // Legacy metadata without generation_mode — was always ref mode.
       patch.mode = 'ref'
     }
     const effMode: 'ref' | 't2v' | 'flf' = (patch.mode as string) as 'ref' | 't2v' | 'flf'
-    // ref + аудио-гайд: восстанавливаем галочку вместе с рефами.
+    // ref + audio guide: restore checkbox along with refs.
     patch.audioGuide =
       effMode === 'ref' && (params.audio_guide === true || params.keep_original_audio === true)
 
-    // ── References (отфильтрованы под режим) ──
+    // ── References (filtered for mode) ──
     const allMetaRefs: MetaReference[] = Array.isArray(params.references)
       ? params.references
       : Array.isArray(params.minimax_h3_references)
         ? params.minimax_h3_references
         : []
 
-    // (правка 147) В t2v/flf поддерживаются только аудио-референсы.
-    // Старый «Повторить» восстанавливал ВСЕ рефы — картинки/видео в т2v/flf
-    // молча игнорировались генерацией, а в UI показывались как активные.
-    // Фильтруем сразу, чтобы в стор попали только то, что реально задействуется.
+    // (edit 147) Only audio references are supported in t2v/flf.
+    // Old "Retry" restored ALL refs — image/video in t2v/flf were silently
+    // ignored by generation, while shown as active in UI.
+    // Filter immediately so the store only gets what is actually used.
     const metaRefs: MetaReference[] =
       effMode === 'ref'
         ? allMetaRefs
         : allMetaRefs.filter((r) => (r.type || 'image').toLowerCase() === 'audio')
     const droppedByMode = allMetaRefs.length - metaRefs.length
 
-    // (правка 147) FL2VA: кадры — это отдельные файлы в input/, восстанавливаем
-    // в слоты startFrame/endFrame (как и рефы, проверяем существование).
+    // (edit 147) FL2VA: frames are separate files in input/, restore into
+    // startFrame/endFrame slots (check existence just like refs).
     const firstFramePath = typeof params.first_frame === 'string' ? params.first_frame : ''
     const lastFramePath = typeof params.last_frame === 'string' ? params.last_frame : ''
     const frameSlots: Array<{ slot: 'start' | 'end'; path: string; name: string }> = []
@@ -350,14 +350,14 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
       if (lastFramePath) frameSlots.push({ slot: 'end', path: lastFramePath, name: basename(lastFramePath) })
     }
 
-    // Референсы и кадры в ComfyUI input/ недолговечны (чистка input,
-    // переустановка ComfyUI). «Повторить» с несуществующим файлом падал бы
-    // посреди генерации сырым FileNotFoundError. Проверяем существование и
-    // честно предупреждаем, что восстановлены не все.
-    // (правка 587) Пробуем существование по ОДНОМУ списку: пути фильтруются
-    // от пустых, а флаги exists[] раньше индексировались по НЕфильтрованному
-    // metaRefs — при пустом path у рефа все флаги съезжали. Считаем и потребляем
-    // filteredRefs (при непустых путях поведение прежнее).
+    // References and frames in ComfyUI input/ are ephemeral (input cleanup,
+    // ComfyUI reinstall). "Retry" with non-existent file would fail mid-generation
+    // with raw FileNotFoundError. Check existence and honestly warn if not all
+    // were restored.
+    // (edit 587) Probe existence using a SINGLE list: empty paths are filtered out,
+    // whereas exists[] flags were previously indexed against un-filtered metaRefs —
+    // causing flag index shifts if any ref had empty path. Compute and consume
+    // filteredRefs (identical behavior for non-empty paths).
     const filteredRefs: MetaReference[] = metaRefs.filter((r) => r.path)
     const refAndFramePaths: string[] = [
       ...filteredRefs.map((r) => r.path!),
@@ -374,28 +374,28 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
             })
             return res.ok
           } catch {
-            return true // сервер недоступен — не отбрасываем молча
+            return true // server unreachable — don't discard silently
           }
         }),
       )
 
-      // (правка 587) exists[] индексируется по filteredRefs (см. выше).
+      // (edit 587) exists[] is indexed by filteredRefs (see above).
       const presentRefs = filteredRefs.filter((_, i) => exists[i])
       const missingRefs = metaRefs.length - presentRefs.length
       if (presentRefs.length > 0) {
         patch.refs = mapRefs(presentRefs)
       }
       if (missingRefs > 0) {
-        toast.warning(`${missingRefs} реф. не найдены в ComfyUI`, {
-          description: 'Файлы были удалены из input/. Остальные параметры восстановлены.',
+        toast.warning(`${missingRefs} ref(s) not found in ComfyUI`, {
+          description: 'Files were removed from input/. Remaining parameters restored.',
         })
       }
 
-      // Кадры: если файл первого кадра отсутствует — в flf-режиме генерация
-      // не может вообще стартовать (start frame обязателен). Честно
-      // предупреждаем и НЕ включаем режим flf, если кадр утерян.
+      // Frames: if first frame file is missing — generation in flf mode
+      // cannot start at all (start frame is required). Honestly warn
+      // and DO NOT enable flf mode if frame was lost.
       if (frameSlots.length > 0) {
-        const refOffset = filteredRefs.length // (правка 587) сдвиг кадров — по filteredRefs
+        const refOffset = filteredRefs.length // (edit 587) frame offset — relative to filteredRefs
         let missingFrames = 0
         const restored: Partial<{ startFrame: typeof frameSlots[number]; endFrame: typeof frameSlots[number] }> = {}
         for (let i = 0; i < frameSlots.length; i++) {
@@ -408,9 +408,9 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
           }
         }
         if (restored.startFrame) {
-          // (правка 157) Восстанавливаем размеры кадра из метаданных —
-          // без них flf-ветка use-video-gen не сработает и ориентация
-          // снова будет браться из пресета UI, а не из кадра.
+          // (edit 157) Restore frame dimensions from metadata —
+          // without them flf branch of use-video-gen won't work and orientation
+          // will be taken from UI preset rather than frame.
           patch.startFrame = {
             path: restored.startFrame.path,
             name: restored.startFrame.name,
@@ -423,11 +423,11 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
           patch.endFrame = { path: restored.endFrame.path, name: restored.endFrame.name, previewUrl: '' }
         }
         if (missingFrames > 0) {
-          toast.warning(`${missingFrames} кадр(ов) не найдены в ComfyUI`, {
-            description: 'Файлы кадров были удалены из input/. Перетащите их заново, если нужен именно flf-режим.',
+          toast.warning(`${missingFrames} frame(s) not found in ComfyUI`, {
+            description: 'Frame files were removed from input/. Drag and drop them again if flf mode is needed.',
           })
-          // Если стартовый кадр потерян — flf-генерация не может стартовать,
-          // деградируем до t2v, чтобы «Повторить» хотя бы запустился.
+          // If start frame is lost — flf generation cannot start,
+          // degrade to t2v so "Retry" can at least run.
           if (!restored.startFrame && effMode === 'flf') {
             patch.mode = 't2v'
           }
@@ -436,10 +436,10 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
     }
 
     if (droppedByMode > 0) {
-      // Информационный тост: в режиме t2v/flf поддерживаются только аудио,
-      // картинки/видео из метаданных отброшены (они были бы молча игнорированы).
-      toast.info('Референсы картинок/видео отброшены', {
-        description: `Режим ${effMode} использует только аудио-референсы. ${droppedByMode} шт. не загружено.`,
+      // Informational toast: only audio is supported in t2v/flf mode,
+      // image/video from metadata were dropped (they would be silently ignored).
+      toast.info('Image/video references dropped', {
+        description: `Mode ${effMode} uses audio references only. ${droppedByMode} item(s) skipped.`,
       })
     }
 
@@ -449,20 +449,20 @@ export async function restoreFromMeta(filePath: string): Promise<boolean> {
     // ── Switch to Generate tab ──
     window.dispatchEvent(new CustomEvent('h3:goto-generate'))
 
-    // (правка 147) Финальный тост учитывает режим и кадры.
-    const modeShort = effMode === 'flf' ? 'Кадры' : effMode === 't2v' ? 'Текст' : 'Референсы'
+    // (edit 147) Final toast takes mode and frames into account.
+    const modeShort = effMode === 'flf' ? 'Frames' : effMode === 't2v' ? 'Text' : 'References'
     const restoredFrames = (patch.startFrame ? 1 : 0) + (patch.endFrame ? 1 : 0)
-    const bits: string[] = ['Промпт', 'seed', `режим «${modeShort}»`]
-    if (restoredFrames > 0) bits.push(`${restoredFrames} кадр(а)`)
-    if (metaRefs.length > 0) bits.push(`${metaRefs.length} реф.`)
-    toast.success('Параметры генерации восстановлены', {
-      description: bits.join(', ') + ' загружены в форму генерации.',
+    const bits: string[] = ['Prompt', 'seed', `mode "${modeShort}"`]
+    if (restoredFrames > 0) bits.push(`${restoredFrames} frame(s)`)
+    if (metaRefs.length > 0) bits.push(`${metaRefs.length} ref(s)`)
+    toast.success('Generation parameters restored', {
+      description: bits.join(', ') + ' loaded into generation form.',
     })
 
     return true
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    toast.error('Не удалось восстановить параметры', { description: msg })
+    toast.error('Failed to restore parameters', { description: msg })
     return false
   }
 }

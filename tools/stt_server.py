@@ -1,5 +1,5 @@
 """
-stt_server.py — STT (whisper / transcribe.cpp) bridge for MiniMax H3 Studio (правка 65).
+stt_server.py — STT (whisper / transcribe.cpp) bridge for MiniMax H3 Studio (fix 65).
 
 Loads the bundled transcribe.dll from the project's local `stt/` folder (self-contained,
 portable — no external installation) and exposes a tiny HTTP API on 127.0.0.1:8091
@@ -27,7 +27,7 @@ ABI notes (verified against the bundled DLL, transcribe.cpp v0.1.3):
                                        +56 family (sentinel — leave untouched)
   Safest path: call the library's own transcribe_*_params_init(&buf) to stamp
   struct_size + defaults, then write only the fields we need at the offsets above.
-  (правка 65)
+  (fix 65)
 """
 
 import argparse
@@ -42,7 +42,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ── args ──
-# (правка 72) STT-рантайм встроен в проект: <root>/stt (рядом с tools/)
+# (fix 72) STT runtime is bundled in project: <root>/stt (next to tools/)
 _DEFAULT_STT_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'stt')
 )
@@ -52,7 +52,7 @@ ap.add_argument('--stt-dir', default=_DEFAULT_STT_DIR,
 ap.add_argument('--model', default='',
                 help='Model filename (in stt/models) or absolute path. Empty = auto')
 ap.add_argument('--port', type=int, default=8091)
-ap.add_argument('--language', default='ru', help='Language code ("ru", "en") or "auto"')
+ap.add_argument('--language', default='en', help='Language code ("en", "ru") or "auto"')
 ap.add_argument('--threads', type=int, default=0, help='CPU threads (0 = auto)')
 ap.add_argument('--idle-sec', type=int, default=900, help='Exit after N sec without requests')
 args = ap.parse_args()
@@ -69,38 +69,37 @@ log = lambda msg: print(f'[stt] {msg}', flush=True)
 
 # ─────────────────────────── DLL loading ───────────────────────────
 
-# (правка 716) Хэндл os.add_dll_directory() — держим на уровне модуля,
-# иначе деструктор убирает каталог из пути поиска DLL.
+# (fix 716) Handle for os.add_dll_directory() — keep at module level,
+# otherwise destructor removes directory from DLL search path.
 _DLL_DIR_HANDLE = None
 
 
 def load_lib(stt_dir):
     dll = os.path.join(stt_dir, 'transcribe.dll')
     if not os.path.isfile(dll):
-        raise RuntimeError(f'transcribe.dll не найдена: {dll} — папка STT-рантайма не найдена в проекте')
-    # (правка 72) Явно добавляем папку рантайма в поиск DLL-зависимостей (ggml, onnxruntime),
-    # чтобы transcribe.dll находила соседние .dll независимо от CWD и PATH.
-    # (правка 716) Результат add_dll_directory() ОБЯЗАН удерживаться: его
-    # деструктор закрывает хэндл и тем самым УБИРАЕТ каталог из пути поиска.
-    # Раньше значение отбрасывалось, объект собирался GC'ом, и заявленная цель
-    # не достигалась (работало лишь случайно, из-за LOAD_WITH_ALTERED_SEARCH_PATH).
+        raise RuntimeError(f'transcribe.dll not found: {dll} — STT runtime folder not found in project')
+    # (fix 72) Explicitly add runtime folder to DLL search path (ggml, onnxruntime),
+    # so transcribe.dll finds adjacent .dlls independent of CWD and PATH.
+    # (fix 716) Return value of add_dll_directory() MUST be retained: its
+    # destructor closes handle and thereby REMOVES catalog from search path.
+    # Previously value was discarded, collected by GC, and intended purpose was lost.
     global _DLL_DIR_HANDLE
     try:
         if hasattr(os, 'add_dll_directory'):
             _DLL_DIR_HANDLE = os.add_dll_directory(stt_dir)
     except OSError:
-        pass  # уже добавлена
+        pass  # already added
     except Exception:
         pass
     try:
         lib = ctypes.CDLL(dll)
     except OSError as e:
-        raise RuntimeError(f'Не удалось загрузить transcribe.dll: {e}')
+        raise RuntimeError(f'Failed to load transcribe.dll: {e}')
 
     def sig(name, restype, argtypes):
         fn = getattr(lib, name, None)
         if fn is None:
-            raise RuntimeError(f'Функция {name} отсутствует в transcribe.dll')
+            raise RuntimeError(f'Function {name} missing in transcribe.dll')
         fn.restype = restype
         fn.argtypes = argtypes
         return fn
@@ -122,9 +121,9 @@ def load_lib(stt_dir):
 def status_text(lib, code):
     try:
         raw = lib.transcribe_status_string(code)
-        return raw.decode('utf-8', errors='replace') if raw else f'код {code}'
+        return raw.decode('utf-8', errors='replace') if raw else f'code {code}'
     except Exception:
-        return f'код {code}'
+        return f'code {code}'
 
 
 def make_params(lib, size, init_name):
@@ -137,7 +136,7 @@ def make_params(lib, size, init_name):
             init.restype = ctypes.c_int
             init(ctypes.byref(buf))
         except Exception as e:
-            log(f'предупреждение: {init_name} не вызвалась: {e}')
+            log(f'warning: {init_name} invocation failed: {e}')
     # Defensive: make sure struct_size is stamped even if init was missing.
     ctypes.c_uint64.from_buffer(buf, 0).value = size
     return buf
@@ -154,7 +153,7 @@ STATE = {
     'model': None,      # c_void_p handle (keep a Python reference alive!)
     'session': None,    # c_void_p handle
     'model_path': None,
-    'language': 'ru',
+    'language': 'en',
     'threads': 0,
     'version': '',
 }
@@ -190,8 +189,8 @@ def resolve_model(explicit, stt_dir):
         for c in candidates:
             if os.path.isfile(c):
                 return c
-        raise RuntimeError(f'Модель не найдена: {explicit}')
-    # (правка 72) Авто: первая *.bin / *.gguf в stt/models, затем resources/models, Data/models.
+        raise RuntimeError(f'Model not found: {explicit}')
+    # (fix 72) Auto: first *.bin / *.gguf in stt/models, then resources/models, Data/models.
     for d in (os.path.join(stt_dir, 'models'),
               os.path.join(stt_dir, 'resources', 'models'),
               os.path.join(stt_dir, 'Data', 'models')):
@@ -205,8 +204,8 @@ def resolve_model(explicit, stt_dir):
         except OSError:
             pass
     raise RuntimeError(
-        'Модели STT не найдены. Скачайте ggml-модель (например, whisper small/medium) '
-        f'в папку {os.path.join(stt_dir, "models")} через кнопку «Скачать» в настройках «Голосовой ввод».'
+        'STT models not found. Download a ggml model (e.g., whisper small/medium) '
+        f'into {os.path.join(stt_dir, "models")} via the "Download" button in "Voice Input" settings.'
     )
 
 
@@ -220,10 +219,10 @@ def load_state(model_arg, language, threads):
     if not BACKENDS_INITIALIZED:
         rc = lib.transcribe_init_backends_default()
         if rc != 0:
-            log(f'предупреждение: init_backends_default -> {rc} (продолжаем)')
+            log(f'warning: init_backends_default -> {rc} (continuing)')
         BACKENDS_INITIALIZED = True
 
-    # model_load_params: CPU backend (правка 65: голосовой ввод работает на CPU)
+    # model_load_params: CPU backend (fix 65: voice input runs on CPU)
     mlp = make_params(lib, MODEL_LOAD_PARAMS_SIZE, 'transcribe_model_load_params_init')
     set_i32(mlp, 8, TRANSCRIBE_BACKEND_CPU)
 
@@ -231,12 +230,11 @@ def load_state(model_arg, language, threads):
     t0 = time.time()
     rc = lib.transcribe_model_load_file(model_path.encode('utf-8'), ctypes.byref(mlp), ctypes.byref(model))
     if rc != 0:
-        # (правка 716) Старая (рабочая) модель НЕ тронута — сервер остаётся
-        # с ней. Раньше free_state() вызывался ДО загрузки, и неудачный
-        # /reload оставлял сервер вообще без модели (503 / «Модель не
-        # загружена») без отката.
-        raise RuntimeError(f'Не удалось загрузить модель ({status_text(lib, rc)}). Файл: {model_path}')
-    log(f'модель загружена: {model_path} ({(time.time() - t0) * 1000:.0f} мс)')
+        # (fix 716) Old (working) model remains UNTOUCHED — server stays
+        # with it. Previously free_state() was called BEFORE loading, and a failed
+        # /reload left the server without any model (503 / "Model not loaded") without rollback.
+        raise RuntimeError(f'Failed to load model ({status_text(lib, rc)}). File: {model_path}')
+    log(f'model loaded: {model_path} ({(time.time() - t0) * 1000:.0f} ms)')
 
     sp = make_params(lib, SESSION_PARAMS_SIZE, 'transcribe_session_params_init')
     set_i32(sp, 8, threads)
@@ -244,19 +242,16 @@ def load_state(model_arg, language, threads):
     session = ctypes.c_void_p()
     rc = lib.transcribe_session_init(model, ctypes.byref(sp), ctypes.byref(session))
     if rc != 0:
-        # (правка 716) free_state() тут НЕ освобождает только что загруженную
-        # модель: STATE['model'] присваивается ниже, а хэндл живёт в локальной
-        # переменной model. Без явного transcribe_model_free модель (сотни МБ)
-        # утекала при каждом неудачном /reload.
+        # (fix 716) free_state() does NOT free newly loaded model here:
+        # STATE['model'] assigned below, while handle lives in local variable model.
+        # Explicit transcribe_model_free prevents leak on failed /reload.
         try:
             lib.transcribe_model_free(model)
         except Exception:
             pass
-        raise RuntimeError(f'Не удалось создать сессию ({status_text(lib, rc)})')
+        raise RuntimeError(f'Failed to create session ({status_text(lib, rc)})')
 
-    # (правка 716) Новая модель и сессия готовы — только теперь освобождаем
-    # прежнюю и подменяем STATE. До этого момента рабочая модель оставалась
-    # доступна, поэтому неудачный /reload не ломал сервис.
+    # (fix 716) New model and session ready — only now free old state and swap.
     free_state()
 
     # Keep Python references so the ctypes handles/buffers are never GC'd.
@@ -274,7 +269,7 @@ def load_state(model_arg, language, threads):
 def decode_wav(data):
     """Parse WAV, return (float32 PCM @16 kHz mono as bytes, n_samples)."""
     if len(data) < 12 or data[:4] != b'RIFF' or data[8:12] != b'WAVE':
-        raise RuntimeError('Это не WAV-файл')
+        raise RuntimeError('Not a valid WAV file')
 
     pos = 12
     fmt = None
@@ -286,13 +281,11 @@ def decode_wav(data):
         body = pos + 8
         if cid == b'fmt ':
             if body + 16 > len(data):
-                raise RuntimeError('Повреждённый fmt-чанк WAV')
+                raise RuntimeError('Corrupted WAV fmt chunk')
             audio_fmt, channels, rate, _, _, bps = struct.unpack_from('<HHIIHH', data, body)
-            # (правка 716) WAVE_FORMAT_EXTENSIBLE (0xFFFE) — так пишут ffmpeg,
-            # DAW и MediaRecorder. Реальный формат лежит в первых 2 байтах
-            # SubFormat GUID (часть fmt-чанка с 24-го байта). Раньше такой WAV
-            # отвергался с «Неподдерживаемый формат WAV (fmt=65534)», хотя
-            # докстринг обещал «16-bit/float, any rate/channels».
+            # (fix 716) WAVE_FORMAT_EXTENSIBLE (0xFFFE) — written by ffmpeg,
+            # DAW, and MediaRecorder. Actual format is in first 2 bytes
+            # of SubFormat GUID (offset 24 in fmt chunk).
             if audio_fmt == 0xFFFE and body + 26 <= len(data):
                 (sub_fmt,) = struct.unpack_from('<H', data, body + 24)
                 audio_fmt = sub_fmt
@@ -304,29 +297,24 @@ def decode_wav(data):
             break
         pos = body + csize + (csize & 1)
     if fmt is None or data_off is None:
-        raise RuntimeError('Некорректный WAV (нет чанков fmt/data)')
+        raise RuntimeError('Invalid WAV (missing fmt/data chunks)')
 
     audio_fmt, channels, rate, bps = fmt
-    # bps в стандартном WAV — биты на сэмпл (16/24/32). Браузерный клиент
-    # шлёт ровно это (16-bit PCM). Для совместимости с клиентами, которые
-    # передают байты на сэмпл (2/3/4), принимаем оба варианта.
+    # bps in standard WAV is bits per sample (16/24/32).
+    # Support both bits and bytes per sample (2/3/4).
     if bps >= 8:
         bps = bps // 8
 
     raw = data[data_off:data_off + data_len]
 
-    # Сэмпл-буферы — array.array вместо Python-списков: список ел ~24+ байта
-    # на сэмпл и валил процесс по памяти на длинных WAV. Промежуточный
-    # формат 'd' хранит те же double, что были в list-версии, — результат
-    # downmix/resample бит-в-бит тот же (для float32-WAV значения и так
-    # float32-точные, поэтому их можно хранить прямо в 'f').
+    # Sample buffers — array.array instead of Python lists to prevent memory bloat on large WAVs.
     if audio_fmt == 1 and bps == 2:
         n = len(raw) // 2
         src = array.array('h')
         src.frombytes(raw[:n * 2])
         mono = array.array('d', (s / 32768.0 for s in src))
     elif audio_fmt == 1 and bps == 1:
-        # (правка 716) 8-bit PCM (беззнаковый, 128 = ноль) — раньше отвергался.
+        # (fix 716) 8-bit PCM (unsigned, 128 = zero)
         n = len(raw)
         mono = array.array('d', ((b - 128) / 128.0 for b in raw[:n]))
     elif audio_fmt == 1 and bps == 4:
@@ -348,7 +336,7 @@ def decode_wav(data):
         mono = array.array('f')
         mono.frombytes(raw[:n * 4])
     else:
-        raise RuntimeError(f'Неподдерживаемый формат WAV (fmt={audio_fmt}, bps={bps})')
+        raise RuntimeError(f'Unsupported WAV format (fmt={audio_fmt}, bps={bps})')
 
     if channels > 1:
         n_ch = len(mono) // channels
@@ -359,7 +347,7 @@ def decode_wav(data):
     if rate != 16000:
         ratio = rate / 16000
         n_out = int(len(mono) / ratio)
-        out = array.array('d', bytes(8 * n_out))  # нули без временного списка
+        out = array.array('d', bytes(8 * n_out))  # zeros without temporary list
         for i in range(n_out):
             p = i * ratio
             i0 = int(p)
@@ -378,7 +366,7 @@ def run_transcribe(wav_bytes):
     with LOCK:
         lib = STATE['lib']
         if lib is None or STATE['session'] is None:
-            raise RuntimeError('Модель не загружена')
+            raise RuntimeError('Model not loaded')
         pcm, n = decode_wav(wav_bytes)
         if n < 160:
             return '', 0
@@ -396,7 +384,7 @@ def run_transcribe(wav_bytes):
         t0 = time.time()
         rc = lib.transcribe_run(STATE['session'], arr, n, ctypes.byref(rp))
         if rc != 0:
-            raise RuntimeError(f'Ошибка распознавания: {status_text(lib, rc)}')
+            raise RuntimeError(f'Transcription error: {status_text(lib, rc)}')
         ms = int((time.time() - t0) * 1000)
         text = lib.transcribe_full_text(STATE['session'])
         return (text.decode('utf-8', errors='replace') if text else '').strip(), ms
@@ -404,15 +392,8 @@ def run_transcribe(wav_bytes):
 
 # ─────────────────────────── HTTP server ───────────────────────────
 
-# Лимит тела запроса: decode_wav разворачивает WAV в сэмпл-буферы по
-# несколько байт на сэмпл — гигантское тело валило процесс по памяти.
-# Настраивается переменной окружения STT_MAX_BODY_MB (по умолчанию 256 МБ).
-# (правка 716) decode_wav держит ОДНОВРЕМЕННО ~5 копий сэмплов
-# (raw → array('d') моно → array('d') ресемпл → float32 bytes → c_float
-# буфер), т.е. усиление ≈13x к размеру тела. Прежний лимит 256 МБ давал
-# ~3.3 ГБ живых аллокаций — «легальное» тело всё равно убивало процесс.
-# Поэтому лимит понижен до 48 МБ (≈ 25 минут аудио 16 кГц моно 16 бит),
-# а значение из окружения валидируется (0/мусор больше не ломают старт).
+# Request body limit: decode_wav expands WAV into sample buffers.
+# Configurable via STT_MAX_BODY_MB environment variable (default 48 MB).
 try:
     _max_body_mb = int(os.environ.get('STT_MAX_BODY_MB', '48'))
 except (TypeError, ValueError):
@@ -442,10 +423,8 @@ class Handler(BaseHTTPRequestHandler):
         mark_activity()
         if self.path == '/health':
             lib = STATE['lib']
-            # БЕЗ LOCK: run_transcribe держит лок на всё время CPU-инференса
-            # (десятки секунд), и health-пинги зависали бы за ним — ensureStt
-            # решал бы, что здоровый сервер мёртв. Чтения простых полей
-            # dict атомарны под GIL — лок для отчёта не нужен.
+            # WITHOUT LOCK: run_transcribe holds lock throughout CPU inference.
+            # Dict reads are atomic under GIL.
             ok = lib is not None and STATE['session'] is not None
             payload = {
                 'ok': ok,
@@ -461,9 +440,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         mark_activity()
-        # int(Content-Length) без try — мусорный/отсутствующий заголовок ронял
-        # обработчик traceback'ом (тот же фикс, что правка 353 в llm_server.py).
-        # Плюс лимит размера тела — см. MAX_BODY_BYTES выше.
         try:
             length = int(self.headers.get('Content-Length') or 0)
         except (TypeError, ValueError):
@@ -474,27 +450,23 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == '/transcribe':
             try:
                 text, ms = run_transcribe(body)
-                # Долгая транскрипция (> --idle-sec) не обновляет активность,
-                # пока идёт блокирующий вызов DLL. Отмечаем её по факту
-                # завершения — иначе idle-watchdog убивал сервер сразу после
-                # успешного распознавания (аналог touch() в llm_server).
                 mark_activity()
                 self._json(200, {'ok': True, 'text': text, 'ms': ms})
             except Exception as e:
-                log(f'ошибка распознавания: {e}')
+                log(f'transcription error: {e}')
                 self._json(500, {'ok': False, 'error': str(e)})
         elif self.path == '/reload':
             try:
                 req = json.loads(body.decode('utf-8') or '{}')
                 model = req.get('model') or STATE['model_path'] or args.model
-                language = req.get('language') or STATE['language'] or 'ru'
+                language = req.get('language') or STATE['language'] or 'en'
                 threads = req.get('threads', STATE['threads'])
                 with LOCK:
                     load_state(model, language, threads)
                 self._json(200, {'ok': True, 'model': STATE['model_path'],
                                  'language': STATE['language'], 'threads': STATE['threads']})
             except Exception as e:
-                log(f'ошибка перезагрузки: {e}')
+                log(f'reload error: {e}')
                 self._json(500, {'ok': False, 'error': str(e)})
         elif self.path == '/shutdown':
             self._json(200, {'ok': True})
@@ -503,14 +475,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {'ok': False, 'error': 'not found'})
 
     def log_message(self, fmt, *a):
-        # Молчим (как в llm_server.py): каждый запрос писался в stderr, и если
-        # родитель не вычитывает пайп (буфер 64 КБ), поток-обработчик
-        # блокировался навсегда прямо на записи лога.
         pass
 
 
 def _do_shutdown():
-    log('остановка: освобождаю модель')
+    log('shutdown: freeing model')
     with LOCK:
         free_state()
     os._exit(0)
@@ -520,11 +489,8 @@ def idle_watchdog(idle_sec):
     while True:
         time.sleep(5)
         if time.time() - LAST_ACTIVITY[0] > idle_sec:
-            log(f'простой {idle_sec // 60} мин — выход (освобождаю память)')
+            log(f'idle for {idle_sec // 60} min — exiting (freeing memory)')
             with LOCK:
-                # Перепроверка ПОСЛЕ захвата LOCK: пока мы ждали лок (долгая
-                # транскрипция держит его всё время инференса), активность
-                # могла обновиться уже после первой проверки — выходить нельзя.
                 if time.time() - LAST_ACTIVITY[0] <= idle_sec:
                     continue
                 free_state()
@@ -535,7 +501,7 @@ def main():
     try:
         STATE['lib'] = load_lib(args.stt_dir)
     except Exception as e:
-        log(f'ОШИБКА: {e}')
+        log(f'ERROR: {e}')
         sys.exit(2)
 
     lib = STATE['lib']
@@ -555,7 +521,7 @@ def main():
     try:
         load_state(args.model, args.language, args.threads)
     except Exception as e:
-        log(f'ОШИБКА: {e}')
+        log(f'ERROR: {e}')
         sys.exit(2)
 
     threading.Thread(target=idle_watchdog, args=(args.idle_sec,), daemon=True).start()
@@ -565,7 +531,7 @@ def main():
         daemon_threads = True
 
     srv = Server(('127.0.0.1', args.port), Handler)
-    log(f'готов: модель={STATE["model_path"]} lang={STATE["language"]} threads={STATE["threads"]} порт={args.port} (CPU)')
+    log(f'ready: model={STATE["model_path"]} lang={STATE["language"]} threads={STATE["threads"]} port={args.port} (CPU)')
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

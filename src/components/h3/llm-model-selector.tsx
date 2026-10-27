@@ -2,8 +2,8 @@
 
 /**
  * LLM Model Selector — dropdown to switch between LLM models/quantizations:
- * Gemma 4 12B (Q3_K_M / Q4_K_M / Q5_K_M) or Qwen3.5 9B (правка 52).
- * Listed with VRAM recommendations. (правка 48)
+ * Gemma 4 12B (Q3_K_M / Q4_K_M / Q5_K_M) or Qwen3.5 9B (edit 52).
+ * Listed with VRAM recommendations. (edit 48)
  */
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
@@ -17,18 +17,15 @@ interface LlmModelOption {
   sizeLabel: string
 }
 
-/** Модель ассистента по умолчанию — Qwen3.5 9B. */
+/** Default assistant model — Qwen3.5 9B. */
 export const DEFAULT_LLM_MODEL_ID = 'llm_assistant_qwen'
 const DEFAULT_LLM_MODEL_FILE = 'Qwen3.5-9B-Q4_K_M.gguf'
 
 /**
- * Размер модели берём из реестра (models-config.ts), а не дублируем строкой
- * рядом: раньше подписи в селекторе разошлись с реальными файлами
- * (показывали «~8.6 GB» для Gemma Q5,whose файл весит 8.41 ГБ, и «~7.8 GB»
- * для Bonsai PQ2_0,whose файл весит 7.21 ГБ).
+ * Model size is retrieved from the registry (models-config.ts) instead of hardcoding:
+ * avoids selector labels diverging from actual files on disk.
  *
- * Виртуальные id бонусов ('llm_assistant_bonsai*') в реестре отсутствуют —
- * для них указан источник id (какая запись реестра описывает этот файл).
+ * Virtual ids ('llm_assistant_bonsai*') are resolved to their source entry.
  */
 function sizeOf(modelId: string): string {
   const def = MODELS.find((m) => m.id === modelId)
@@ -36,45 +33,45 @@ function sizeOf(modelId: string): string {
 }
 
 const LLM_OPTIONS: LlmModelOption[] = [
-  // (правка 136) Bonsai 2 27B — тернарный квант Qwen-семейства на форке
-  // llama.cpp (PrismML). Значение 'bonsai' = спец-маркер в config [llm] model.
+  // (edit 136) Bonsai 2 27B — ternary quantization of Qwen family on llama.cpp fork (PrismML).
+  // 'bonsai' value = special marker in config [llm] model.
   {
     id: 'llm_assistant_bonsai',
-    label: `Bonsai 2 27B · тернарная (27B в ${sizeOf('bonsai_model')}, vision)`,
+    label: `Bonsai 2 27B · ternary (27B in ${sizeOf('bonsai_model')}, vision)`,
     filename: 'bonsai',
     sizeLabel: sizeOf('bonsai_model'),
   },
-  // (правка 168) Bonsai 2 27B PTQ1_0 — самая лёгкая квантизация, для карт ≤8 ГБ.
-  // Значение 'bonsai_light' = использовать PTQ1_0 вместо PQ2_0.
+  // (edit 168) Bonsai 2 27B PTQ1_0 — lightest quantization for <=8 GB GPUs.
+  // 'bonsai_light' value = use PTQ1_0 instead of PQ2_0.
   {
     id: 'llm_assistant_bonsai_light',
-    label: `Bonsai 2 27B · PTQ1_0 (самая лёгкая, ${sizeOf('bonsai_model_light')}, для карт ≤8 ГБ)`,
+    label: `Bonsai 2 27B · PTQ1_0 (lightest, ${sizeOf('bonsai_model_light')}, for GPUs ≤8 GB)`,
     filename: 'bonsai_light',
     sizeLabel: sizeOf('bonsai_model_light'),
   },
   {
     id: 'llm_assistant',
-    label: `Gemma 4 12B · Q4_K_M (баланс, ${sizeOf('llm_assistant')})`,
+    label: `Gemma 4 12B · Q4_K_M (balanced, ${sizeOf('llm_assistant')})`,
     filename: 'gemma-4-12b-it-Q4_K_M.gguf',
     sizeLabel: sizeOf('llm_assistant'),
   },
   {
     id: 'llm_assistant_q3',
-    label: `Gemma 4 12B · Q3_K_M (лёгкая, ${sizeOf('llm_assistant_q3')}, ~8 GB VRAM)`,
+    label: `Gemma 4 12B · Q3_K_M (light, ${sizeOf('llm_assistant_q3')}, ~8 GB VRAM)`,
     filename: 'gemma-4-12b-it-Q3_K_M.gguf',
     sizeLabel: sizeOf('llm_assistant_q3'),
   },
   {
     id: 'llm_assistant_q5',
-    label: `Gemma 4 12B · Q5_K_M (макс. качество, ${sizeOf('llm_assistant_q5')}, ~12 GB VRAM)`,
+    label: `Gemma 4 12B · Q5_K_M (max quality, ${sizeOf('llm_assistant_q5')}, ~12 GB VRAM)`,
     filename: 'gemma-4-12b-it-Q5_K_M.gguf',
     sizeLabel: sizeOf('llm_assistant_q5'),
   },
-  // Qwen3.5 9B (правка 52): альтернатива для слабых машин — 5.7 ГБ весов,
-  // мультимодальная (картинки + видео). Нужен свежий llama.cpp (qwen35).
+  // Qwen3.5 9B (edit 52): alternative for lower-spec machines — 5.7 GB weights,
+  // multimodal (images + video). Requires modern llama.cpp (qwen35).
   {
     id: 'llm_assistant_qwen',
-    label: `Qwen3.5 9B · Q4_K_M (vision, лёгкая, ${sizeOf('llm_assistant_qwen')})`,
+    label: `Qwen3.5 9B · Q4_K_M (vision, light, ${sizeOf('llm_assistant_qwen')})`,
     filename: 'Qwen3.5-9B-Q4_K_M.gguf',
     sizeLabel: sizeOf('llm_assistant_qwen'),
   },
@@ -83,8 +80,8 @@ const LLM_OPTIONS: LlmModelOption[] = [
 export function LlmModelSelector() {
   const [selected, setSelected] = useState(DEFAULT_LLM_MODEL_FILE)
   const [saving, setSaving] = useState(false)
-  // Путь своей GGUF-модели из конфига: если задан — в списке появляется
-  // пункт «Своя модель», и он же выбран, когда backend=custom.
+  // Custom GGUF model path from config: when set — "Custom model" appears in list,
+  // and is selected when backend=custom.
   const [customPath, setCustomPath] = useState('')
 
   useEffect(() => {
@@ -112,26 +109,25 @@ export function LlmModelSelector() {
         body: JSON.stringify({ llm_model: filename }),
       })
       if (res.ok) {
-        // Выгружаем загруженную LLM: иначе она продолжала бы отвечать СТАРОЙ
-        // моделью, а чат-роут уже шлёт протокол/сэмплинг НОВОЙ (для смены
-        // бэкенда standard↔bonsai это несовместимые /chat и
-        // /v1/chat/completions). Страховка на гонку — сигнатура конфига в
-        // ensureLlm (llm-runner.ts).
+        // Unload active LLM: otherwise it continues responding with the OLD model
+        // while chat routes use the protocol/sampling of the NEW one (for
+        // standard <-> bonsai backend switches this is incompatible /chat vs /v1/chat/completions).
+        // Race condition guarded by config signature in ensureLlm (llm-runner.ts).
         void fetch('/api/llm/stop', { method: 'POST' }).catch(() => {})
         if (filename === 'llm_custom') {
-          toast.success('LLM: своя модель (GGUF)', {
-            description: 'Ассистент перезапустится с ней при следующем сообщении.',
+          toast.success('LLM: custom model (GGUF)', {
+            description: 'The assistant will restart with it on the next message.',
           })
         } else {
           const opt = LLM_OPTIONS.find((o) => o.filename === filename)
           toast.success(
             `LLM: ${opt?.label ?? (filename || 'Qwen3.5 9B')}`,
-            { description: 'Ассистент перезапустится с ней при следующем сообщении.' },
+            { description: 'The assistant will restart with it on the next message.' },
           )
         }
       }
     } catch {
-      toast.error('Не удалось сохранить')
+      toast.error('Failed to save')
     } finally {
       setSaving(false)
     }
@@ -142,14 +138,14 @@ export function LlmModelSelector() {
     void save(value)
   }
 
-  // Имя файла своей модели для подписи пункта (путь может быть и папкой).
+  // Base name of custom model file for option label (path may be a directory or file).
   const customBase = customPath.split(/[\\/]/).filter(Boolean).pop() ?? ''
 
   return (
     <div className="space-y-2 pt-2 border-t border-border">
       <div className="flex items-center gap-2">
         <BotIcon className="w-3.5 h-3.5 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">Модель ассистента</span>
+        <span className="text-xs text-muted-foreground">Assistant model</span>
         {saving && <Loader2Icon className="w-3 h-3 animate-spin text-muted-foreground" />}
       </div>
       <select
@@ -159,7 +155,7 @@ export function LlmModelSelector() {
         className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
       >
         {customPath && (
-          <option value="llm_custom">Своя модель (GGUF): {customBase}</option>
+          <option value="llm_custom">Custom model (GGUF): {customBase}</option>
         )}
         {LLM_OPTIONS.map((opt) => (
           <option key={opt.id} value={opt.filename}>
@@ -169,8 +165,8 @@ export function LlmModelSelector() {
       </select>
       <p className="text-[10px] text-muted-foreground/50">
         {customPath
-          ? 'Своя модель задаётся путём в поле ниже; выбор встроенной модели в списке переключает обратно (путь при этом сохраняется).'
-          : 'Qwen3.5 9B — модель по умолчанию (8–12 ГБ VRAM) · Bonsai 2 27B — необязательная тернарная модель · PTQ1_0 — самая лёгкая (≤8 ГБ) · Gemma Q3 — 8 ГБ VRAM · Q4 — 12 ГБ · Q5 — 16+ ГБ'}
+          ? 'Custom model is configured via path below; choosing a built-in model switches back (path is retained).'
+          : 'Qwen3.5 9B — default model (8–12 GB VRAM) · Bonsai 2 27B — optional ternary model · PTQ1_0 — lightest (≤8 GB) · Gemma Q3 — 8 GB VRAM · Q4 — 12 GB · Q5 — 16+ GB'}
       </p>
     </div>
   )

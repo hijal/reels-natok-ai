@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { moveOutputFile } from '@/lib/gallery-folders'
 
 /**
- * POST /api/comfy/move — переместить файл вывода между папками галереи
- * (drag&drop в общей галерее, правка 91). Тело:
- *   { filename, from: string ('' = общая), to: string }
- * Вместе с файлом переезжает его .meta.json сайдкар.
+ * POST /api/comfy/move — move output file between gallery folders
+ * (drag&drop in shared gallery, fix 91). Body:
+ *   { filename, from: string ('' = shared), to: string }
+ * Along with the file, its .meta.json sidecar is moved.
  */
 export const dynamic = 'force-dynamic'
 

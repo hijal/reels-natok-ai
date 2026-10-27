@@ -1,21 +1,21 @@
 /**
- * latent-file (правка 375/376) — работа с .latent-файлами пайплайна
- * «драфт → рефайн» (нода MiniMaxStudioSaveAVLatent, правка 372).
+ * latent-file (fix 375/376) — working with .latent files of the
+ * "draft → refine" pipeline (MiniMaxStudioSaveAVLatent node, fix 372).
  *
- * Формат: safetensors с тензорами video_samples/audio_samples и JSON-шапкой
- * в metadata → {"minimax_av_latent": "{\"fps\":24,\"vae\":…,\"version\":1}"}.
- * Шапку читаем БЕЗ загрузки тензоров: safetensors кладёт длину JSON-хедера
- * в первые 8 байт (u64 LE), сам хедер — сразу за ними.
+ * Format: safetensors with video_samples/audio_samples tensors and JSON header
+ * in metadata → {"minimax_av_latent": "{\"fps\":24,\"vae\":…,\"version\":1}"}.
+ * The header is read WITHOUT loading tensors: safetensors stores the length of JSON header
+ * in the first 8 bytes (u64 LE), the header itself immediately follows them.
  *
- * Латент валиден только с тем же video-VAE: при смене VAE старые файлы
- * инвалидируются — проверяем имя в шапке против текущего VAELoader
- * (видео-VAE в проекте один: minimax_h3_video_vae_int8_convrot).
+ * Latent is valid only with the same video VAE: when changing VAE, old files
+ * are invalidated — we verify the name in the header against current VAELoader
+ * (the project has only one video VAE: minimax_h3_video_vae_int8_convrot).
  */
 import fs from 'fs'
 import path from 'path'
 import { getAppConfig } from '@/lib/app-config'
 
-/** Имя video-VAE, которым собирает воркфлоу студия ('46:3' VAELoader). */
+/** Name of the video VAE used by studio workflow builder ('46:3' VAELoader). */
 export const VIDEO_VAE_NAME = 'minimax_h3_video_vae_int8_convrot.safetensors'
 
 export interface LatentHeader {
@@ -28,38 +28,38 @@ export interface LatentCheck {
   ok: boolean
   reason?: string
   header?: LatentHeader
-  /** Пиксельная канва латента (latent × 16, VAE_DOWNSAMPLE в узле
-   *  апскейлера), число видео-токенов и аудио-шагов — из shape тензоров
-   *  video_samples/audio_samples в шапке safetensors, без их загрузки. */
+  /** Pixel canvas of the latent (latent × 16, VAE_DOWNSAMPLE in upscaler node),
+   *  number of video tokens and audio steps — from shape of tensors
+   *  video_samples/audio_samples in safetensors header, without loading them. */
   dims?: { width: number; height: number; tokens: number; audioSteps: number }
 }
 
 /**
- * Проверить .latent-файл (путь относительно output/ ComfyUI) перед подачей
- * в refine: существует, внутри output/, safetensors-хедер распарсен, оба
- * тензора на месте, версия формата и VAE совпадают с текущими.
- * Тензоры НЕ читаем — это дешёвая проверка перед постановкой джоба.
+ * Check .latent file (path relative to ComfyUI output/) before passing
+ * to refine: exists, inside output/, safetensors header parsed, both
+ * tensors present, format version and VAE match current ones.
+ * Tensors are NOT read — this is a cheap check before queueing the job.
  */
 export function validateLatentFile(relPath: string): LatentCheck {
   const OUTPUT_DIR = getAppConfig().outputDir
-  if (!OUTPUT_DIR || !relPath) return { ok: false, reason: 'не задан путь латента' }
+  if (!OUTPUT_DIR || !relPath) return { ok: false, reason: 'latent path not specified' }
 
-  // (паттерн правки 348) resolve + нижний регистр на win32 — иначе
-  // startsWith-проверка пропускала '..\' или чужой префикс с другим регистром.
+  // (fix 348 pattern) resolve + lowercase on win32 — otherwise
+  // startsWith check passed '..\' or a foreign prefix with different casing.
   const root = path.resolve(OUTPUT_DIR)
   const full = path.resolve(root, relPath)
   const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
   if (norm(full) !== norm(root) && !norm(full).startsWith(norm(root) + path.sep)) {
-    return { ok: false, reason: 'путь вне output/' }
+    return { ok: false, reason: 'path outside output/' }
   }
 
   let st: fs.Stats
   try {
     st = fs.statSync(full)
   } catch {
-    return { ok: false, reason: 'файл латента не найден' }
+    return { ok: false, reason: 'latent file not found' }
   }
-  if (!st.isFile() || st.size < 16) return { ok: false, reason: 'файл латента пуст/битый' }
+  if (!st.isFile() || st.size < 16) return { ok: false, reason: 'latent file is empty/corrupted' }
 
   const fd = fs.openSync(full, 'r')
   try {
@@ -67,7 +67,7 @@ export function validateLatentFile(relPath: string): LatentCheck {
     fs.readSync(fd, lenBuf, 0, 8, 0)
     const headerLen = Number(lenBuf.readBigUInt64LE(0))
     if (!Number.isFinite(headerLen) || headerLen <= 0 || headerLen > 16 * 1024 * 1024) {
-      return { ok: false, reason: 'битая шапка safetensors' }
+      return { ok: false, reason: 'corrupted safetensors header' }
     }
     const headBuf = Buffer.alloc(headerLen)
     fs.readSync(fd, headBuf, 0, headerLen, 8)
@@ -77,12 +77,12 @@ export function validateLatentFile(relPath: string): LatentCheck {
       __metadata__?: Record<string, string>
     }
     if (!header.video_samples || !header.audio_samples) {
-      return { ok: false, reason: 'в файле нет пары video/audio тензоров' }
+      return { ok: false, reason: 'no video/audio tensor pair in file' }
     }
-    // (правки 381/382) Пиксельная канва из shape: последние две размерности
-    // видео-латента = (H_lat, W_lat), пиксели = латент × 16 (VAE_DOWNSAMPLE
-    // узла MinimaxH3LatentUpscaler3D: VAE 8× + patch 2×). tokens = shape[-3],
-    // аудио-шаги = последняя размерность аудио-латента (кадры × 5/3).
+    // (fixes 381/382) Pixel canvas from shape: last two dimensions
+    // of video latent = (H_lat, W_lat), pixels = latent × 16 (VAE_DOWNSAMPLE
+    // of MinimaxH3LatentUpscaler3D node: VAE 8× + patch 2×). tokens = shape[-3],
+    // audio steps = last dimension of audio latent (frames × 5/3).
     const vShape = header.video_samples.shape
     const aShape = header.audio_samples.shape
     const dims =
@@ -98,11 +98,11 @@ export function validateLatentFile(relPath: string): LatentCheck {
           }
         : undefined
     const raw = header.__metadata__?.minimax_av_latent
-    if (typeof raw !== 'string') return { ok: false, reason: 'нет шапки minimax_av_latent' }
+    if (typeof raw !== 'string') return { ok: false, reason: 'missing minimax_av_latent header' }
     const info = JSON.parse(raw) as LatentHeader
-    if (info.version !== 1) return { ok: false, reason: `версия формата ${info.version} ≠ 1` }
+    if (info.version !== 1) return { ok: false, reason: `format version ${info.version} ≠ 1` }
     if (info.vae !== VIDEO_VAE_NAME) {
-      return { ok: false, reason: `VAE латента (${info.vae}) не совпадает с текущим` }
+      return { ok: false, reason: `latent VAE (${info.vae}) does not match current` }
     }
     return { ok: true, header: info, dims }
   } catch (e) {

@@ -3,7 +3,7 @@
 /**
  * A full-screen modal editor for long prompts.
  * Left: large highlighted textarea (MentionTextarea) + live quality checklist.
- * Right: insert panel — reference tag buttons, "+ реплика" (<d>…</d>),
+ * Right: insert panel — reference tag buttons, "+ dialogue" (<d>…</d>),
  * cinema vocabulary chips and scene skeletons from the Learn guide.
  */
 import { useState, useEffect, useRef } from 'react'
@@ -53,8 +53,7 @@ interface PromptEditorDialogProps {
   onSaveAndRun?: (text: string) => void
   placeholder?: string
   mentions?: MentionItem[]
-  /** (правка 443) Опции «Улучшить промпт»: из редактора клипа продления
-   *  запрос уходит в extend-чат с номером клипа (по умолчанию — generate). */
+  /** Options for "Improve Prompt": request goes to extend chat or generate chat */
   improveOptions?: ImprovePromptOptions
 }
 
@@ -65,15 +64,15 @@ type RightTab = 'insert' | 'history' | 'examples'
  *  [in brackets] are placeholders for the user to fill in. */
 const SKELETONS: Array<{ label: string; text: string }> = [
   {
-    label: 'Портрет',
+    label: 'Portrait',
     text: 'A character with <Picture 1> [what they are doing], [place, time of day], [lighting and mood]. The camera [movement/shot]. He/She says: <d>short line.</d>',
   },
   {
-    label: 'Сцена',
+    label: 'Scene',
     text: 'A character with <Picture 1> [action] in [location from <Video 1>], [surrounding details], [light]. The camera [movement]. Sounds: [background sounds].',
   },
   {
-    label: 'Диалог',
+    label: 'Dialogue',
     text: 'A character with <Picture 1> [scene context and place]. He/She says: <d>first short line.</d> A pause, [reaction/gesture]. Then: <d>second line.</d>',
   },
 ]
@@ -84,7 +83,7 @@ export function PromptEditorDialog({
   initialText,
   onSave,
   onSaveAndRun,
-  placeholder = 'Введите или отредактируйте промпт…',
+  placeholder = 'Enter or edit prompt…',
   mentions,
   improveOptions,
 }: PromptEditorDialogProps) {
@@ -109,38 +108,33 @@ export function PromptEditorDialog({
   /** Apply a full prompt (from history/examples) — replaces the current text. */
   const applyPrompt = (snippet: string) => {
     setText(snippet)
-    toast.success('Промпт подставлен')
+    toast.success('Prompt applied')
   }
 
-  /** (правка 560) «Исправить промпт»: сначала спрашиваем, ЧТО именно
-   *  изменить, — окно с полем задания; промпт + задание уходят в чат
-   *  ассистента текущей вкладки парой. */
+  /** "Refine prompt": first ask what to change via modal input;
+   *  prompt + request are sent to assistant chat. */
   const [fixOpen, setFixOpen] = useState(false)
   const [fixText, setFixText] = useState('')
 
-  /** "Исправить промпт" — open the "what to change" dialog (правка 560). */
+  /** "Refine prompt" — open the "what to change" dialog. */
   const handleImprove = () => {
     if (!text.trim()) {
-      toast.info('Промпт пуст', { description: 'Введите хотя бы несколько слов, чтобы LLM мог его исправить.' })
+      toast.info('Prompt is empty', { description: 'Enter at least a few words so the LLM can refine it.' })
       return
     }
     setFixText('')
     setFixOpen(true)
   }
 
-  /** Отправить: черновик сохраняется, редактор закрывается, задание
-   *  пользователя + текущий промпт уходят в соответствующий чат ассистента
-   *  (правка 559: существующий чат режима, без плодания новых). */
+  /** Send: save draft, close editor, user instructions + current prompt
+   *  are sent to the respective assistant chat. */
   const submitFix = () => {
     const req = fixText.trim()
     if (!req) return
     onSave(text)
     setFixOpen(false)
     improvePrompt(text, { ...improveOptions, fixRequest: req })
-    // (правка 560b) Редактор закрываем ОТДЕЛЬНЫМ тиком после окна задания:
-    // при одновременном exit двух Presence в одном React-коммите анимации
-    // закрытия могли не отрабатывать (диалоги-призраки с data-state=closed
-    // висли над UI). Разделение по тикам даёт каждому диалогу чистый exit.
+    // Close editor on separate tick to avoid Presence exit animation conflicts
     setTimeout(() => onOpenChange(false), 50)
   }
 
@@ -158,9 +152,9 @@ export function PromptEditorDialog({
   const copyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success('Промпт скопирован в буфер обмена')
+      toast.success('Prompt copied to clipboard')
     } catch {
-      toast.error('Не удалось скопировать')
+      toast.error('Failed to copy')
     }
   }
 
@@ -189,44 +183,37 @@ export function PromptEditorDialog({
 
   return (
     <>
-    {/* (правка 560b) Два НЕЗАВИСИМЫХ sibling-диалога. Окно задания НЕ вложено
-        в дерево редактора: при одновременном закрытии обоих (сабмит)
-        вложенный Radix-Dialog застревал в DOM с data-state=closed —
-        exit-анимация не отрабатывала и диалоги-призраки висели над UI.
-        Сиблинги закрываются как два обычных диалога (проверено на шаблоне
-        «Настройки»). */}
+    {/* Two independent sibling dialogs */}
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* (правка 454) Ширина диалога уменьшена на 30%: 80vw → 56vw — на
-          широких мониторах редактор не разъезжался на пол-экрана. */}
       <DialogContent className="max-w-[56vw] sm:max-w-[56vw] w-full h-[85vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-4 pt-3 pb-2 border-b border-border shrink-0 flex items-center justify-between">
           <div>
             <DialogTitle className="text-base font-semibold">
-              Редактор промпта
+              Prompt Editor
             </DialogTitle>
             {mentions && mentions.length > 0 && (
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                Введите <span className="font-mono text-foreground/80">@</span> для вставки референса
+                Type <span className="font-mono text-foreground/80">@</span> to insert reference
               </p>
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground mr-2">{text.length} символов</span>
-            {/* (правка 560) «Исправить промпт» — открывает окно задания. */}
+            <span className="text-xs text-muted-foreground mr-2">{text.length} characters</span>
+            {/* "Refine prompt" — opens task dialog */}
             <button
               type="button"
               onClick={handleImprove}
-              title="Отправить в LLM-ассистент с указанием, что именно изменить"
+              title="Send to LLM assistant with instructions on what to change"
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 text-violet-300 border border-violet-500/30 hover:from-violet-500/30 hover:to-fuchsia-500/30 transition-colors"
             >
               <WandSparklesIcon className="w-3.5 h-3.5" />
-              Исправить промпт
+              Refine prompt
             </button>
             {/* Mini-toolbar: wrap selection · copy · clear */}
             <button
               type="button"
               onClick={() => editorRef.current?.wrapSelection('<d>', '</d>')}
-              title="Обернуть выделение в <d>…</d>"
+              title="Wrap selection in <d>…</d>"
               className="p-1.5 rounded-md text-muted-foreground hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
             >
               <WrapTextIcon className="w-4 h-4" />
@@ -234,7 +221,7 @@ export function PromptEditorDialog({
             <button
               type="button"
               onClick={copyPrompt}
-              title="Скопировать промпт"
+              title="Copy prompt"
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-[var(--surface-3)] transition-colors"
             >
               <CopyIcon className="w-4 h-4" />
@@ -242,13 +229,13 @@ export function PromptEditorDialog({
             <button
               type="button"
               onClick={() => setText('')}
-              title="Очистить"
+              title="Clear"
               className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
             >
               <TrashIcon className="w-4 h-4" />
             </button>
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-              Отмена
+              Cancel
             </Button>
             {onSaveAndRun ? (
               <Button
@@ -257,11 +244,11 @@ export function PromptEditorDialog({
                 className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 font-semibold"
                 title="Ctrl+Enter"
               >
-                Сохранить и запустить
+                Save and Run
               </Button>
             ) : null}
             <Button size="sm" variant={onSaveAndRun ? 'outline' : 'default'} onClick={handleSave}>
-              Сохранить
+              Save
             </Button>
           </div>
         </DialogHeader>
@@ -269,7 +256,7 @@ export function PromptEditorDialog({
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 px-3 py-2">
           {/* Editor + quality checklist */}
           <div className="flex-1 min-h-0 flex flex-col gap-2">
-            {/* (правка 74) Круглый микрофон ВНУТРИ поля редактора */}
+            {/* Microphone inside editor */}
             <div className="relative flex-1 min-h-0">
               <MentionTextarea
                 ref={editorRef}
@@ -280,11 +267,10 @@ export function PromptEditorDialog({
                 mentions={mentions}
                 className="w-full h-full resize-none rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 pr-10"
               />
-              {/* (правка 118) hotkey: диалог монтируется последним → пока открыт, клавишу принимает он */}
               <VoiceInputButton
                 hotkey
                 onText={(t) => editorRef.current?.insertAtCursor(t)}
-                title="Голосовой ввод — вставка по курсору"
+                title="Voice input — insert at cursor"
               />
             </div>
             <PromptQuality prompt={text} refsCount={mentions?.length ?? 0} className="shrink-0" />
@@ -295,9 +281,9 @@ export function PromptEditorDialog({
             {/* Right-panel tabs */}
             <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--surface-2)]/60 border border-border mb-3 shrink-0">
               {([
-                ['insert', 'Вставка', <TagsIcon key="i" className="w-3.5 h-3.5" />],
-                ['history', 'История', <HistoryIcon key="h" className="w-3.5 h-3.5" />],
-                ['examples', 'Примеры', <SparklesIcon key="e" className="w-3.5 h-3.5" />],
+                ['insert', 'Insert', <TagsIcon key="i" className="w-3.5 h-3.5" />],
+                ['history', 'History', <HistoryIcon key="h" className="w-3.5 h-3.5" />],
+                ['examples', 'Examples', <SparklesIcon key="e" className="w-3.5 h-3.5" />],
               ] as const).map(([id, label, icon]) => (
                 <button
                   key={id}
@@ -306,8 +292,8 @@ export function PromptEditorDialog({
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
                     rightTab === id
-                      ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                      : 'text-muted-foreground border border-transparent hover:text-foreground',
+                       ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                       : 'text-muted-foreground border border-transparent hover:text-foreground',
                   )}
                 >
                   {icon}
@@ -317,7 +303,7 @@ export function PromptEditorDialog({
             </div>
             {rightTab === 'insert' && (
               <div className="flex-1 overflow-y-auto space-y-4 min-h-0 px-1">
-            {panelBlock(<TagsIcon className="w-3.5 h-3.5" />, 'Референсы (вставить тег)', (
+            {panelBlock(<TagsIcon className="w-3.5 h-3.5" />, 'References (insert tag)', (
               <div className="flex flex-wrap gap-1.5">
                 {(mentions ?? []).map((m) => (
                   <button
@@ -331,16 +317,16 @@ export function PromptEditorDialog({
                   </button>
                 ))}
                 {(!mentions || mentions.length === 0) && (
-                  <p className="text-[10px] text-muted-foreground/70">Загрузите референсы на вкладке генерации.</p>
+                  <p className="text-[10px] text-muted-foreground/70">Upload references in the generation tab.</p>
                 )}
               </div>
             ))}
 
-            {panelBlock(<MessageSquareQuoteIcon className="w-3.5 h-3.5" />, 'Реплика (озвучка)', (
+            {panelBlock(<MessageSquareQuoteIcon className="w-3.5 h-3.5" />, 'Dialogue (voiceover)', (
               <div className="space-y-1">
                 <button
                   type="button"
-                  onClick={() => insert('<d>речь героя</d>')}
+                  onClick={() => insert('<d>character dialogue</d>')}
                   className="w-full px-2 py-1.5 rounded-md text-xs border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors"
                 >
                   + &lt;d&gt;…&lt;/d&gt;
@@ -349,14 +335,14 @@ export function PromptEditorDialog({
                   type="button"
                   onClick={() => editorRef.current?.wrapSelection('<d>', '</d>')}
                   className="w-full px-2 py-1.5 rounded-md text-xs border border-amber-500/20 text-amber-300/80 hover:bg-amber-500/10 transition-colors"
-                  title="Выделите текст в промпте и нажмите"
+                  title="Select text in prompt and click"
                 >
-                  Обернуть выделение в &lt;d&gt;
+                  Wrap selection in &lt;d&gt;
                 </button>
               </div>
             ))}
 
-            {panelBlock(<CameraIcon className="w-3.5 h-3.5" />, 'Камера и свет', (
+            {panelBlock(<CameraIcon className="w-3.5 h-3.5" />, 'Camera & Lighting', (
               <div className="flex flex-wrap gap-1">
                 {CAMERA_WORDS.map((w) => (
                   <button
@@ -371,7 +357,7 @@ export function PromptEditorDialog({
               </div>
             ))}
 
-            {panelBlock(<LayoutTemplateIcon className="w-3.5 h-3.5" />, 'Шаблоны сцены', (
+            {panelBlock(<LayoutTemplateIcon className="w-3.5 h-3.5" />, 'Scene Templates', (
               <div className="space-y-1">
                 {SKELETONS.map((s) => (
                   <button
@@ -380,7 +366,7 @@ export function PromptEditorDialog({
                     onClick={() => insert(s.text)}
                     className="w-full text-left px-2 py-1.5 rounded-md text-xs border border-border bg-[var(--surface-2)]/70 text-foreground/85 hover:border-cyan-500/40 transition-colors"
                   >
-                    {s.label} <span className="text-muted-foreground/60">— вставить скелет</span>
+                    {s.label} <span className="text-muted-foreground/60">— insert skeleton</span>
                   </button>
                 ))}
               </div>
@@ -392,20 +378,20 @@ export function PromptEditorDialog({
             {rightTab === 'history' && (
               <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
                 <div className="flex items-center justify-between px-1 py-1.5 border-b border-border sticky top-0 bg-[var(--surface-1)]">
-                  <span className="text-[10px] font-semibold text-foreground">История промптов</span>
+                  <span className="text-[10px] font-semibold text-foreground">Prompt History</span>
                   {historyEntries.length > 0 && (
                     <button
                       type="button"
                       onClick={clearHistory}
                       className="text-[10px] text-muted-foreground hover:text-red-400"
                     >
-                      очистить всё
+                      clear all
                     </button>
                   )}
                 </div>
                 {historyEntries.length === 0 && (
                   <p className="px-2 py-4 text-xs text-muted-foreground text-center">
-                    Пока пусто — запущенные промпты сохраняются здесь автоматически.
+                    Empty for now — executed prompts are saved here automatically.
                   </p>
                 )}
                 {historyEntries.map((e) => (
@@ -420,7 +406,7 @@ export function PromptEditorDialog({
                         ev.stopPropagation()
                         toggleHistoryFavorite(e.id)
                       }}
-                      title={e.favorite ? 'Убрать из избранного' : 'В избранное'}
+                      title={e.favorite ? 'Remove from favorites' : 'Add to favorites'}
                       className={cn(
                         'shrink-0 mt-0.5 w-4 h-4 flex items-center justify-center transition-colors',
                         e.favorite ? 'text-amber-400' : 'text-muted-foreground/40 hover:text-amber-400',
@@ -438,7 +424,7 @@ export function PromptEditorDialog({
                         removeHistoryEntry(e.id)
                       }}
                       className="shrink-0 mt-0.5 w-4 h-4 flex items-center justify-center text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Удалить из истории"
+                      title="Delete from history"
                     >
                       <XIcon className="w-3 h-3" />
                     </button>
@@ -451,7 +437,7 @@ export function PromptEditorDialog({
             {rightTab === 'examples' && (
               <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
                 <div className="px-1 py-1.5 border-b border-border sticky top-0 bg-[var(--surface-1)]">
-                  <span className="text-[10px] font-semibold text-foreground">Готовые примеры</span>
+                  <span className="text-[10px] font-semibold text-foreground">Ready-made Examples</span>
                 </div>
                 {EXAMPLES.map((ex) => (
                   <div
@@ -466,7 +452,7 @@ export function PromptEditorDialog({
                   </div>
                 ))}
                 <p className="px-2 py-2 text-[10px] text-muted-foreground/60 border-t border-border mt-2">
-                  Заменяет текущий промпт. Промпты — на английском: модель понимает его лучше всего.
+                  Replaces current prompt. Prompts are in English: model understands it best.
                 </p>
               </div>
             )}
@@ -475,16 +461,15 @@ export function PromptEditorDialog({
       </DialogContent>
     </Dialog>
 
-    {/* (правка 560) Окно «что изменить»: открывается по кнопке
-        «Исправить промпт». Задание пользователя + текущий черновик
-        уходят в чат ассистента (submitFix). Сиблинг редактора, не
-        вложенный диалог — см. комментарий в начале return. */}
+    {/* "What to change" window: opens via "Refine prompt" button.
+        User request + current draft are sent to assistant chat (submitFix).
+        Sibling of editor, not nested dialog. */}
     <Dialog open={fixOpen} onOpenChange={setFixOpen}>
       <DialogContent className="max-w-lg p-0 gap-0">
           <DialogHeader className="px-4 pt-4 pb-2 border-b border-border">
-            <DialogTitle className="text-base font-semibold">Исправить промпт</DialogTitle>
+            <DialogTitle className="text-base font-semibold">Refine Prompt</DialogTitle>
             <DialogDescription className="text-xs leading-relaxed">
-              Напишите, что бы вы хотели изменить в этом промпте
+              Describe what you would like to change in this prompt
             </DialogDescription>
           </DialogHeader>
           <div className="p-4 space-y-3">
@@ -502,16 +487,16 @@ export function PromptEditorDialog({
                 }
               }}
               rows={4}
-              placeholder="Например: сделай камеру статичной, убери дождь, реплику героя — короче…"
+              placeholder="For example: make the camera static, remove rain, make character dialogue shorter…"
               className="w-full resize-none rounded-xl border border-border bg-[var(--surface-2)] px-3.5 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
             />
             <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-              Промпт и ваше задание уйдут в чат ассистента этой вкладки — ответ
-              можно будет вставить обратно кнопкой «В промпт». Ctrl+Enter — отправить, Esc — отмена.
+              Prompt and your request will be sent to the assistant chat of this tab — the response
+              can be pasted back via "To Prompt". Ctrl+Enter to send, Esc to cancel.
             </p>
             <div className="flex items-center justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setFixOpen(false)}>
-                Отмена
+                Cancel
               </Button>
               <Button
                 size="sm"
@@ -520,7 +505,7 @@ export function PromptEditorDialog({
                 className="gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 hover:border-violet-500/50 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <WandSparklesIcon className="w-3.5 h-3.5" />
-                Отправить ассистенту
+                Send to Assistant
               </Button>
           </div>
         </div>
@@ -531,16 +516,8 @@ export function PromptEditorDialog({
 }
 
 /**
- * (правка 717) Вертикальная колонка кнопок поля промпта.
- *
- * Раньше каждая кнопка позиционировалась САМА: absolute top-2 с волшебными
- * смещениями right-2 / right-10 / right-[4.25rem]. Эти «магические» значения
- * не учитывали реальную ширину кнопки (p-1.5 + иконка w-3.5 + рамка ≈ 28px),
- * из-за чего кнопки налезали друг на друга и съезжали при смене размера
- * поля. Теперь это ОДИН flex-контейнер: строгая колонка, РОВНЫЕ интервалы
- * (gap) и никакой магии в координатах.
- *
- * Кнопки внутри не позиционируются — позиционирует контейнер.
+ * Vertical column of prompt field buttons.
+ * Flex container: strict column, consistent gap, no magic offsets.
  */
 export function PromptFieldTools({ children }: { children: React.ReactNode }) {
   return (
@@ -553,23 +530,20 @@ export function PromptFieldTools({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** (правка 691) «Исправить промпт» — компактная кнопка над полем ввода:
- * открывает диалог «что изменить» и отправляет текущий промпт + задание
- * в чат ассистента этой вкладки (тот же поток, что и «Исправить промпт»
- * в полноэкранном редакторе).
- * (правка 717) Позиционирование — контейнером PromptFieldTools (вертикальная
- * колонка), кнопка сама не absolute. */
+/** "Refine prompt" — compact button above input field:
+ * opens dialog asking "what to change" and sends current prompt + request
+ * to assistant chat of this tab. */
 export function PromptFixButton({
   onFix,
 }: {
-  /** Вызывается при клике (промпт пуст / непустой — решение за родителем). */
+  /** Called on click. */
   onFix: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onFix}
-      title="Исправить промпт с ассистентом: напишите, что изменить — промпт и задание уйдут в чат"
+      title="Refine prompt with assistant: write what to change — prompt and instructions will go to chat"
       className="p-1.5 rounded-md bg-[var(--surface-3)]/80 hover:bg-[var(--surface-4)] text-violet-300 hover:text-violet-200 transition-colors border border-violet-500/30 backdrop-blur-sm"
     >
       <WandSparklesIcon className="w-3.5 h-3.5" />
@@ -577,15 +551,13 @@ export function PromptFixButton({
   )
 }
 
-/** (правка 691) «Очистить поле» — компактная кнопка над полем ввода.
- * Пустое поле — неактивна (красный hover).
- * (правка 717) Позиционирование — контейнером PromptFieldTools. */
+/** "Clear field" — compact button above input field. */
 export function PromptClearButton({
   onClear,
   disabled,
 }: {
   onClear: () => void
-  /** true — промпт пуст: кнопку не показываем (нет смысла чистить). */
+  /** true — prompt is empty: button not shown. */
   disabled?: boolean
 }) {
   if (disabled) return null
@@ -593,7 +565,7 @@ export function PromptClearButton({
     <button
       type="button"
       onClick={onClear}
-      title="Очистить поле промпта"
+      title="Clear prompt field"
       className="p-1.5 rounded-md bg-[var(--surface-3)]/80 hover:bg-red-500/15 text-muted-foreground hover:text-red-400 transition-colors border border-border/50 backdrop-blur-sm"
     >
       <Trash2Icon className="w-3.5 h-3.5" />
@@ -604,7 +576,6 @@ export function PromptClearButton({
 /**
  * A small button that triggers the PromptEditorDialog.
  * Place it next to a prompt textarea to open the editor.
- * (правка 717) Позиционирование — контейнером PromptFieldTools.
  */
 export function PromptEditButton({
   onOpen,
@@ -615,38 +586,31 @@ export function PromptEditButton({
     <button
       onClick={onOpen}
       className="p-1.5 rounded-md bg-[var(--surface-3)] hover:bg-[var(--surface-4)] text-muted-foreground hover:text-foreground transition-colors border border-border/50"
-      title="Открыть редактор промпта"
+      title="Open prompt editor"
     >
       <PencilLineIcon className="w-3.5 h-3.5" />
     </button>
   )
 }
 
-/** (правка 691) Диалог «Исправить промпт»: пользователь описывает, что
- * изменить, — текущий промпт + задание уходят в чат ассистента вкладки
- * (requestImprovePrompt с fixRequest). Тот же UX, что в полноэкранном
- * редакторе, но вызывается прямо из поля ввода.
- *
- * (правка 560b) Закрытие — отдельным тиком, чтобы анимации exit Presence
- * не конфликтовали с другими диалогами в одном React-коммите. */
+/** "Refine prompt" dialog: user describes what to change,
+ * current prompt + request are sent to assistant chat of the tab. */
 export function PromptFixDialog({
   open,
   onOpenChange,
-  /** (правка 691) Вызывается при отправке задания: parent шлёт промпт +
-   * задание в нужный чат (режим/клип). */
+  /** Called when submitting request. */
   onSubmit,
   hint,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (fixRequest: string) => void
-  /** (правка 691) Контекстная подсказка под полем: куда уйдёт задание
-   *  (чат вкладки, номер клипа и т.п.). По умолчанию — обобщённая. */
+  /** Contextual hint under input. */
   hint?: string
 }) {
   const [text, setText] = useState('')
 
-  // Сброс текста при каждом открытии — задание вводится заново.
+  // Reset text each time opened.
   useEffect(() => {
     if (open) setText('')
   }, [open])
@@ -656,9 +620,6 @@ export function PromptFixDialog({
     if (!req) return
     onSubmit(req)
     onOpenChange(false)
-    // (правка 560b) закрытие повторным вызовом через отдельный тик —
-    // Presence exit-анимации не конфликтуют с другими диалогами в одном
-    // React-коммите.
     setTimeout(() => onOpenChange(false), 50)
   }
 
@@ -666,9 +627,9 @@ export function PromptFixDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg p-0 gap-0">
         <DialogHeader className="px-4 pt-4 pb-2 border-b border-border">
-          <DialogTitle className="text-base font-semibold">Исправить промпт</DialogTitle>
+          <DialogTitle className="text-base font-semibold">Refine Prompt</DialogTitle>
           <DialogDescription className="text-xs leading-relaxed">
-            Напишите, что бы вы хотели изменить в этом промпте
+            Describe what you would like to change in this prompt
           </DialogDescription>
         </DialogHeader>
         <div className="p-4 space-y-3">
@@ -686,15 +647,15 @@ export function PromptFixDialog({
               }
             }}
             rows={4}
-            placeholder="Например: сделай камеру статичной, убери дождь, реплику героя — короче…"
+            placeholder="For example: make the camera static, remove rain, make character dialogue shorter…"
             className="w-full resize-none rounded-xl border border-border bg-[var(--surface-2)] px-3.5 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
           />
           <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-            {hint ?? 'Промпт и ваше задание уйдут в чат ассистента этой вкладки — ответ можно будет вставить обратно кнопкой «В промпт». Ctrl+Enter — отправить, Esc — отмена.'}
+            {hint ?? 'Prompt and your request will be sent to the assistant chat of this tab — the response can be pasted back via "To Prompt". Ctrl+Enter to send, Esc to cancel.'}
           </p>
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Отмена
+              Cancel
             </Button>
             <Button
               size="sm"
@@ -703,7 +664,7 @@ export function PromptFixDialog({
               className="gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 hover:border-violet-500/50 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <WandSparklesIcon className="w-3.5 h-3.5" />
-              Отправить ассистенту
+              Send to Assistant
             </Button>
           </div>
         </div>

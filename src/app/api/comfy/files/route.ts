@@ -8,11 +8,11 @@ import { listGalleryFolders } from '@/lib/gallery-folders'
  * GET /api/comfy/files?type=all|video|image
  * Lists output files from the ComfyUI output directory.
  *
- * - (правка 91) Файлы из папок проектов идут с subfolder = путь папки;
- *   сами папки — в `folders`.
- * - (правка 495) Вложенные папки: листинг рекурсивный (до MAX_DEPTH в
- *   gallery-folders), subfolder — относительный путь 'a/b'; служебные
- *   каталоги 'latents' пропускаются.
+ * - (fix 91) Files from project folders have subfolder = folder path;
+ *   the folders themselves are in `folders`.
+ * - (fix 495) Nested folders: listing is recursive (up to MAX_DEPTH in
+ *   gallery-folders), subfolder is relative path 'a/b'; internal
+ *   directories like 'latents' are skipped.
  * - `.meta.json` sidecars and dotfiles are never listed.
  * - Files written within the last HOT_SKIP_SECONDS are skipped: VHS creates
  *   the output mp4 at the start of muxing and writes it progressively, so a
@@ -34,9 +34,9 @@ async function listDir(
   const files: Array<{ url: string; filename: string; subfolder: string; mtime: number; size: number; type: string; hasMeta: boolean; generationTime: number | null; pipeline: string | null }> = []
   const entries = await fs.readdir(dirAbs, { withFileTypes: true })
 
-  // (правка 354) stat + чтение сайдкаров — ПАРАЛЛЕЛЬНО по файлам:
-  // последовательный await на каждый файл делал листинг больших папок
-  // линейно-медленным (дисковые RTT суммировались).
+  // (fix 354) stat + sidecar reading in PARALLEL across files:
+  // sequential await on each file made listing large folders
+  // linearly slow (disk RTT accumulated).
   const probed = await Promise.all(entries.map(async (entry) => {
     if (!entry.isFile()) return null
     if (entry.name.startsWith('.')) return null
@@ -50,8 +50,8 @@ async function listDir(
     if (!isVideo && !isImage) return null
 
     let mtime = 0
-    // (правка 260) Размер файла — fast-track галереи ждёт стабилизации size,
-    // чтобы понять, что муксинг mp4 завершён и файл можно показывать.
+    // (fix 260) File size — fast-track gallery waits for size stabilization
+    // to determine that mp4 muxing is finished and the file can be displayed.
     let size = 0
     let hasMeta = false
     let generationTime: number | null = null
@@ -66,10 +66,10 @@ async function listDir(
       mtime = Math.floor(stats.mtimeMs / 1000)
       size = stats.size
       hasMeta = metaRaw !== null
-      // Время генерации из метаданных (sidecar .meta.json → generation_time) —
-      // тот же источник, что показывает диалог метаданных. Бейдж превью теперь
-      // берёт значение ОТСЮДА, а не из клиентской оценки useGenDurations
-      // (откуда и было расхождение «много/мало»).
+      // Generation time from metadata (sidecar .meta.json → generation_time) —
+      // the same source shown in the metadata dialog. The preview badge now
+      // takes the value FROM HERE rather than from client-side estimation in useGenDurations
+      // (which caused discrepancy).
       if (metaRaw !== null) {
         try {
           const meta = JSON.parse(metaRaw) as { generation_time?: unknown; pipeline?: unknown; params?: { generation_time?: unknown } }
@@ -77,10 +77,10 @@ async function listDir(
           const nested = typeof meta.params?.generation_time === 'number' ? meta.params.generation_time : null
           const gt = top ?? nested
           if (typeof gt === 'number' && Number.isFinite(gt) && gt > 0) generationTime = gt
-          // (правка 261) pipeline ('draft'|'full') — красный бейдж «Draft» на
-          // превью галереи для однопроходных генераций.
+          // (fix 261) pipeline ('draft'|'full') — red "Draft" badge on
+          // gallery preview for single-pass generations.
           if (meta.pipeline === 'draft' || meta.pipeline === 'full') pipeline = meta.pipeline
-        } catch { /* sidecar malformed / mid-write — оставим null */ }
+        } catch { /* sidecar malformed / mid-write — keep null */ }
       }
     } catch { /* ignore */ }
 
@@ -118,9 +118,9 @@ export async function GET(req: NextRequest) {
   const includeHot = searchParams.get('include_hot') === '1'
   const OUTPUT_DIR = getAppConfig().outputDir
 
-  // (правка 259) Никакого кэширования списка: URL всегда один и тот же
-  // (?type=all), и без явного запрета браузер имел право отдавать устаревший
-  // ответ — новое видео «не появлялось» до ручного обновления страницы.
+  // (fix 259) No list caching: URL is always the same
+  // (?type=all), and without explicit prevention the browser was allowed to serve stale
+  // responses — new video "did not appear" until manual page refresh.
   const NO_STORE = {
     'Cache-Control': 'no-store, no-cache, must-revalidate',
     Pragma: 'no-cache',
@@ -131,11 +131,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // (правка 495) Папки проекта — все уровни вложенности (listGalleryFolders
-    // уже исключает dot-папки и служебные 'latents', сортирует).
+    // (fix 495) Project folders — all nesting levels (listGalleryFolders
+    // already excludes dot-folders and service 'latents', and sorts).
     const folders = await listGalleryFolders()
 
-    // (правка 354) Папки проектов листаем параллельно.
+    // (fix 354) List project folders in parallel.
     const nested = await Promise.all(
       folders.map((folder) => listDir(path.join(OUTPUT_DIR, ...folder.split('/')), folder, typeFilter, includeHot)
         .catch(() => [])),
@@ -150,10 +150,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ files, folders }, { headers: NO_STORE })
   } catch (err) {
-    // (правка 716) Ошибка больше не маскируется под «пустую галерею»:
-    // раньше UI показывал пустую галерею, и пользователь не понимал, что
-    // папка output недоступна. Отдаём 500 с текстом ошибки.
+    // (fix 716) Error is no longer masked as an "empty gallery":
+    // previously UI showed an empty gallery, and the user did not understand that
+    // the output folder was unavailable. Return 500 with error message.
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Не удалось прочитать галерею: ${msg}`, files: [], folders: [] }, { status: 500, headers: NO_STORE })
+    return NextResponse.json({ error: `Failed to read gallery: ${msg}`, files: [], folders: [] }, { status: 500, headers: NO_STORE })
   }
 }

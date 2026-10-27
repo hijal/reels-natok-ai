@@ -1,50 +1,46 @@
 'use client'
 
 /**
- * (правка 719) Кликабельное превью референса с полноэкранным просмотром.
+ * Clickable reference preview with fullscreen viewer.
  *
- * Зачем: просмотр рефов был реализован только на «Генерации» (картинки и
- * видео) и частично на «Продлении» (только картинки). На остальных вкладках
- * (Refine, ControlNet, Tile Upscale, FPS, Upscale) рефы и исходное видео
- * посмотреть было НЕЛЬЗЯ вообще. Теперь — один компонент и одно поведение
- * везде: клик по превью → просмотр во весь экран (см. RefViewerDialog).
+ * Provides a unified component and behavior across tabs:
+ * click on preview -> open in fullscreen (see RefViewerDialog).
  *
- * Компонент сам держит состояние просмотрщика и рендерит его через портал в
- * body (как VideoLightbox). Родителю достаточно передать kind/name/path/url.
+ * The component maintains viewer state and renders it via portal to
+ * body (like VideoLightbox). Parent only needs to pass kind/name/path/url.
  */
 import { useState, type ReactNode } from 'react'
 import { RefViewerDialog, type RefViewerData } from './ref-viewer-dialog'
 
 export interface RefPreviewThumbProps {
-  /** Тип рефа: картинка / видео / аудио. */
+  /** Reference type: image / video / audio. */
   kind: RefViewerData['kind']
-  /** Отображаемое имя (в подписи просмотрщика). */
+  /** Display name (in viewer caption). */
   name: string
-  /** Путь к файлу в ComfyUI input/ (или staging) — для просмотрщика. */
+  /** Path to file in ComfyUI input/ (or staging) — for viewer. */
   path?: string
-  /** Прямой URL (blob:/file) — приоритетнее path. */
+  /** Direct URL (blob:/file) — prioritized over path. */
   url?: string
-  /** Классы обёртки-кнопки (размер/скругления/рамка — как в конкретной вкладке). */
+  /** Wrapper button classes (size/rounding/border — matching the specific tab). */
   className?: string
-  /** Подсказка. По умолчанию — «Открыть во весь экран». */
+  /** Tooltip. Default is "Open fullscreen". */
   title?: string
-  /** Содержимое превью (img/video/иконка) — рисуется внутри кнопки. */
+  /** Preview content (img/video/icon) — rendered inside button. */
   children: ReactNode
-  /** Аудио: текущая обрезка/громкость — показываются в просмотрщике. */
+  /** Audio: current trim/volume — displayed in viewer. */
   trimStart?: number
   trimEnd?: number | null
   audioVolume?: number
-  /** Вызывается при открытии просмотрщика (родитель может запомнить id рефа). */
+  /** Called when opening viewer (parent can record ref id). */
   onOpen?: (data: RefViewerData) => void
   /**
-   * Остановить всплытие клика (true — клик по превью не должен доходить до
-   * родителя: например, до drop-зоны, открывающей диалог выбора файла —
-   * как в extend-view).
+   * Stop click propagation (true — click on preview does not bubble to parent:
+   * e.g., to a drop zone that opens a file picker dialog).
    */
   stopPropagation?: boolean
-  /** Аудио: обрезка изменилась — сохранить в сторе. */
+  /** Audio: trim changed — persist to store. */
   onTrimChange?: (start: number, end: number | null) => void
-  /** Аудио: громкость изменилась — сохранить в сторе. */
+  /** Audio: volume changed — persist to store. */
   onVolumeChange?: (v: number) => void
 }
 
@@ -81,7 +77,7 @@ export function RefPreviewThumb({
         type="button"
         onClick={open}
         disabled={!canOpen}
-        title={title ?? (canOpen ? 'Открыть во весь экран' : undefined)}
+        title={title ?? (canOpen ? 'Open fullscreen' : undefined)}
         className={className}
       >
         {children}

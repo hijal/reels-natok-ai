@@ -1,25 +1,25 @@
 /**
- * (правка 722) Детекторы Face Refine — значения комбо спрашиваем у ComfyUI.
+ * (fix 722) Face Refine detectors — query combo values from ComfyUI.
  *
- * H3FaceTrackCrop объявляет `detector` и `fallback_detector` как combo из
- * категорий folder_paths `ultralytics_bbox` / `ultralytics`. Impact Pack, который
- * обычно их регистрирует, в этой сборке не стоит — папку детекторов студия
- * регистрирует сама (extra_model_paths.yaml → models/ultralytics), и тогда
- * ComfyUI отдаёт имена с подпапкой: `bbox\face_yolov8m.pt`,
+ * H3FaceTrackCrop declares `detector` and `fallback_detector` as combos from
+ * folder_paths categories `ultralytics_bbox` / `ultralytics`. Impact Pack, which
+ * usually registers them, is not installed in this build — the studio registers
+ * the detectors folder itself (extra_model_paths.yaml -> models/ultralytics), and then
+ * ComfyUI returns names with subfolders: `bbox\face_yolov8m.pt`,
  * `segm\person_yolov8m-seg.pt`.
  *
- * Значение вне списка ComfyUI отклоняет при валидации промпта, поэтому хардкод
- * имени не годится: до регистрации папки (или до перезапуска бэкенда) список —
- * один `face_yolov8m.pt`, после — имена с подпапкой. Подбираем то, что реально
- * есть, по /object_info; кэш короткий, чтобы поднявшийся бэкенд подхватился сам.
+ * ComfyUI rejects values not in the list during prompt validation, so hardcoding
+ * the name won't work: before registering the folder (or before restarting the backend)
+ * the list is just `face_yolov8m.pt`, after — names with subfolders. We pick what
+ * actually exists via /object_info; cache TTL is short so a newly started backend is picked up automatically.
  */
 import { COMFY_URL } from './minimax-h3-client'
 import { DEFAULT_FACE_DETECTOR } from './face-refine-template'
 
 export interface FaceDetectors {
-  /** Детектор лиц — значение для H3FaceTrackCrop.detector. */
+  /** Face detector — value for H3FaceTrackCrop.detector. */
   detector: string
-  /** Детектор человека для кадров без лица или null, если модели нет. */
+  /** Person detector for frames without a face, or null if the model is absent. */
   fallbackDetector: string | null
 }
 
@@ -28,7 +28,7 @@ const FAIL_TTL_MS = 10_000
 
 let cache: { at: number; value: FaceDetectors } | null = null
 
-/** Обе формы combo: legacy `[["a","b"], {...}]` и `["COMBO", {options}]`. */
+/** Both forms of combo: legacy `[["a","b"], {...}]` and `["COMBO", {options}]`. */
 function comboOptions(spec: unknown): string[] {
   if (!Array.isArray(spec)) return []
   const raw = Array.isArray(spec[0])
@@ -55,7 +55,7 @@ export async function resolveFaceDetectors(): Promise<FaceDetectors> {
       options = comboOptions(info.H3FaceTrackCrop?.input?.required?.detector)
     }
   } catch {
-    // ComfyUI не отвечает — вернём дефолт, отправка промпта всё равно упадёт.
+    // ComfyUI is not responding — return default, prompt submit will fail anyway.
   }
 
   const detector =
@@ -63,7 +63,7 @@ export async function resolveFaceDetectors(): Promise<FaceDetectors> {
     options.find((o) => /face/i.test(o)) ??
     options[0] ??
     DEFAULT_FACE_DETECTOR
-  // Модель человека — обычно person_yolov8m-seg; годится любая с «person».
+  // Person model — usually person_yolov8m-seg; any with "person" is suitable.
   const fallbackDetector = options.find((o) => /person/i.test(o)) ?? null
 
   const value: FaceDetectors = { detector, fallbackDetector }

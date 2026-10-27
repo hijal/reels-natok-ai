@@ -1,21 +1,21 @@
 'use client'
 
 /**
- * Единый FIFO-шлюз для всех задач, которые исполняет ComfyUI.
+ * Unified FIFO gateway for all tasks executed by ComfyUI.
  *
- * Очередь `useGenQueue` остаётся трекером/UI, а этот модуль гарантирует,
- * что в ComfyUI одновременно находится не больше одной задачи приложения.
- * Задачи получают ход в порядке `createdAt` (то есть в порядке постановки
- * в общую очередь), независимо от режима: Generate/Extend/Refine/
+ * The `useGenQueue` queue remains the tracker/UI, while this module guarantees
+ * that no more than one application task is executing in ComfyUI at the same time.
+ * Tasks are granted a turn in order of `createdAt` (i.e. order of enqueueing
+ * into the shared queue), regardless of mode: Generate/Extend/Refine/
  * ControlNet/FPS/Tile Upscale/Face Refine.
  *
- * DLSS Upscale (type `upscale`) сюда НЕ входит: он выполняется на отдельном
- * мосту, не в ComfyUI, и должен по-прежнему работать параллельно.
+ * DLSS Upscale (type `upscale`) is NOT included here: it executes on a separate
+ * bridge outside ComfyUI, and should continue to run in parallel.
  *
- * Ход удерживается до терминального статуса элемента очереди
- * (`done` / `error` / `cancelled`). Это позволяет не трогать поллеры и
- * обработчики завершения каждого режима: шлюз сам отпускает ход, когда
- * элемент очереди завершился.
+ * The turn is held until a terminal status of the queue item is reached
+ * (`done` / `error` / `cancelled`). This avoids having to touch the pollers and
+ * completion handlers of each mode: the gateway releases the turn on its own when
+ * the queue item finishes.
  */
 
 import {
@@ -24,7 +24,7 @@ import {
   type QueueItemType,
 } from './gen-queue-store'
 
-/** Режимы, которые исполняет ComfyUI и которые обязаны идти строго по одному. */
+/** Modes executed by ComfyUI that must run strictly one at a time. */
 export const COMFY_GATED_TYPES: ReadonlySet<QueueItemType> = new Set<QueueItemType>([
   'video',
   'refine',
@@ -50,19 +50,19 @@ let holderTimer: ReturnType<typeof setTimeout> | null = null
 let cancelledReleaseTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
- * Элементы очереди, созданные до загрузки этой страницы, пришли из
- * localStorage прошлого запуска. Если такой элемент с prompt_id держит ход,
- * при первой новой задаче быстро сверяем его с ComfyUI: после перезапуска
- * ComfyUI старые prompt_id уже не существуют и не должны блокировать очередь
- * на минуты, пока локальный/глобальный поллер сам дойдёт до ошибки.
+ * Queue items created before loading this page originate from localStorage
+ * of a previous run. If such an item with prompt_id holds the turn, on the
+ * first new task we quickly check it against ComfyUI: after restarting ComfyUI,
+ * old prompt_ids no longer exist and should not block the queue for minutes
+ * while local/global pollers slowly encounter an error.
  */
 const SESSION_STARTED_AT = Date.now()
 let verifyingHolderId: string | null = null
 
 /**
- * Аварийный таймаут: если поллер режима умер и элемент навсегда остался
- * `submitting`/`running`, не блокируем очередь до перезапуска приложения.
- * 6 часов с запасом покрывают самые длинные генерации.
+ * Emergency timeout: if a mode's poller died and an item remained stuck in
+ * `submitting`/`running` forever, do not block the queue until app restart.
+ * 6 hours safely covers the longest generations.
  */
 const HOLDER_TIMEOUT_MS = 6 * 60 * 60 * 1000
 
@@ -85,7 +85,7 @@ function verifyRestoredHolder() {
   if (!holderId || verifyingHolderId === holderId) return
   const item = itemById(holderId)
   if (!item || !item.promptId) return
-  // Живые задачи текущей сессии не трогаем — их судьбу решают их поллеры.
+  // Don't touch live tasks from the current session — their fate is decided by their pollers.
   if (item.createdAt >= SESSION_STARTED_AT) return
 
   const promptId = item.promptId
@@ -100,12 +100,12 @@ function verifyRestoredHolder() {
       if (!data || data.ok !== true) return
       if (holderId !== heldId) return
       if (data.states?.[promptId] !== 'gone') return
-      console.log(`[comfy-turn] старая задача ${promptId} не найдена в ComfyUI — снимаю ход`)
+      console.log(`[comfy-turn] old task ${promptId} not found in ComfyUI — releasing turn`)
       useGenQueue
         .getState()
-        .setStatus(heldId, 'error', 'Задача из прошлого запуска не найдена в ComfyUI — снимаю из очереди.')
+        .setStatus(heldId, 'error', 'Task from previous run was not found in ComfyUI — removing from queue.')
     })
-    .catch(() => { /* ComfyUI ещё поднимается — оставляем как есть */ })
+    .catch(() => { /* ComfyUI is still starting up — leave as is */ })
     .finally(() => {
       if (verifyingHolderId === heldId) verifyingHolderId = null
     })
@@ -122,16 +122,16 @@ function armHolderTimer() {
   clearHolderTimer()
   holderTimer = setTimeout(() => {
     if (holderId) {
-      console.warn(`[comfy-turn] watchdog: отпускаю зависший ход ${holderId}`)
+      console.warn(`[comfy-turn] watchdog: releasing stuck turn ${holderId}`)
       releaseHolder('watchdog')
     }
   }, HOLDER_TIMEOUT_MS)
 }
 
 /**
- * После перезагрузки страницы ожидающие промисы потеряны, но задача с
- * `promptId` могла остаться живой в ComfyUI. Восстанавливаем для неё ход,
- * чтобы новая генерация не запустилась параллельно.
+ * After a page reload, pending promises are lost, but a task with `promptId`
+ * might still be running in ComfyUI. Restore its turn so that a new generation
+ * does not start concurrently.
  */
 function ensureHolderFromQueue(): boolean {
   if (holderId) return true
@@ -145,15 +145,15 @@ function ensureHolderFromQueue(): boolean {
 
   holderId = activeWithPrompt[0].id
   armHolderTimer()
-  console.log(`[comfy-turn] восстановлен активный ход ${holderId}`)
+  console.log(`[comfy-turn] restored active turn ${holderId}`)
   return true
 }
 
 /**
- * При отмене QueueIndicator сначала ставит `cancelled`, а уже потом шлёт
- * `/api/comfy/cancel`. Не отпускаем ход мгновенно, иначе следующая задача
- * может стартовать, пока ComfyUI ещё дожигает отменяемую. Небольшой грейс
- * закрывает эту гонку, не блокируя очередь при зависшем cancel-запросе.
+ * On cancellation, QueueIndicator first sets `cancelled`, and only then sends
+ * `/api/comfy/cancel`. Do not release the turn immediately, otherwise the next task
+ * might start while ComfyUI is still finishing up the cancelled one. A short grace period
+ * closes this race condition without blocking the queue if the cancel request hangs.
  */
 function scheduleCancelledRelease() {
   if (cancelledReleaseTimer) return
@@ -170,7 +170,7 @@ function releaseHolder(reason: string) {
   const released = holderId
   holderId = null
   clearHolderTimer()
-  console.log(`[comfy-turn] ход освобождён ${released} (${reason})`)
+  console.log(`[comfy-turn] turn released ${released} (${reason})`)
   pump()
 }
 
@@ -189,8 +189,8 @@ function ensureSubscription() {
         return
       }
     }
-    // Элемент могли отменить/удалить, пока он ждал ход. `pump` вычистит
-    // такие ожидания и разрешит их с granted=false.
+    // An item may have been cancelled/deleted while waiting for its turn. `pump`
+    // will clean up such waiters and resolve them with granted=false.
     pump()
   })
 }
@@ -199,10 +199,10 @@ function pump() {
   if (pumping || holderId) return
   pumping = true
   try {
-    // Задача, пережившая reload, имеет приоритет: она уже в ComfyUI.
+    // A task surviving a reload has priority: it is already in ComfyUI.
     if (ensureHolderFromQueue()) return
 
-    // Выкидываем отменённые/удалённые/уже завершённые ожидания.
+    // Discard cancelled/deleted/already finished waiters.
     waiters = waiters.filter((waiter) => {
       const item = itemById(waiter.id)
       if (!isGated(item) || !isActive(item)) {
@@ -226,11 +226,11 @@ function pump() {
 
     holderId = next.id
     armHolderTimer()
-    console.log(`[comfy-turn] ход выдан ${next.id} (${item.type})`)
+    console.log(`[comfy-turn] turn granted ${next.id} (${item.type})`)
 
-    // В ожидании элемент показывался как «В очереди»; теперь он реально
-    // отправляется. setStatus синхронно вызовет подписку — `pumping` не даст
-    // рекурсии.
+    // While waiting, the item was displayed as "Queued"; now it is actually
+    // being submitted. setStatus synchronously triggers subscriptions — `pumping` prevents
+    // recursion.
     useGenQueue.getState().setStatus(next.id, 'submitting')
     next.resolve(true)
   } finally {
@@ -239,10 +239,10 @@ function pump() {
 }
 
 /**
- * Запросить ход для элемента очереди.
+ * Request a turn for a queue item.
  *
- * Возвращает `false`, если элемент отменили/удалили до получения хода —
- * вызывающий код должен просто выйти, не отправляя запрос в ComfyUI.
+ * Returns `false` if the item was cancelled/deleted before acquiring turn —
+ * calling code should simply exit without submitting a request to ComfyUI.
  */
 export function acquireComfyTurn(id: string): Promise<boolean> {
   ensureSubscription()
@@ -254,8 +254,8 @@ export function acquireComfyTurn(id: string): Promise<boolean> {
   const holderBusy = ensureHolderFromQueue() || holderId !== null
   if (holderBusy) {
     useGenQueue.getState().setStatus(id, 'queued')
-    // Если ход держит старая persisted-задача, не ждём её «естественной»
-    // ошибки несколько минут — быстро проверяем prompt_id в ComfyUI.
+    // If the turn is held by an old persisted task, do not wait minutes for
+    // its "natural" error — quickly verify prompt_id in ComfyUI.
     verifyRestoredHolder()
   }
 
@@ -271,22 +271,22 @@ export function acquireComfyTurn(id: string): Promise<boolean> {
 }
 
 /**
- * Досрочно отпустить ход. Обычно не нужен: ход отпускается автоматически по
- * терминальному статусу элемента. Оставлен для аварийных веток.
+ * Prematurely release turn. Typically unnecessary: turn is released automatically
+ * upon reaching terminal item status. Kept for emergency code paths.
  */
 export function releaseComfyTurn(id: string): void {
   if (holderId === id) releaseHolder('manual')
 }
 
-/** Элемент ещё существует и не отменён/не завершён. Проверять после await
- *  acquire: пользователь мог удалить задачу ровно между выдачей хода и
- *  продолжением submit(). */
+/** Element still exists and is not cancelled/finished. Check after await
+ *  acquire: user could have deleted the task right between turn grant and
+ *  continuation of submit(). */
 export function isComfyTurnActive(id: string): boolean {
   const item = itemById(id)
   return !!item && isGated(item) && isActive(item)
 }
 
-/** Инициализация на старте приложения: восстановить ход у живой задачи. */
+/** Initialization on app startup: restore turn for a live task. */
 export function initComfyTurn(): void {
   ensureSubscription()
   if (ensureHolderFromQueue()) return

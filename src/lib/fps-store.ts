@@ -1,15 +1,15 @@
 'use client'
 
 /**
- * FpsStore — мост «галерея → вкладка FPS» + UI-состояние. (правка 268)
+ * FpsStore — bridge "gallery → FPS tab" + UI state. (fix 268)
  *
- * Аналогичен TileUpscaleTargetStore: кнопка в галерее кладёт цель сюда и шлёт
- * событие 'h3:goto-fps'. FpsView забирает цель.
+ * Similar to TileUpscaleTargetStore: button in gallery puts target here and sends
+ * 'h3:goto-fps' event. FpsView consumes the target.
  *
- * Параметры двух режимов frame interpolation (Fannovel16/ComfyUI-Frame-Interpolation):
- *   RIFE VFI  — быстрый, мало VRAM; параметры: ckpt_name, multiplier, batch_size,
+ * Parameters for two frame interpolation modes (Fannovel16/ComfyUI-Frame-Interpolation):
+ *   RIFE VFI  — fast, low VRAM; parameters: ckpt_name, multiplier, batch_size,
  *               scale_factor, dtype, fast_mode, ensemble, clear_cache_after_n_frames.
- *   FILM VFI  — для крупных движений; параметры: ckpt_name, multiplier,
+ *   FILM VFI  — for large motions; parameters: ckpt_name, multiplier,
  *               clear_cache_after_n_frames.
  */
 import { create } from 'zustand'
@@ -23,33 +23,33 @@ export interface FpsSource {
   url: string
   filename: string
   subfolder: string
-  /** Файл с диска, уже загруженный в ComfyUI input/. */
+  /** File from disk, already uploaded to ComfyUI input/. */
   inputSource?: string
 }
 
-/** Режим VFI: RIFE VFI (быстрый) / FILM VFI (крупные движения). */
+/** VFI mode: RIFE VFI (fast) / FILM VFI (large motion). */
 export type FpsMode = 'rife' | 'film'
 
-/** Параметры вкладки FPS — переживают переключение вкладок. */
+/** FPS tab parameters — survive tab switching. */
 export interface FpsUiParams {
-  /** Режим: 'rife' | 'film'. Default 'rife'. */
+  /** Mode: 'rife' | 'film'. Default 'rife'. */
   mode: FpsMode
-  /** Множитель FPS: 2 | 3 | 4. Default 2. */
+  /** FPS multiplier: 2 | 3 | 4. Default 2. */
   multiplier: number
-  // (правка 269) rifeModel/filmModel удалены: по одной модели на режим,
-  // зафиксированы в fps-template.ts (rife49.pth / film_net_fp32.pt) и
-  // скачиваются в Настройках → Модели.
+  // (fix 269) rifeModel/filmModel removed: one model per mode,
+  // pinned in fps-template.ts (rife49.pth / film_net_fp32.pt) and
+  // downloaded in Settings → Models.
   /** RIFE batch_size (1–64). Default 4. */
   rifeBatchSize: number
   /** RIFE scale_factor: 0.25 | 0.5 | 1 | 2 | 4. Default 1. */
   rifeScale: number
-  /** RIFE dtype: float32 | float16 | bfloat16. Default 'float16' (экономия VRAM). */
+  /** RIFE dtype: float32 | float16 | bfloat16. Default 'float16' (VRAM saving). */
   rifeDtype: string
-  /** RIFE fast_mode. Default false (качество). */
+  /** RIFE fast_mode. Default false (quality). */
   rifeFastMode: boolean
-  /** RIFE ensemble. Default true (качество). */
+  /** RIFE ensemble. Default true (quality). */
   rifeEnsemble: boolean
-  /** Анти-OOM: меньше = меньше пик VRAM, медленнее. Default 4. */
+  /** Anti-OOM: lower = lower VRAM peak, slower. Default 4. */
   clearCacheAfterNFrames: number
 }
 
@@ -79,8 +79,8 @@ export const useFpsTarget = create<FpsState>((set, get) => ({
   setTarget: (target) => set({ target }),
   clear: () => set({ target: null }),
   source: null,
-  // (правка 558) blob:URL предыдущего файла с диска ревокаем — каждый
-  // перевыбор источника оставлял блоб в памяти до конца сессии.
+  // (fix 558) Revoke blob:URL of previous file from disk — each
+  // source re-selection would otherwise keep the blob in memory until session end.
   setSource: (source) => {
     const prev = get().source
     if (prev?.url.startsWith('blob:') && prev.url !== source?.url) {

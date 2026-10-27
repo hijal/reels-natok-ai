@@ -1,31 +1,31 @@
 'use client'
 
 /**
- * Splash — экран-заставка на время загрузки ComfyUI.
+ * Splash — splash screen while ComfyUI is loading.
  *
- * (правка 522) Новый дизайн: вместо ОДНОГО видео в центре — «видео-стена»
- * из 8 карточек 9:16 (public/splash-videos/tile_01..08.mp4), которые медленно
- * скроллясь вниз, бесконечно повторяются. Карточки без рамок, подписей и
- * отступов — буквально сшиты, и служат живым фоном из кинематографичных
- * кадров, сгенерированных в этой программе.
+ * (fix 522) New design: instead of ONE video in the center — a "video wall"
+ * of 8 9:16 cards (public/splash-videos/tile_01..08.mp4) that slowly
+ * scroll down and loop infinitely. Cards without borders, labels, or
+ * paddings — seamlessly stitched, serving as a live backdrop of cinematic
+ * shots generated in this program.
  *
- * Сохранена вся прежняя логика:
- *  - опрос готовности ComfyUI через /api/comfy/health каждые 2 с;
- *  - таймер загрузки (m:ss) + шиммер-полоска;
- *  - после ~5 мин — честное предупреждение, что ComfyUI стартует дольше;
- *  - при готовности — «Готово — открываем студию…» и router.replace('/').
+ * All original logic preserved:
+ *  - polling ComfyUI readiness via /api/comfy/health every 2 s;
+ *  - load timer (m:ss) + shimmer bar;
+ *  - after ~5 min — honest warning that ComfyUI is taking longer to start;
+ *  - on ready — "Ready — opening studio..." and router.replace('/').
  *
- * Оформление строится на CSS-переменных темы (--surface-*, --foreground,
- * --splash-*) и следует светлой/тёмной теме приложения.
+ * Styling is built on theme CSS variables (--surface-*, --foreground,
+ * --splash-*) and follows light/dark app theme.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const POLL_MS = 2000
-/** Пауза на «Готово» перед переходом, мс. */
+/** Delay on "Ready" before transitioning, ms. */
 const EXIT_DELAY_MS = 700
 
-/** 8 видео-кадров (public/splash-videos). 9:16, зациклены, без звука. */
+/** 8 video tiles (public/splash-videos). 9:16, looped, muted. */
 const SPLASH_TILES = [
   '/splash-videos/tile_01.mp4',
   '/splash-videos/tile_02.mp4',
@@ -44,24 +44,24 @@ export default function SplashPage() {
   const [elapsed, setElapsed] = useState(0)
   const startedAt = useRef(Date.now())
 
-  /* Порядок кадров: при каждой загрузке экрана — перемешанный.
-   * Перемешиваем ОДИН базовый порядок и дублируем его в обеих группах
-   * (для бесшовного цикла translateY 0 → -50% группы обязаны совпадать).
-   * Инициализируем каноническим порядком, чтобы не было рассинхрона на
-   * hydration; перемешивание происходит после монтирования. */
+  /* Frame order: shuffled on every screen load.
+   * Shuffle ONE base order and duplicate it in both groups
+   * (for seamless loop translateY 0 → -50% the groups must match).
+   * Initialized with canonical order to prevent hydration mismatch;
+   * shuffling occurs after mounting. */
   const [order, setOrder] = useState<string[]>(SPLASH_TILES)
 
-  /* Автозапуск всех видео (muted, чтобы автоплей не блокировался). */
+  /* Autoplay all videos (muted so autoplay is not blocked). */
   useEffect(() => {
     const vids = Array.from(document.querySelectorAll<HTMLVideoElement>('.splash-tile video'))
     vids.forEach((v) => {
-      v.play().catch(() => { /* автоплей может быть заблокирован — молча игнорируем */ })
+      v.play().catch(() => { /* autoplay may be blocked — silently ignore */ })
     })
   }, [])
 
-  /* Перемешиваем порядок кадров один раз после монтирования (Fisher–Yates).
-   * Благодаря этому на каждой загрузке сплэш порядок плиток другой, но
-   * дублирование в обеих группах остаётся — цикл скролла бесшовный. */
+  /* Shuffle frame order once after mount (Fisher–Yates).
+   * Thanks to this, each splash load has a different tile order, but
+   * duplication in both groups remains — scroll loop is seamless. */
   useEffect(() => {
     const a = [...SPLASH_TILES]
     for (let i = a.length - 1; i > 0; i--) {
@@ -71,14 +71,14 @@ export default function SplashPage() {
     setOrder(a)
   }, [])
 
-  /* Опрос готовности ComfyUI. Ссылка на контроллер — чтобы таймеры не
-   * стреляли после размонтирования при переходе в приложение. */
+  /* Poll ComfyUI readiness. Controller reference to prevent timers from
+   * firing after unmount when transitioning to the application. */
   useEffect(() => {
     let cancelled = false
     let timer: ReturnType<typeof setTimeout>
-    // (правка 587) Таймер перехода в приложение тоже трекаем: без этого
-    // уход со сплэша в окно 700 мс «Готово» оставлял висящий setTimeout,
-    // который после размонтирования насильно возвращал приложение на '/'.
+    // (fix 587) Also track transition timer to the app: without this,
+    // leaving splash during the 700ms "Ready" window left a dangling setTimeout,
+    // which after unmount forcibly redirected the app to '/'.
     let exitTimer: ReturnType<typeof setTimeout> | undefined
 
     const tick = async () => {
@@ -93,7 +93,7 @@ export default function SplashPage() {
           }
         }
       } catch {
-        /* ComfyUI ещё грузится (или веб-сервер сам ещё стартует) — ждём */
+        /* ComfyUI is still loading (or web server itself is starting) — wait */
       }
       if (!cancelled) timer = setTimeout(tick, POLL_MS)
     }
@@ -105,24 +105,24 @@ export default function SplashPage() {
     }
   }, [router])
 
-  /* Счётчик секунд загрузки — чтобы было видно, что всё живо. */
+  /* Loading seconds counter — to show that everything is alive. */
   useEffect(() => {
     if (ready) return
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt.current) / 1000)), 1000)
     return () => clearInterval(id)
   }, [ready])
 
-  /* ComfyUI не поднялся за ~5 минут — честно сообщаем, но продолжаем ждать. */
+  /* ComfyUI did not come up after ~5 minutes — inform honestly, but keep waiting. */
   useEffect(() => {
     if (elapsed > 300 && !failed) setFailed(true)
   }, [elapsed, failed])
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-[var(--surface-0)]">
-      {/* ── Живой фон: «видео-стена» из 8 кадров 9:16, скроллится вниз ── */}
+      {/* ── Live backdrop: "video wall" of 8 9:16 frames, scrolls down ── */}
       <div className="relative flex-1 min-h-0 overflow-hidden bg-[var(--surface-1)]">
         <div className="splash-scroll absolute inset-0">
-          {/* Две одинаковые группы для бесшовного цикла (translateY 0 → -50%). */}
+          {/* Two identical groups for seamless loop (translateY 0 → -50%). */}
           <div className="splash-track">
             {[0, 1].map((set) => (
               <div key={set} className="splash-set" aria-hidden={set === 1}>
@@ -136,7 +136,7 @@ export default function SplashPage() {
           </div>
         </div>
 
-        {/* Затухание к краям, чтобы стена «растворялась» под панелями. */}
+        {/* Edge fade so the wall "dissolves" under panels. */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-24"
           style={{ background: 'linear-gradient(to bottom, var(--surface-0), transparent)' }}
@@ -147,7 +147,7 @@ export default function SplashPage() {
         />
       </div>
 
-      {/* ── Верхняя панель: бренд слева, подписи справа ── */}
+      {/* ── Top panel: brand on left, captions on right ── */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-8 py-5">
         <div className="flex items-center gap-3">
           <div
@@ -172,18 +172,18 @@ export default function SplashPage() {
         </div>
       </div>
 
-      {/* ── Статус загрузки (как в прежнем splash) ── */}
+      {/* ── Loading status (as in previous splash) ── */}
       <div className="relative z-10 flex flex-col items-center gap-3 px-8 pb-3 pt-2">
         {ready ? (
           <div className="flex items-center gap-2 text-emerald-400">
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 6 9 17l-5-5" />
             </svg>
-            <span className="text-sm font-medium">Готово — открываем студию…</span>
+            <span className="text-sm font-medium">Ready — opening studio…</span>
           </div>
         ) : (
           <>
-            {/* Бегущая полоска-шиммер */}
+            {/* Shimmer loading bar */}
             <div className="h-1 w-64 overflow-hidden rounded-full bg-[var(--surface-2)] relative">
               <div
                 className="absolute inset-y-0 w-1/3 rounded-full animate-[splash-slide_1.6s_ease-in-out_infinite]"
@@ -196,8 +196,8 @@ export default function SplashPage() {
                 style={{ background: 'var(--splash-a)' }}
               />
               {failed
-                ? 'ComfyUI стартует дольше обычного — детали в окне консоли…'
-                : 'Идёт загрузка ComfyUI…'}
+                ? 'ComfyUI is taking longer than usual to start — see console window for details…'
+                : 'Loading ComfyUI…'}
               <span className="opacity-50">·</span>
               <span className="font-semibold" style={{ color: 'var(--foreground)' }}>
                 {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}
@@ -207,7 +207,7 @@ export default function SplashPage() {
         )}
       </div>
 
-      {/* Ключевые кадры анимаций (локально, не плодим классы в globals.css). */}
+      {/* Animation keyframes (locally, without polluting globals.css classes). */}
       <style>{`
         .splash-scroll { overflow: hidden; }
         .splash-track {

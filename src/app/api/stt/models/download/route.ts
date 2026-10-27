@@ -6,19 +6,19 @@ import { sttStatus } from '@/lib/stt-runner'
 import { stopStt } from '@/lib/stt-runner'
 
 /**
- * (правка 72) STT-модели: скачивание, прогресс, отмена.
+ * (fix 72) STT models: download, progress, cancellation.
  *
- * POST   — начать скачивание модели
- * DELETE — отменить активное скачивание
- * GET    — прогресс скачивания (?name=small)
+ * POST   — start downloading model
+ * DELETE — cancel active download
+ * GET    — download progress (?name=small)
  *
- * Модели скачиваются из HuggingFace (ggerganov/whisper.cpp)
- * во встроенную папку <project>/stt/models/.
+ * Models are downloaded from HuggingFace (ggerganov/whisper.cpp)
+ * to the built-in folder <project>/stt/models/.
  */
 export const dynamic = 'force-dynamic'
 
-/* (правка 73) Модели лежат в корне репозитория (папки models/ больше нет —
- * старые URL вида .../resolve/main/models/*.bin дают 404). */
+/* (fix 73) Models are located at the repository root (models/ folder no longer exists —
+ * old URLs like .../resolve/main/models/*.bin return 404). */
 const HF_BASE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main'
 
 const STT_MODEL_CATALOG: Array<{
@@ -27,11 +27,11 @@ const STT_MODEL_CATALOG: Array<{
   sizeLabel: string
   quality: string
 }> = [
-  { name: 'tiny',     file: 'ggml-tiny.bin',     sizeLabel: '~75 МБ',  quality: 'быстро, качество низкое' },
-  { name: 'base',     file: 'ggml-base.bin',     sizeLabel: '~142 МБ', quality: 'среднее качество' },
-  { name: 'small',    file: 'ggml-small.bin',    sizeLabel: '~466 МБ', quality: 'хорошее (рекомендуется)' },
-  { name: 'medium',   file: 'ggml-medium.bin',   sizeLabel: '~1.5 ГБ', quality: 'отличное' },
-  { name: 'large-v3', file: 'ggml-large-v3.bin', sizeLabel: '~3.1 ГБ', quality: 'лучшее, медленно' },
+  { name: 'tiny',     file: 'ggml-tiny.bin',     sizeLabel: '~75 MB',  quality: 'fast, low quality' },
+  { name: 'base',     file: 'ggml-base.bin',     sizeLabel: '~142 MB', quality: 'medium quality' },
+  { name: 'small',    file: 'ggml-small.bin',    sizeLabel: '~466 MB', quality: 'good (recommended)' },
+  { name: 'medium',   file: 'ggml-medium.bin',   sizeLabel: '~1.5 GB', quality: 'excellent' },
+  { name: 'large-v3', file: 'ggml-large-v3.bin', sizeLabel: '~3.1 GB', quality: 'best, slow' },
 ]
 
 interface DownloadState {
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
   const name = (typeof body.name === 'string' ? body.name : '').trim()
   const cat = STT_MODEL_CATALOG.find((m) => m.name === name)
   if (!cat) {
-    return NextResponse.json({ error: `Неизвестная модель: ${name}` }, { status: 400 })
+    return NextResponse.json({ error: `Unknown model: ${name}` }, { status: 400 })
   }
 
   if (active.has(name)) {
@@ -145,9 +145,9 @@ export async function POST(request: Request) {
   active.set(name, state)
 
   // Start download in background (fire-and-forget)
-  // (правка 716) .catch обязателен: doDownload — async, и его отклонение
-  // без обработчика стало бы unhandled rejection (Node по умолчанию завершает
-  // процесс). Состояние загрузки само пишет error — терять его нельзя.
+  // (fix 716) .catch is required: doDownload is async, and rejecting it
+  // without a handler would become an unhandled rejection (Node terminates
+  // the process by default). Download state itself writes error — must not lose it.
   void doDownload(state).catch((err) => {
     const message = err instanceof Error ? err.message : String(err)
     state.error = message
@@ -165,7 +165,7 @@ export async function DELETE(request: Request) {
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 })
 
   const st = active.get(name)
-  if (!st) return NextResponse.json({ ok: false, error: 'Нет активного скачивания' }, { status: 404 })
+  if (!st) return NextResponse.json({ ok: false, error: 'No active download' }, { status: 404 })
 
   st.cancelled = true
   st.controller.abort()
@@ -191,18 +191,18 @@ async function doDownload(state: DownloadState) {
     if (contentLength) state.total = parseInt(contentLength, 10)
 
     if (!res.body) {
-      state.error = 'Ответ без body (неподдерживаемый окружение)'
+      state.error = 'Response without body (unsupported environment)'
       return
     }
 
     const reader = res.body.getReader()
     const out = createWriteStream(tmpDest, { flags: 'w' })
 
-    // (правка 587) 'error'-listener на ВЕСЬ write-этап: раньше слушатели
-    // вешались только вокруг out.end() — ошибка записи посреди цикла
-    // (ENOSPC/EPERM на .part-файле) эмитилась с нулём слушателей и
-    // валила весь сервер uncaught-ом. Флаг проваливает цикл (throw),
-    // fetch и reader отменяет controller.abort() в catch ниже.
+    // (fix 587) 'error'-listener across the ENTIRE write-phase: previously listeners
+    // were only attached around out.end() — write errors in the middle of loop
+    // (ENOSPC/EPERM on .part file) were emitted with zero listeners and
+    // crashed the entire server with an uncaught error. The flag aborts the loop (throw),
+    // and controller.abort() cancels fetch and reader in catch below.
     let writeError: Error | null = null
     out.on('error', (err: Error) => {
       writeError = err
@@ -216,12 +216,12 @@ async function doDownload(state: DownloadState) {
 
       if (value) {
         const b = Buffer.from(value)
-        // (правка 347) Backpressure: write() возвращает false, когда
-        // внутренний буфер переполнен — раньше чанки продолжали сыпаться,
-        // и весь файл копился в RAM (до сотен МБ у ggml-моделей).
+        // (fix 347) Backpressure: write() returns false when
+        // internal buffer is full — previously chunks kept arriving,
+        // and the entire file accumulated in RAM (up to hundreds of MB for ggml models).
         if (!out.write(b)) {
           await new Promise<void>((resolve, reject) => {
-            // (правка 587) drain после ошибки записи = ошибка, не успех
+            // (fix 587) drain after write error = error, not success
             out.once('drain', () => (writeError ? reject(writeError) : resolve()))
             out.once('error', reject)
           })
@@ -250,12 +250,12 @@ async function doDownload(state: DownloadState) {
       return
     }
 
-    // (правка 347) Сверяем фактический объём с content-length ДО rename:
-    // раньше обрыв соединения (fetch без ошибки, просто короткий body)
-    // переименовывал обрезанный файл в «готовую» модель, и whisper падал
-    // на загрузке уже молча.
+    // (fix 347) Verify actual size with content-length BEFORE rename:
+    // previously connection abort (fetch without error, just short body)
+    // renamed truncated file to "ready" model, and whisper crashed
+    // silently upon loading.
     if (state.total && received < state.total) {
-      state.error = `Скачано не полностью: ${received} из ${state.total} байт — нажмите «Скачать» ещё раз`
+      state.error = `Download incomplete: ${received} of ${state.total} bytes — click "Download" again`
       try { if (existsSync(tmpDest)) unlinkSync(tmpDest) } catch { /* ignore */ }
       return
     }

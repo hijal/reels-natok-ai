@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * TileUpscaleView — вкладка «Tile Upscale»: tiled latent upscale готового видео
- * через MMH3UltimateUpscale (монолитная нода: temporal chunks → latent upscale →
+ * TileUpscaleView — "Tile Upscale" tab: tiled latent upscale of finished video
+ * via MMH3UltimateUpscale (monolithic node: temporal chunks → latent upscale →
  * spatial tiles → per-tile sampling → stitch).
  *
- * Layout как у Refine: слева — параметры + статус, справа — галерея.
- * Источник: drag&drop из галереи или файл с диска.
+ * Layout matches Refine: left — parameters + status, right — gallery.
+ * Source: drag&drop from gallery or file from disk.
  *
- * (правка 319) Состояние джоба (promptId/phase/progress/error) и поллинг
- * /api/comfy/status вынесены в модульный tile-upscale-job-store — переживают
- * unmount вкладки и перезагрузку страницы. Обновление галереи — через
- * useGalleryRefresh.bump() из стора (staggered-reload встроен в useVideoGallery).
+ * (fix 319) Job state (promptId/phase/progress/error) and /api/comfy/status
+ * polling moved to modular tile-upscale-job-store — survives tab unmount
+ * and page reload. Gallery refresh via useGalleryRefresh.bump() from store
+ * (staggered reload built into useVideoGallery).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -30,10 +30,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { SettingSlider } from '@/components/h3/setting-slider' // (правка 461)
+import { SettingSlider } from '@/components/h3/setting-slider' // (fix 461)
 import { VideoGalleryGrid, H3_VIDEO_DND_MIME } from '@/components/h3/video-gallery-grid'
 import { GenerationStatus } from '@/components/h3/generation-status'
-// (правка 719) Превью с полноэкранным просмотром — как на «Генерации».
+// (fix 719) Preview with fullscreen lightbox — same as on "Generate".
 import { RefPreviewThumb } from '@/components/h3/ref-preview-thumb'
 import { useVideoGallery } from '@/components/h3/use-video-gallery'
 import { useTileUpscaleTarget, type TileUpscaleSource } from '@/lib/tile-upscale-target-store'
@@ -45,14 +45,14 @@ export function TileUpscaleView() {
   const clearStoreTarget = useTileUpscaleTarget((s) => s.clear)
   const source = useTileUpscaleTarget((s) => s.source)
   const setSource = useTileUpscaleTarget((s) => s.setSource)
-  // (правка 587) Отзыв предыдущего blob:-URL при замене/удалении источника
-  // (паттерн refine-view, правка 345) — URL.createObjectURL утекал.
+  // (fix 587) Revoke previous blob:-URL when replacing/removing source
+  // (refine-view pattern, fix 345) — URL.createObjectURL leaked.
   const prevSourceUrlRef = useRef<string | null>(null)
   const setSourceSafe = useCallback(
     (next: TileUpscaleSource | null) => {
       const prev = prevSourceUrlRef.current
       if (prev && prev.startsWith('blob:') && prev !== next?.url) {
-        try { URL.revokeObjectURL(prev) } catch { /* уже отозван */ }
+        try { URL.revokeObjectURL(prev) } catch { /* already revoked */ }
       }
       prevSourceUrlRef.current = next?.url ?? null
       setSource(next)
@@ -66,11 +66,11 @@ export function TileUpscaleView() {
   const patchParams = useTileUpscaleTarget((s) => s.patchParams)
 
   const [prompt, setPrompt] = useState('')
-  // (правка 270) «Дополнительные параметры» — свёрнуты по умолчанию.
+  // (fix 270) "Advanced Parameters" — collapsed by default.
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploadingSrc, setUploadingSrc] = useState(false)
-  // (правка 319) Состояние джоба — из модульного стора (переживает unmount).
+  // (fix 319) Job state from modular store (survives unmount).
   const busy = useTileUpscaleJob((s) => s.busy)
   const phase = useTileUpscaleJob((s) => s.phase)
   const progress = useTileUpscaleJob((s) => s.progress)
@@ -83,7 +83,7 @@ export function TileUpscaleView() {
 
   const gallery = useVideoGallery()
 
-  // Цель из стора галереи
+  // Target from gallery store
   useEffect(() => {
     if (!storeTarget) return
     const file = gallery.files.find(
@@ -91,7 +91,7 @@ export function TileUpscaleView() {
     )
     if (file) {
       setSourceSafe(file as TileUpscaleSource)
-      toast.success(`Источник: ${file.filename}`)
+      toast.success(`Source: ${file.filename}`)
     } else {
       setSourceSafe({
         url: `/api/comfy/file?filename=${encodeURIComponent(storeTarget.filename)}&subfolder=${encodeURIComponent(storeTarget.subfolder)}`,
@@ -106,7 +106,7 @@ export function TileUpscaleView() {
     setPrompt('')
   }, [source])
 
-  // (правка 274) Клик-выбор файла: <input type='file'> + ref
+  // (fix 274) Click-select file: <input type='file'> + ref
   const fileInputRef = useRef<HTMLInputElement>(null)
   const VIDEO_EXTS = '.mp4,.m4v,.mov,.mkv,.avi,.webm,.m2ts,.mts,.mxf,.vob,.wmv,.flv,.mpg,.mpeg,.ogv'
 
@@ -120,26 +120,26 @@ export function TileUpscaleView() {
         subfolder: '',
         inputSource: path,
       })
-      toast.success(`Источник: ${file.name}`)
+      toast.success(`Source: ${file.name}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки видео')
+      toast.error(e instanceof Error ? e.message : 'Error uploading video')
     } finally {
       setUploadingSrc(false)
     }
   }, [setSourceSafe])
 
-  // (правка 319) Поллинг и staggered-reload галереи вынесены в
-  // tile-upscale-job-store (модульный, переживает unmount); обновление
-  // галереи — через useGalleryRefresh.bump() по завершении джоба.
+  // (fix 319) Polling and staggered gallery reload moved to
+  // tile-upscale-job-store (modular, survives unmount); gallery
+  // refresh via useGalleryRefresh.bump() upon job completion.
 
   const start = useCallback(async () => {
     const src = sourceRef.current
     if (!src) {
-      toast.error('Сначала выберите видео-источник')
+      toast.error('Please select a source video first')
       return
     }
     if (uploadingSrc) {
-      toast.error('Видео ещё загружается')
+      toast.error('Video is still uploading')
       return
     }
 
@@ -163,7 +163,7 @@ export function TileUpscaleView() {
     await jobSubmit(body)
   }, [prompt, uploadingSrc, params, jobSubmit])
 
-  // (правка 319) Отмена/сброс — через стор (поллинг модульный).
+  // (fix 319) Cancel/reset via store (modular polling).
   const cancel = useCallback(() => { void jobCancel() }, [jobCancel])
   const reset = useCallback(() => { jobReset() }, [jobReset])
 
@@ -182,18 +182,18 @@ export function TileUpscaleView() {
           filename: parsed.filename ?? '',
           subfolder: parsed.subfolder ?? '',
         })
-        toast.success(`Источник: ${parsed.filename}`)
-      } catch { toast.error('Не удалось прочитать перетащенное видео') }
+        toast.success(`Source: ${parsed.filename}`)
+      } catch { toast.error('Failed to read dragged video') }
       return
     }
     const f = e.dataTransfer.files?.[0]
     if (f) void uploadLocalFile(f)
-    else toast.error('Нужно видео')
+    else toast.error('Video file required')
   }
 
   return (
     <div className="flex h-full w-full min-w-0">
-      {/* ═══ Панель параметров ═══ */}
+      {/* ═══ Parameter Panel ═══ */}
       <aside className="w-[360px] shrink-0 border-r border-border bg-[var(--surface-1)] flex flex-col">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center gap-2">
@@ -201,9 +201,9 @@ export function TileUpscaleView() {
             <h2 className="text-sm font-semibold text-foreground">Tile Upscale</h2>
           </div>
 
-          {/* Источник */}
+          {/* Source */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground font-medium">Источник</Label>
+            <Label className="text-xs text-muted-foreground font-medium">Source</Label>
             {source ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -214,18 +214,18 @@ export function TileUpscaleView() {
                   dragOver ? 'border-pink-400 ring-1 ring-pink-400/50' : 'border-border',
                 )}
               >
-                {/* (правка 460) Превью: src — САМО видео (source.url), а не
-                    srcThumb(...): URL с &width=320 отдаёт JPEG-постер, и <video>
-                    показывал чёрный квадрат. JPEG-постер уходит в poster=
-                    (мгновенная отрисовка), первый кадр — через preload="metadata"
-                    + muted (WebView2). У blob:-URL (файл с диска) постера нет.
-                    (правка 719) Клик — просмотр во весь экран. */}
+                {/* (fix 460) Preview: src is the video ITSELF (source.url), not
+                    srcThumb(...): URL with &width=320 returns JPEG poster, and <video>
+                    showed a black square. JPEG poster goes to poster=
+                    (instant rendering), first frame via preload="metadata"
+                    + muted (WebView2). Blob URL (file from disk) has no poster.
+                    (fix 719) Click — open fullscreen. */}
                 <RefPreviewThumb
                   kind="video"
                   name={source.filename}
                   url={source.url}
                   className="w-20 h-12 rounded object-cover bg-black shrink-0"
-                  title="Открыть исходное видео во весь экран"
+                  title="Open source video fullscreen"
                 >
                   <video
                     src={source.url}
@@ -238,12 +238,12 @@ export function TileUpscaleView() {
                 </RefPreviewThumb>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-foreground truncate">{source.filename}</p>
-                  {uploadingSrc && <p className="text-[10px] text-pink-400">загрузка…</p>}
+                  {uploadingSrc && <p className="text-[10px] text-pink-400">uploading…</p>}
                 </div>
                 {!busy && (
                   <button onClick={() => setSourceSafe(null)}
                     className="text-[10px] text-muted-foreground hover:text-foreground shrink-0">
-                    убрать
+                    remove
                   </button>
                 )}
               </div>
@@ -252,7 +252,7 @@ export function TileUpscaleView() {
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={dropHandler}
-                // (правка 274) Клик по полю — выбор файла с диска
+                // (fix 274) Click field — choose file from disk
                 onClick={() => fileInputRef.current?.click()}
                 role="button"
                 tabIndex={0}
@@ -263,10 +263,10 @@ export function TileUpscaleView() {
                 )}
               >
                 <FileVideoIcon className="w-4 h-4 shrink-0" />
-                <span>Кликните для выбора, перетащите карточку из галереи или файл с диска</span>
+                <span>Click to select, drag card from gallery or file from disk</span>
               </div>
             )}
-            {/* (правка 274) Скрытый input — клик-выбор видео с диска */}
+            {/* (fix 274) Hidden input — click file select from disk */}
             <input
               ref={fileInputRef}
               type="file"
@@ -280,14 +280,14 @@ export function TileUpscaleView() {
             />
           </div>
 
-          {/* (правка 270) Основные параметры: разрешение + шаги в одну
-              строку, денойз ниже. Остальные (тайлы/overlap/temporal) —
-              в «Дополнительные параметры» (паттерн из generate-view).
-              (правка 462) Сырые <select> заменены на общий Select из
-              @/components/ui/select (эталон вкладки «Генерация»). */}
+          {/* (fix 270) Main parameters: resolution + steps in one
+              row, denoise below. Rest (tiles/overlap/temporal) in
+              "Advanced Parameters" (pattern from generate-view).
+              (fix 462) Raw <select> replaced with common Select from
+              @/components/ui/select (reference from "Generate" tab). */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Разрешение</Label>
+              <Label className="text-xs text-muted-foreground">Resolution</Label>
               <Select
                 value={String(params.targetResolution)}
                 onValueChange={(v) => patchParams({ targetResolution: parseInt(v, 10) })}
@@ -302,7 +302,7 @@ export function TileUpscaleView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Шаги</Label>
+              <Label className="text-xs text-muted-foreground">Steps</Label>
               <Select
                 value={String(params.steps)}
                 onValueChange={(v) => patchParams({ steps: parseInt(v, 10) })}
@@ -318,12 +318,12 @@ export function TileUpscaleView() {
             </div>
           </div>
 
-          {/* (правка 461) Сырой <input type="range"> заменён на общий
-              SettingSlider (как во вкладке «Генерация»): значение — в
-              formatValue, пояснение — в labelTitle-тултипе. */}
+          {/* (fix 461) Raw <input type="range"> replaced with common
+              SettingSlider (as in "Generate" tab): value in
+              formatValue, explanation in labelTitle tooltip. */}
           <SettingSlider
-            label="Денойз"
-            labelTitle="Насколько сильно модель перерисовывает картинку при апскейле. Меньше — результат ближе к исходнику, больше — больше новых деталей."
+            label="Denoise"
+            labelTitle="How strongly the model redraws the image during upscale. Lower is closer to original, higher adds more new detail."
             value={params.denoise}
             min={0.05}
             max={1}
@@ -333,28 +333,28 @@ export function TileUpscaleView() {
             disabled={busy}
           />
 
-          {/* (правка 270) Дополнительные параметры — тайлы, перекрытия, temporal. */}
+          {/* (fix 270) Advanced parameters — tiles, overlap, temporal. */}
           <div className="space-y-2">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-border hover:border-pink-500/30 transition-all text-left"
             >
-              <span className="text-xs font-medium text-muted-foreground">Дополнительные параметры</span>
+              <span className="text-xs font-medium text-muted-foreground">Advanced Parameters</span>
               <span className={cn('text-[10px] text-muted-foreground transition-transform', showAdvanced && 'rotate-180')}>▼</span>
             </button>
 
             {showAdvanced && (
               <div className="space-y-3 pl-1">
-                {/* (правка 481) SyncTile: per-step синхронизация тайлов.
-                    В sync-режиме «Фейд» не используется (блендинг идёт после
-                    каждого шага), «Перекрытие» задаёт геометрию рамп. */}
+                {/* (fix 481) SyncTile: per-step tile synchronization.
+                    In sync mode "Fade" is unused (blending runs after
+                    each step), "Overlap" specifies ramp geometry. */}
                 <div className="space-y-1">
                   <Label
                     className="text-xs text-muted-foreground"
-                    title="Тайлы согласуются после каждого шага сэмплирования (блендинг в общий канвас + общий шум) — убирает мерцание на стыках. Выключите для сравнения со старым режимом."
+                    title="Tiles are reconciled after each sampling step (blending into common canvas + shared noise) — eliminates seam flicker. Turn off to compare with legacy mode."
                   >
-                    SyncTile (швы без мерцания)
+                    SyncTile (seamless joints)
                   </Label>
                   <Select
                     value={params.syncTiles ? 'on' : 'off'}
@@ -365,20 +365,20 @@ export function TileUpscaleView() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-[var(--surface-3)] border-border">
-                      <SelectItem value="on">Вкл (рекомендуется)</SelectItem>
-                      <SelectItem value="off">Выкл (старый режим)</SelectItem>
+                      <SelectItem value="on">On (recommended)</SelectItem>
+                      <SelectItem value="off">Off (legacy mode)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Тайл: размер задаёт пользователь, количество — авто */}
+                {/* Tile: user sets size, count calculated automatically */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label
                       className="text-xs text-muted-foreground"
-                      title="Размер кусочков, на которые делится кадр при обработке. Сколько их понадобится — посчитается автоматически."
+                      title="Size of chunks the frame is split into during processing. How many are needed is calculated automatically."
                     >
-                      Тайл (px)
+                      Tile (px)
                     </Label>
                     <Select
                       value={String(params.tileSize)}
@@ -398,7 +398,7 @@ export function TileUpscaleView() {
                 {/* Overlap + Fade */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Перекрытие (px)</Label>
+                    <Label className="text-xs text-muted-foreground">Overlap (px)</Label>
                     <Select
                       value={String(params.overlap)}
                       onValueChange={(v) => patchParams({ overlap: parseInt(v, 10) })}
@@ -413,7 +413,7 @@ export function TileUpscaleView() {
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Фейд (px)</Label>
+                    <Label className="text-xs text-muted-foreground">Fade (px)</Label>
                     <Select
                       value={String(params.fade)}
                       onValueChange={(v) => patchParams({ fade: parseInt(v, 10) })}
@@ -432,7 +432,7 @@ export function TileUpscaleView() {
                 {/* Temporal */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Кусок (кадры)</Label>
+                    <Label className="text-xs text-muted-foreground">Chunk (frames)</Label>
                     <Select
                       value={String(params.chunkFrames)}
                       onValueChange={(v) => patchParams({ chunkFrames: parseInt(v, 10) })}
@@ -442,12 +442,12 @@ export function TileUpscaleView() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-[var(--surface-3)] border-border">
-                        {[102, 136, 170, 204, 272].map((n) => <SelectItem key={n} value={String(n)}>{n} (~{Math.round(n/24*10)/10}с)</SelectItem>)}
+                        {[102, 136, 170, 204, 272].map((n) => <SelectItem key={n} value={String(n)}>{n} (~{Math.round(n/24*10)/10}s)</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Overlap (кадры)</Label>
+                    <Label className="text-xs text-muted-foreground">Overlap (frames)</Label>
                     <Select
                       value={String(params.temporalOverlap)}
                       onValueChange={(v) => patchParams({ temporalOverlap: parseInt(v, 10) })}
@@ -466,18 +466,18 @@ export function TileUpscaleView() {
             )}
           </div>
 
-          {/* Запуск */}
+          {/* Launch */}
           <div className="flex gap-2 pt-1">
             <Button onClick={start} disabled={!source} className="flex-1 gap-1.5">
               <PlayIcon className="w-4 h-4" />
-              {busy ? 'Ещё в очередь' : 'Запустить Tile Upscale'}
+              {busy ? 'Add to Queue' : 'Start Tile Upscale'}
             </Button>
           </div>
 
         </div>
 
-        {/* Статус */}
-        {/* (правка 475) панель статуса/превью — surface-1, в цвет панели настроек */}
+        {/* Status */}
+        {/* (fix 475) status/preview panel — surface-1, matching settings panel color */}
         <div className="shrink-0 border-t border-border p-3 bg-[var(--surface-1)]/90 backdrop-blur-sm">
           <GenerationStatus
             isGenerating={busy}
@@ -489,13 +489,13 @@ export function TileUpscaleView() {
             onReset={reset}
             startedAt={startedAt}
             promptId={promptId}
-            // (правка 478) свой вид стадии — метка «Tile Upscale», а не «Refine»
+            // (fix 478) custom stage kind — "Tile Upscale" badge, not "Refine"
             stageKind="tile"
           />
         </div>
       </aside>
 
-      {/* ═══ Галерея ═══ */}
+      {/* ═══ Gallery ═══ */}
       <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-y-auto p-3">
           <VideoGalleryGrid
@@ -503,7 +503,7 @@ export function TileUpscaleView() {
             loading={gallery.loading}
             onRefresh={() => void gallery.load()}
             onDeleteFile={gallery.deleteFile}
-            emptyHint="Результаты Tile Upscale появятся здесь"
+            emptyHint="Tile Upscale results will appear here"
           />
         </div>
       </section>

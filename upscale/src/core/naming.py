@@ -5,8 +5,8 @@ from pathlib import Path
 
 RENAME_MODES = ("Auto", "Copy", "Custom")
 _INVALID_FILENAME_CHARACTERS = set('<>:"/\\|?*')
-# (правка 716) Зарезервированные имена Windows (CON, PRN, AUX, NUL, COM1..9,
-# LPT1..9) — с расширением или без, файл с таким именем создать нельзя.
+# (fix 716) Reserved Windows names (CON, PRN, AUX, NUL, COM1..9,
+# LPT1..9) — with or without extension, a file cannot be created with such names.
 _RESERVED_STEMS = {"con", "prn", "aux", "nul"} | {
     f"{prefix}{index}" for prefix in ("com", "lpt") for index in range(1, 10)
 }
@@ -14,12 +14,12 @@ _MAX_FILENAME_LENGTH = 255
 
 
 def validate_output_stem(stem: str) -> str:
-    """(правка 716) Проверка ИТОГОВОГО имени файла.
+    """(fix 716) Validate the FINAL filename stem.
 
-    Раньше validate_rename проверял только ПОЛЬЗОВАТЕЛЬСКИЙ суффикс, а
-    итоговый stem (например «CON» из исходника или «имя » с пробелом на
-    конце) не проверялся вовсе — файл падал с FileExistsError/OSError уже в
-    момент записи, с невнятным сообщением.
+    Previously validate_rename only checked the USER suffix, and
+    the final stem (e.g. "CON" from source or "name " with a trailing space)
+    was not checked at all — failing with FileExistsError/OSError only
+    when written, with an unclear message.
     """
     if not stem:
         raise ValueError("Output name cannot be empty.")
@@ -66,8 +66,8 @@ def output_filename(
         stem = source.stem.strip().rstrip(".") or "output"
         if mode == "Custom":
             stem += suffix
-    # (правка 716) Итоговое имя проверяем целиком (зарезервированные имена
-    # Windows, хвостовые пробелы/точки, длина, недопустимые символы).
+    # (fix 716) Validate the final name completely (reserved Windows names,
+    # trailing spaces/periods, length, invalid characters).
     validate_output_stem(stem)
     return f"{stem}{extension}"
 

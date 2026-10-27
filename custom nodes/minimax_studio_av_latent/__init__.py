@@ -1,18 +1,18 @@
-"""MiniMax Studio (правка 372): сохранение/загрузка AV-латента H3 в файл.
+"""MiniMax Studio (fix 372): saving/loading H3 AV-latents to/from file.
 
-Зачем: рефайн из mp4 заново кодирует видео через VAE — двойная потеря
-(h264 + VAE roundtrip). Генерация (draft/full) сохраняет финальный AV-
-латент сэмплера в output/<sub>/latents/<stem>.latent (stem совпадает с
-mp4 — тот же filename_prefix/счётчик), а рефайн стартует с него
-(LoadAVLatent вместо VHS_LoadVideo -> VAEEncode).
+Why: Refine from mp4 re-encodes video through VAE — double loss
+(h264 + VAE roundtrip). Generation (draft/full) saves the final AV
+sampler latent to output/<sub>/latents/<stem>.latent (stem matches
+mp4 — same filename_prefix/counter), and refine starts from it
+(LoadAVLatent instead of VHS_LoadVideo -> VAEEncode).
 
-AV-латент H3 — {"samples": NestedTensor(video, audio)} (см.
-LTXVConcatAVLatent/LTXVSeparateAVLatent в comfy_extras/nodes_lt.py).
-Встроенные SaveLatent/LoadLatent (nodes.py) не подходят: они пишут один
-тензор "latent_tensor" и не умеют nested AV-пары.
+H3 AV-latent is {"samples": NestedTensor(video, audio)} (see
+LTXVConcatAVLatent/LTXVSeparateAVLatent in comfy_extras/nodes_lt.py).
+Builtin SaveLatent/LoadLatent (nodes.py) are insufficient: they write a single
+tensor "latent_tensor" and cannot handle nested AV pairs.
 
-Формат файла: safetensors с тензорами video_samples и audio_samples +
-JSON-шапка (fps, vae) в metadata. Расширение .latent.
+File format: safetensors with video_samples and audio_samples tensors +
+JSON header (fps, vae) in metadata. File extension .latent.
 """
 
 import json
@@ -47,7 +47,7 @@ class MiniMaxStudioSaveAVLatent:
     def save(self, samples, filename_prefix="latents/Minimax_Studio", vae_name=""):
         streams = samples["samples"]
         if not streams.is_nested:
-            raise ValueError("MiniMaxStudioSaveAVLatent: ожидается AV-латент (NestedTensor video+audio)")
+            raise ValueError("MiniMaxStudioSaveAVLatent: expected AV latent (NestedTensor video+audio)")
         video_samples, audio_samples = streams.unbind()
 
         full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
@@ -67,8 +67,8 @@ class MiniMaxStudioLoadAVLatent:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
-            # Путь относительно output/ ComfyUI, напр. "latents/Minimax_Studio_00001_.latent"
-            # (workflow собирается сервером студии, виджет-список не нужен).
+            # Path relative to ComfyUI output/, e.g. "latents/Minimax_Studio_00001_.latent"
+            # (workflow assembled by studio server, widget dropdown not needed).
             "latent": ("STRING", {"default": ""}),
         }}
 
@@ -81,9 +81,9 @@ class MiniMaxStudioLoadAVLatent:
         root = os.path.realpath(folder_paths.get_output_directory())
         path = os.path.realpath(os.path.join(root, latent))
         if path != root and not path.startswith(root + os.sep):
-            raise ValueError("MiniMaxStudioLoadAVLatent: путь вне output/: {}".format(latent))
+            raise ValueError("MiniMaxStudioLoadAVLatent: path outside output/: {}".format(latent))
         if not os.path.isfile(path):
-            raise FileNotFoundError("MiniMaxStudioLoadAVLatent: файл не найден: {}".format(latent))
+            raise FileNotFoundError("MiniMaxStudioLoadAVLatent: file not found: {}".format(latent))
         return path
 
     def load(self, latent):

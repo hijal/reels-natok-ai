@@ -1,48 +1,48 @@
-import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format' // (правка 386)
+import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format' // (fix 386)
 /**
- * FPS — frame interpolation (VFI) workflow-шаблон. (правка 268)
+ * FPS — frame interpolation (VFI) workflow template. (fix 268)
  *
- * Вставка кадров между существующими: 24 fps → 48/72/96 fps.
- * Пакет нод: Fannovel16/ComfyUI-Frame-Interpolation.
+ * Inserting frames between existing ones: 24 fps → 48/72/96 fps.
+ * Node package: Fannovel16/ComfyUI-Frame-Interpolation.
  *
- * Цепочка:
+ * Chain:
  *   VHS_LoadVideo (24 fps) ──IMAGE→ RIFE VFI / FILM VFI (multiplier) ──IMAGE→
- *   VHS_VideoCombine (fps = исходный × multiplier, звук из исходника)
+ *   VHS_VideoCombine (fps = source × multiplier, audio from source)
  *
- * RIFE VFI  (быстрый, мало VRAM) — параметры:
+ * RIFE VFI  (fast, low VRAM) — parameters:
  *   ckpt_name (rife49.pth | rife47.pth | rife417.pth | rife426.pth |
  *              sudo_rife4_269.662_testV1_scale1.pth), frames (IMAGE),
  *   multiplier (INT), clear_cache_after_n_frames (INT 1–1000),
  *   fast_mode (BOOL), ensemble (BOOL), scale_factor (0.25|0.5|1|2|4),
  *   dtype (float32|float16|bfloat16), torch_compile (BOOL), batch_size (1–64).
  *
- * FILM VFI (крупные движения) — параметры:
+ * FILM VFI (large motion) — parameters:
  *   ckpt_name (film_net_fp32.pt), frames (IMAGE), multiplier (INT),
  *   clear_cache_after_n_frames (INT 1–1000).
  *
- * Заметки по VRAM:
- *   - clear_cache_after_n_frames — главный анти-OOM: меньше = меньше пик,
- *     медленнее. На слабой карте 2–4.
- *   - scale_factor (RIFE) — 0.25/0.5 = быстрее и меньше VRAM, 1.0 = качество.
- *   - dtype=float16 экономит ~50% VRAM относительно float32.
+ * Notes on VRAM:
+ *   - clear_cache_after_n_frames — main anti-OOM: smaller = lower peak,
+ *     slower. On low-end GPU 2–4.
+ *   - scale_factor (RIFE) — 0.25/0.5 = faster and less VRAM, 1.0 = quality.
+ *   - dtype=float16 saves ~50% VRAM relative to float32.
  */
 
 export type FpsMode = 'rife' | 'film'
 
 export interface FpsParams {
-  /** (правка 386) Формат/качество видео-выхода ([video] config.ini). */
+  /** (fix 386) Video output format/quality ([video] config.ini). */
   videoFormat?: VideoFormatSettings
-  /** Имя файла в ComfyUI input/ (уже скопирован роутом). */
+  /** Filename in ComfyUI input/ (already copied by route). */
   sourceVideo: string
-  /** Исходный FPS видео (ffprobe r_frame_rate). Default 24. */
+  /** Source video FPS (ffprobe r_frame_rate). Default 24. */
   sourceFps: number
-  /** Режим VFI: 'rife' | 'film'. Default 'rife'. */
+  /** VFI mode: 'rife' | 'film'. Default 'rife'. */
   mode?: FpsMode
-  /** Множитель FPS: 2 | 3 | 4. Default 2. */
+  /** FPS multiplier: 2 | 3 | 4. Default 2. */
   multiplier?: number
-  // (правка 269) rifeModel/filmModel удалены: по одной модели на режим,
-  // зафиксированы ниже (RIFE_MODEL / FILM_MODEL). Скачиваются в
-  // Настройках → Модели (models-config.ts, category 'fps').
+  // (fix 269) rifeModel/filmModel removed: one model per mode,
+  // fixed below (RIFE_MODEL / FILM_MODEL). Downloaded in
+  // Settings → Models (models-config.ts, category 'fps').
   /** RIFE batch_size (1–64). Default 4. */
   rifeBatchSize?: number
   /** RIFE scale_factor. Default 1. */
@@ -53,13 +53,13 @@ export interface FpsParams {
   rifeFastMode?: boolean
   /** RIFE ensemble. Default true. */
   rifeEnsemble?: boolean
-  /** Анти-OOM: кадров между очисткой кэша. Default 4. */
+  /** Anti-OOM: frames between cache clearing. Default 4. */
   clearCacheAfterNFrames?: number
-  /** Подпапка вывода. */
+  /** Output subfolder. */
   outputSubfolder?: string
 }
 
-// (правка 269) По одной модели на режим (решение пользователя):
+// (fix 269) One model per mode (user decision):
 // RIFE → rife49.pth, FILM → film_net_fp32.pt.
 const RIFE_MODEL = 'rife49.pth'
 const FILM_MODEL = 'film_net_fp32.pt'
@@ -81,17 +81,17 @@ function safeFps(n: number): number {
 }
 
 export function buildFpsWorkflow(p: FpsParams): Record<string, unknown> {
-  const vhsEnc = vhsEncodeInputs(p.videoFormat) // (правка 386)
+  const vhsEnc = vhsEncodeInputs(p.videoFormat) // (fix 386)
   const mode: FpsMode = p.mode === 'film' ? 'film' : 'rife'
   const multiplier = Math.max(2, Math.min(1000, Math.floor(p.multiplier ?? 2)))
   const srcFps = safeFps(p.sourceFps)
   const outFps = safeFps(srcFps * multiplier)
 
-  // (правка 269) Модели зафиксированы — не принимаются из параметров.
+  // (fix 269) Models are fixed — not accepted from params.
   const rifeModel = RIFE_MODEL
   const filmModel = FILM_MODEL
   const rifeBatchSize = Math.max(1, Math.min(64, Math.floor(p.rifeBatchSize ?? 4)))
-  // (правка 268, фикс) scale_factor — ЧИСЛО (0.25/0.5/1.0/2.0/4.0), не строка.
+  // (fix 268, fix) scale_factor — NUMBER (0.25/0.5/1.0/2.0/4.0), not string.
   const RIFE_SCALE_OPTIONS = [0.25, 0.5, 1.0, 2.0, 4.0]
   const rifeScaleNum = p.rifeScale ?? 1.0
   const rifeScale = RIFE_SCALE_OPTIONS.includes(rifeScaleNum) ? rifeScaleNum : 1.0
@@ -109,8 +109,8 @@ export function buildFpsWorkflow(p: FpsParams): Record<string, unknown> {
     'fps_src': {
       inputs: {
         video: p.sourceVideo,
-        // Не форсируем 24 fps — используем fps из исходника (VHS force_rate=0).
-        // multiplier умножит этот fps и даст целевой fps.
+        // Do not force 24 fps — use fps from source (VHS force_rate=0).
+        // multiplier will multiply this fps and yield target fps.
         force_rate: 0,
         custom_width: 0,
         custom_height: 0,
@@ -119,7 +119,7 @@ export function buildFpsWorkflow(p: FpsParams): Record<string, unknown> {
         select_every_nth: 1,
       },
       class_type: 'VHS_LoadVideo',
-      _meta: { title: `Исходник (${srcFps} fps)` },
+      _meta: { title: `Source (${srcFps} fps)` },
     },
 
     // ═══════════════════════════════════════════════
@@ -158,21 +158,21 @@ export function buildFpsWorkflow(p: FpsParams): Record<string, unknown> {
         }),
 
     // ═══════════════════════════════════════════════
-    //  OUTPUT COMBINE (fps × multiplier, звук из исходника)
+    //  OUTPUT COMBINE (fps × multiplier, audio from source)
     // ═══════════════════════════════════════════════
     'fps_out': {
       inputs: {
         frame_rate: outFps,
         loop_count: 0,
         filename_prefix: `${sub}Minimax_Studio_fps`,
-        // (правка 386) формат/качество — из [video] настроек студии
+        // (fix 386) format/quality — from studio [video] settings
         ...vhsEnc,
         save_metadata: false,
-        // (правка 323) A/V sync: VFI ИНТЕРПОЛИРУЕТ кадры (N → N×multiplier),
-        // out frame_rate = srcFps×multiplier → длительность видео =
-        // длительности исходника. Звук — оригинальная дорожка из VHS
-        // passthrough той же длительности → рассинхрона нет; false допедит
-        // аудио apad до длины видео. Это смысл fps-режима — не трогать.
+        // (fix 323) A/V sync: VFI INTERPOLATES frames (N → N×multiplier),
+        // out frame_rate = srcFps×multiplier → video duration =
+        // source duration. Audio is the original track from VHS
+        // passthrough with the same duration → no desync; false will pad
+        // audio with apad to video length. This is the purpose of fps mode — do not touch.
         pingpong: false,
         save_output: true,
         images: ['fps_vfi', 0],

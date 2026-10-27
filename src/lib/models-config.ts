@@ -11,46 +11,46 @@ export interface ModelDef {
   /** Direct download URL */
   url: string
   /**
-   * Точный размер файла в БАЙТАХ.
+   * Exact file size in BYTES.
    *
-   * ВАЖНО: это ровно то значение `content-length`, которое отдаёт сервер
-   * (проверено HEAD-запросом), а не округлённое «N ГБ». Размер нужен для
-   * двух проверок в model-downloader.ts:
-   *   • sizeOk()      — файл считается скачанным, если отличается от
-   *                      ожидаемого не более чем на ±10%;
-   *   • doDownload()  — недокачанным считается файл с completion < 0.9.
+   * IMPORTANT: this is exactly the `content-length` value returned by the server
+   * (verified via HEAD request), not a rounded "N GB". The size is needed for
+   * two checks in model-downloader.ts:
+   *   • sizeOk()      — file is considered downloaded if it differs from
+   *                      expected by no more than ±10%;
+   *   • doDownload()  — file is considered incomplete with completion < 0.9.
    *
-   * Раньше здесь стояло `gb(N)` = N × 2³⁰ (двоичные ГБ), а размеры были
-   * переписаны из интерфейса HuggingFace, где ГБ десятичные (10⁹). Разница
-   * 7,4% съедала запас: у `llm_assistant_q5` до порога 0.9 оставалось всего
-   * 1,1 п.п., и полностью скачанный файл мог быть объявлен неполным.
-   * Теперь expected == фактическому размеру байт в байт.
+   * Previously this had `gb(N)` = N × 2³⁰ (binary GB), while sizes were
+   * transcribed from the HuggingFace UI, where GB are decimal (10⁹). The 7.4%
+   * difference ate the margin: for `llm_assistant_q5` only 1.1 pp was left to the 0.9 threshold,
+   * and a fully downloaded file could be declared incomplete.
+   * Now expected == actual byte-for-byte size.
    */
   sizeBytes: number
   /** Human-readable size */
   sizeLabel: string
-  /** (правка 269) Category for grouping in UI */
+  /** (fix 269) Category for grouping in UI */
   category: 'diffusion' | 'text_encoder' | 'vae' | 'lora' | 'upscaler' | 'preview' | 'llm' | 'fps' | 'veda' | 'preprocessor' | 'face'
-  /** (правка 138 / Bonsai / 269) Куда класть файл: 'comfy' (по умолчанию —
-   *  ComfyUI/models/<relPath>), 'bonsai' (<bonsai_dir>/<relPath>) или
-   *  'custom' (<baseDir>/<relPath> — произвольный каталог, например
-   *  папка моделей кастомной ноды). */
+  /** (fix 138 / Bonsai / 269) Where to place the file: 'comfy' (by default —
+   *  ComfyUI/models/<relPath>), 'bonsai' (<bonsai_dir>/<relPath>) or
+   *  'custom' (<baseDir>/<relPath> — arbitrary directory, e.g.
+   *  custom node model folder). */
   target?: 'comfy' | 'bonsai' | 'custom'
-  /** (правка 269) Абсолютный корневой каталог при target='custom'. */
+  /** (fix 269) Absolute root directory when target='custom'. */
   baseDir?: string
-  /** (правка 138 / Bonsai) URL указывает на ZIP: после скачивания извлечь
-   *  ТОЛЬКО эти файлы (рекурсивный поиск по архиву) в каталог relPath. */
+  /** (fix 138 / Bonsai) URL points to a ZIP: after downloading extract
+   *  ONLY these files (recursive archive search) into relPath directory. */
   extractFiles?: string[]
-  /** (правка 138) Опциональная модель: панель показывает, но «Скачать все»
-   *  НЕ тянет (лишние гигабайты без ведома пользователя). */
+  /** (fix 138) Optional model: panel shows it, but "Download all"
+   *  does NOT download it (no extra gigabytes without user's consent). */
   optional?: boolean
 }
 
 export const MODELS: ModelDef[] = [
   {
     id: 'diffusion',
-    // (правка 293) Основная модель — вернули обратно (была лучше по качеству).
-    // Kijai/MiniMax-H3-experimental. 4-шаговая генерация (FastH3 VSA DataFree), ~22.9 ГБ.
+    // (fix 293) Primary model — switched back (was better in quality).
+    // Kijai/MiniMax-H3-experimental. 4-step generation (FastH3 VSA DataFree), ~22.9 GB.
     label: 'Diffusion Model (FastH3 VSA DataFree 4-step INT8 ConvRot)',
     relPath: 'diffusion_models/minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors',
     url: 'https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/main/minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors?download=true',
@@ -93,9 +93,9 @@ export const MODELS: ModelDef[] = [
     sizeBytes: 1956193000,
     sizeLabel: '~1.8 GB',
     category: 'lora',
-    // Обязательная: включена по умолчанию во всех режимах (кроме «Кадры» с
-    // аудио), поэтому «Скачать все» тянет её вместе с базовыми моделями,
-    // и жёлтый баннер «модели не скачаны» требует её наравне с ними.
+    // Required: enabled by default in all modes (except "Frames" with
+    // audio), so "Download all" pulls it along with base models,
+    // and yellow banner "models not downloaded" requires it on par with them.
   },
   {
     id: 'upscaler',
@@ -117,7 +117,7 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'llm_assistant',
-    label: 'Ассистент — Gemma 4 12B (Q4_K_M, omni)',
+    label: 'Assistant — Gemma 4 12B (Q4_K_M, omni)',
     relPath: 'llm/gemma-4-12b-it-Q4_K_M.gguf',
     url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/gemma-4-12b-it-Q4_K_M.gguf?download=true',
     sizeBytes: 7121861440,
@@ -126,7 +126,7 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'llm_assistant_q3',
-    label: 'Ассистент — Gemma 4 12B (Q3_K_M, лёгкая, ~8 ГБ VRAM)',
+    label: 'Assistant — Gemma 4 12B (Q3_K_M, lightweight, ~8 GB VRAM)',
     relPath: 'llm/gemma-4-12b-it-Q3_K_M.gguf',
     url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/gemma-4-12b-it-Q3_K_M.gguf?download=true',
     sizeBytes: 5693872960,
@@ -135,7 +135,7 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'llm_assistant_q5',
-    label: 'Ассистент — Gemma 4 12B (Q5_K_M, качество, ~12 ГБ VRAM)',
+    label: 'Assistant — Gemma 4 12B (Q5_K_M, high quality, ~12 GB VRAM)',
     relPath: 'llm/gemma-4-12b-it-Q5_K_M.gguf',
     url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/gemma-4-12b-it-Q5_K_M.gguf?download=true',
     sizeBytes: 8413576000,
@@ -144,21 +144,21 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'llm_assistant_mmproj',
-    label: 'Vision Projector (mmproj BF16) — для зрения LLM',
+    label: 'Vision Projector (mmproj BF16) — for LLM vision',
     relPath: 'llm/mmproj-BF16.gguf',
     url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/mmproj-BF16.gguf?download=true',
     sizeBytes: 175115840,
     sizeLabel: '~175 MB',
     category: 'llm',
   },
-  // ── Qwen3.5 9B (правка 52) — альтернативная LLM для слабых машин: ──
-  // мультимодальная (картинка + видео), ~5.7 ГБ Q4 против 7.1 у Gemma 12B,
-  // гибрид Gated DeltaNet → экономнее по KV-кэшу. Нужен свежий llama.cpp
-  // (архитектура qwen35) — пользователь тестирует на своём железе.
-  // Файлы в подпапке llm/qwen3.5-9b/, чтобы не конфликтовать с Gemma.
+  // ── Qwen3.5 9B (fix 52) — alternative LLM for weaker machines: ──
+  // multimodal (image + video), ~5.7 GB Q4 vs 7.1 for Gemma 12B,
+  // hybrid Gated DeltaNet → more economical KV cache. Requires modern llama.cpp
+  // (qwen35 architecture) — user tests on their hardware.
+  // Files in subfolder llm/qwen3.5-9b/ to avoid conflicting with Gemma.
   {
     id: 'llm_assistant_qwen',
-    label: 'Ассистент — Qwen3.5 9B (Q4_K_M, vision, лёгкая по VRAM)',
+    label: 'Assistant — Qwen3.5 9B (Q4_K_M, vision, lightweight VRAM)',
     relPath: 'llm/qwen3.5-9b/Qwen3.5-9B-Q4_K_M.gguf',
     url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf?download=true',
     sizeBytes: 5680522464,
@@ -167,20 +167,20 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'llm_assistant_qwen_mmproj',
-    label: 'Vision Projector (Qwen3.5 mmproj F16) — зрение для Qwen3.5 9B',
+    label: 'Vision Projector (Qwen3.5 mmproj F16) — vision for Qwen3.5 9B',
     relPath: 'llm/qwen3.5-9b/mmproj-F16.gguf',
     url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf?download=true',
     sizeBytes: 918166080,
     sizeLabel: '~918 MB',
     category: 'llm',
   },
-  // ── (правка 138) Bonsai 2 27B — тернарная LLM-ассистент на форке llama.cpp
-  // (PrismML). Движок и модели живут в <bonsai_dir> (по умолчанию
-  // <проект>/Bonsai_2_27B), НЕ в models ComfyUI. Точная версия движка
-  // подобрана под кванты модели (prism-b10709-9a9394a, CUDA 12.4).
+  // ── (fix 138) Bonsai 2 27B — ternary LLM assistant on llama.cpp fork
+  // (PrismML). Engine and models live in <bonsai_dir> (by default
+  // <project>/Bonsai_2_27B), NOT in ComfyUI models. Exact engine version
+  // matched for model quants (prism-b10709-9a9394a, CUDA 12.4).
   {
     id: 'bonsai_engine_bin',
-    label: 'Bonsai: движок llama-server (PrismML b10709, бинарники)',
+    label: 'Bonsai: llama-server engine (PrismML b10709, binaries)',
     relPath: 'llama.cpp/',
     target: 'bonsai',
     url: 'https://github.com/PrismML-Eng/llama.cpp/releases/download/prism-b10709-9a9394a/llama-prism-b10709-9a9394a-bin-win-cuda-12.4-x64.zip',
@@ -202,7 +202,7 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'bonsai_engine_cudart',
-    label: 'Bonsai: движок — CUDA DLL (cublas/cudart 12.4)',
+    label: 'Bonsai: engine — CUDA DLL (cublas/cudart 12.4)',
     relPath: 'llama.cpp/',
     target: 'bonsai',
     url: 'https://github.com/PrismML-Eng/llama.cpp/releases/download/prism-b10709-9a9394a/cudart-llama-bin-win-cuda-12.4-x64.zip',
@@ -213,7 +213,7 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'bonsai_model',
-    label: 'Bonsai 2 27B — модель (PQ2_0, тернарная, vision)',
+    label: 'Bonsai 2 27B — model (PQ2_0, ternary, vision)',
     relPath: 'models/Ternary-Bonsai-2-27B-PQ2_0.gguf',
     target: 'bonsai',
     url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-PQ2_0.gguf?download=true',
@@ -231,13 +231,13 @@ export const MODELS: ModelDef[] = [
     sizeLabel: '~630 MB',
     category: 'llm',
   },
-  // ── (правка 269) FPS (frame interpolation, VFI) — вкладка «FPS». ──
-  // Пакет Fannovel16/ComfyUI-Frame-Interpolation ищет модели НЕ в
-  // ComfyUI/models, а в своей папке custom_nodes/.../ckpts/<тип>/<файл>
-  // (ckpts_path из config.yaml). Поэтому target='custom' + baseDir.
-  // По одной модели на режим (решение пользователя): RIFE → rife49.pth,
-  // FILM → film_net_fp32.pt. Скачиваются в Настройках → Модели, а не при
-  // первом запуске генерации (пакет сам докачает при запуске — fallback).
+  // ── (fix 269) FPS (frame interpolation, VFI) — "FPS" tab. ──
+  // Package Fannovel16/ComfyUI-Frame-Interpolation searches models NOT in
+  // ComfyUI/models, but in its folder custom_nodes/.../ckpts/<type>/<file>
+  // (ckpts_path from config.yaml). Hence target='custom' + baseDir.
+  // One model per mode (user decision): RIFE → rife49.pth,
+  // FILM → film_net_fp32.pt. Downloaded in Settings → Models, not during
+  // first generation run (package will download on run as fallback).
   {
     id: 'fps_rife',
     label: 'FPS RIFE VFI — rife49.pth',
@@ -260,13 +260,13 @@ export const MODELS: ModelDef[] = [
     sizeLabel: '~132 MB',
     category: 'fps',
   },
-  // ── (правка 301) Veda Sparse Attention — предиктор спарсификации. ──
-  // Обученный предиктор (Veda-Sparse/Minimax-H3-T2VA-Veda-8NFE-600Step-Preview)
-  // для VedaSparseAttention ноды. Файл лежит в ComfyUI/models/veda/.
-  // Опциональная: нужна ТОЛЬКО если пользователь включил Veda в настройках.
+  // ── (fix 301) Veda Sparse Attention — sparsification predictor. ──
+  // Trained predictor (Veda-Sparse/Minimax-H3-T2VA-Veda-8NFE-600Step-Preview)
+  // for VedaSparseAttention node. File resides in ComfyUI/models/veda/.
+  // Optional: needed ONLY if user enabled Veda in settings.
   {
     id: 'veda_predictor',
-    label: 'Veda Sparse Attention — предиктор (FP8)',
+    label: 'Veda Sparse Attention — predictor (FP8)',
     relPath: 'veda/minimax_h3_t2va_veda_8nfe_600step_preview_fp8.safetensors',
     url: 'https://huggingface.co/Veda-Sparse/Minimax-H3-T2VA-Veda-8NFE-600Step-Preview/resolve/main/minimax_h3_t2va_veda_8nfe_600step_preview_fp8.safetensors?download=true',
     sizeBytes: 275415648,
@@ -274,12 +274,12 @@ export const MODELS: ModelDef[] = [
     category: 'veda',
     optional: true,
   },
-  // Depth-препроцессор вкладки «ControlNet» (Depth Anything V2 Small).
-  // Нода comfyui_controlnet_aux ищет его в СВОЕЙ папке ckpts/<repo>/<файл>
-  // (custom_hf_download), НЕ в ComfyUI/models — поэтому target='custom'.
+  // Depth preprocessor for "ControlNet" tab (Depth Anything V2 Small).
+  // Node comfyui_controlnet_aux looks for it in ITS OWN ckpts/<repo>/<file> folder
+  // (custom_hf_download), NOT in ComfyUI/models — hence target='custom'.
   {
     id: 'depth_anything_v2_vits',
-    label: 'Depth Anything V2 Small (препроцессор глубины)',
+    label: 'Depth Anything V2 Small (depth preprocessor)',
     relPath: 'depth_anything_v2_vits.pth',
     target: 'custom',
     baseDir: 'ComfyUI/custom_nodes/comfyui_controlnet_aux/ckpts/depth-anything/Depth-Anything-V2-Small',
@@ -289,14 +289,14 @@ export const MODELS: ModelDef[] = [
     category: 'preprocessor',
     optional: true,
   },
-  // ── (правка 722) Face Refine — детекторы лиц для вкладки «Face Refine». ──
-  // Пакет ComfyUI-H3-FaceRefine ищет модели детекции в models/ultralytics/bbox
-  // (fallback в самой ноде, если папка не зарегистрирована в ComfyUI как
-  // категория). face_yolov8m — детектор лиц, person_yolov8m-seg — человек
-  // целиком (fallback-детектор для далёких планов, где лицо не видно).
+  // ── (fix 722) Face Refine — face detectors for "Face Refine" tab. ──
+  // Package ComfyUI-H3-FaceRefine searches detection models in models/ultralytics/bbox
+  // (fallback inside node if folder is not registered in ComfyUI as
+  // category). face_yolov8m — face detector, person_yolov8m-seg — whole person
+  // (fallback detector for wide shots where face is not visible).
   {
     id: 'face_yolov8m',
-    label: 'Face Refine — детектор лиц (face_yolov8m)',
+    label: 'Face Refine — face detector (face_yolov8m)',
     relPath: 'ultralytics/bbox/face_yolov8m.pt',
     url: 'https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8m.pt',
     sizeBytes: 52026019,
@@ -306,7 +306,7 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'person_yolov8m_seg',
-    label: 'Face Refine — детектор человека (person_yolov8m-seg)',
+    label: 'Face Refine — person detector (person_yolov8m-seg)',
     relPath: 'ultralytics/segm/person_yolov8m-seg.pt',
     url: 'https://huggingface.co/Bingsu/adetailer/resolve/main/person_yolov8m-seg.pt',
     sizeBytes: 54827683,
@@ -316,19 +316,19 @@ export const MODELS: ModelDef[] = [
   },
   {
     id: 'bonsai_model_light',
-    label: 'Bonsai 2 27B — модель (PTQ1_0, самая лёгкая, ~6 ГБ, для карт ≤8 ГБ)',
+    label: 'Bonsai 2 27B — model (PTQ1_0, lightest, ~6 GB, for ≤8 GB cards)',
     relPath: 'models/Ternary-Bonsai-2-27B-PTQ1_0.gguf',
     target: 'bonsai',
     url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-PTQ1_0.gguf?download=true',
-    // (правка 169) Реальный размер PTQ1_0 = 5.95 ГБ (HuggingFace model card).
-    // Было 595 MB → не проходил modelExists(); было 6.2 → не проходил
-    // финальную валидацию в doDownload (5.95/6.2 = 0.91, но с погрешностью
-    // округления HuggingFace иногда отдаёт чуть меньше → <0.9 → ошибка).
+    // (fix 169) Actual size PTQ1_0 = 5.95 GB (HuggingFace model card).
+    // Was 595 MB → failed modelExists(); was 6.2 → failed
+    // final validation in doDownload (5.95/6.2 = 0.91, but with rounding
+    // error HuggingFace sometimes serves slightly less → <0.9 → error).
     sizeBytes: 5946648928,
     sizeLabel: '~5.95 GB',
     category: 'llm',
-    // Опциональная: качается только вручную; раннер подхватит её, если
-    // основной PQ2_0 не скачан, а PTQ1_0 есть.
+    // Optional: downloaded manually only; runner picks it up if
+    // primary PQ2_0 is not downloaded, but PTQ1_0 exists.
     optional: true,
   },
 ]
@@ -341,13 +341,13 @@ export const MODEL_CATEGORIES: { key: ModelDef['category']; label: string }[] = 
   { key: 'lora', label: 'LoRA' },
   { key: 'upscaler', label: 'Upscaler' },
   { key: 'preview', label: 'Preview' },
-  { key: 'llm', label: 'LLM-ассистент' },
-  // (правка 269) FPS (frame interpolation)
+  { key: 'llm', label: 'LLM Assistant' },
+  // (fix 269) FPS (frame interpolation)
   { key: 'fps', label: 'FPS (VFI)' },
-  // (правка 301) Veda Sparse Attention предиктор
+  // (fix 301) Veda Sparse Attention predictor
   { key: 'veda', label: 'Veda Attention' },
-  // Препроцессоры (depth/canny для вкладки ControlNet)
-  { key: 'preprocessor', label: 'Препроцессоры' },
-  // (правка 722) Детекторы лиц/человека для вкладки Face Refine
-  { key: 'face', label: 'Face Refine (детекторы)' },
+  // Preprocessors (depth/canny for ControlNet tab)
+  { key: 'preprocessor', label: 'Preprocessors' },
+  // (fix 722) Face/person detectors for Face Refine tab
+  { key: 'face', label: 'Face Refine (detectors)' },
 ]

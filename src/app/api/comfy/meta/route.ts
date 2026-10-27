@@ -8,9 +8,9 @@ import { ensureUpscaleMeta } from '@/lib/upscale-meta'
  * GET /api/comfy/meta?path=subfolder/filename.ext
  * Reads the .meta.json sidecar file from the ComfyUI output directory.
  *
- * (правка 94) Ленивый бэкфилл: у апскейл-видео (DLSS5 / RTXVIDEO по имени
- * файла) сайдкаров исторически нет — генерируем его на лету из ffprobe
- * (разрешение/длительность/fps/размер), после чего отдаём как обычный.
+ * (fix 94) Lazy backfill: upscaled videos (DLSS5 / RTXVIDEO by file name)
+ * historically lack sidecars — generate one on the fly using ffprobe
+ * (resolution/duration/fps/size), then serve as normal.
  */
 export const dynamic = 'force-dynamic'
 
@@ -23,10 +23,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'path is required' }, { status: 400 })
   }
 
-  // (правка 340) Санитизация по паттерну safeOutputPath (src/lib/thumb.ts):
-  // старая схема (стрип leading-слэшей + удаление '../') не резала '..\'
-  // (Windows) и сравнивала startsWith БЕЗ path.sep — соседняя папка с общим
-  // префиксом проходила за «внутри output».
+  // (fix 340) Sanitization following safeOutputPath pattern (src/lib/thumb.ts):
+  // old scheme (stripping leading slashes + removing '../') did not strip '..\'
+  // (Windows) and compared startsWith WITHOUT path.sep — a sibling folder with a common
+  // prefix passed as "inside output".
   const cleaned = filePath.replace(/^[\\/]+/, '')
   const outputRoot = path.resolve(OUTPUT_DIR)
   const metaFile = path.resolve(outputRoot, cleaned + '.meta.json')
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (!fs.existsSync(metaFile)) {
-      // (правка 94) Нет сайдкара, но файл — результат апскейла? Сгенерировать.
+      // (fix 94) No sidecar, but file is upscale result? Generate it.
       const base = path.basename(safePath)
       const isUpscale = /_(?:DLSS5|RTXVIDEO(?:_PREVIEW)?)_\d{8}-\d{6}/i.test(base)
       if (isUpscale) {
@@ -53,9 +53,9 @@ export async function GET(req: NextRequest) {
     }
     const raw = fs.readFileSync(metaFile, 'utf-8')
     const data = JSON.parse(raw)
-    // (правка 377) Наличие латента для бейджа refine-view: путь сохранённого
-    // AV-латента в мете + файл на месте (внутри output/). Вычисляемое поле —
-    // в сайдкар не пишется.
+    // (fix 377) Latent availability for refine-view badge: saved
+    // AV-latent path in meta + file exists (inside output/). Computed field —
+    // not written to sidecar.
     const latentFile = typeof (data as { latent_file?: unknown }).latent_file === 'string'
       ? (data as { latent_file: string }).latent_file
       : null
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
           latentPath !== outputRoot && latentPath.startsWith(outputRoot + path.sep)
             ? fs.existsSync(latentPath)
             : false
-      } catch { /* вне output/ — считаем отсутствующим */ }
+      } catch { /* outside output/ — treat as missing */ }
     }
     return NextResponse.json({ ...data, latent_available: latentAvailable })
   } catch (err) {

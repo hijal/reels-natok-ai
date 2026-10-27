@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { setUpscaleMetaGenerationTime } from '@/lib/upscale-meta'
 
 /**
- * (правка 264) POST /api/upscale/finalize
+ * (fix 264) POST /api/upscale/finalize
  * Body: { path: "<output_path>", generation_time: <seconds>,
  *        feature?: "<feature>", options?: {...} }
  *
- * Дописывает generation_time + DLSS-настройки (feature, options) в сайдкар
- * .meta.json результата апскейла. Идемпотентно — существующие поля не
- * перезаписываются. Время меряется на клиенте (upscale-queue: submit → done).
+ * Appends generation_time + DLSS settings (feature, options) to the upscale result's
+ * .meta.json sidecar. Idempotent — existing fields are not
+ * overwritten. Time is measured on the client (upscale-queue: submit → done).
  */
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     const gt = typeof body?.generation_time === 'number' ? body.generation_time : NaN
     if (!p || !Number.isFinite(gt) || gt <= 0) {
       return NextResponse.json(
-        { error: 'Нужны path и generation_time (> 0)' },
+        { error: 'path and generation_time (> 0) are required' },
         { status: 400 },
       )
     }
@@ -33,6 +33,6 @@ export async function POST(req: NextRequest) {
     const ok = setUpscaleMetaGenerationTime(p, gt, feature, options)
     return NextResponse.json({ ok })
   } catch {
-    return NextResponse.json({ ok: false, error: 'Не удалось дописать метаданные' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Failed to append metadata' }, { status: 500 })
   }
 }

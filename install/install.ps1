@@ -1,37 +1,37 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    MiniMax H3 Studio - автоматическая установка зависимостей.
+    MiniMax H3 Studio - automatic dependency installation.
 
 .DESCRIPTION
-    Восстанавливает окружение проекта на чистой машине Windows x64:
-      * Node.js 22 (портативный, если в системе нет 18+)
-      * node_modules + production-сборку .next
-      * ComfyUI 0.33.0 + Python 3.12.10 + torch 2.11.0+cu130 + 288 пакетов
-      * 22 кастомные ноды по зафиксированным коммитам + 3 локальные ноды
-      * папки моделей, extra_model_paths.yaml, .no-auto-update
+    Restores the project environment on a clean Windows x64 machine:
+      * Node.js 22 (portable if 18+ is not present on the system)
+      * node_modules + production build .next
+      * ComfyUI 0.33.0 + Python 3.12.10 + torch 2.11.0+cu130 + 288 packages
+      * 22 custom nodes at pinned commits + 3 local nodes
+      * model folders, extra_model_paths.yaml, .no-auto-update
 
-    Модели НЕ скачиваются - они загружаются через UI студии.
-    Папки upscale/bin и stt в репозиторий не входят и установщиком не
-    восстанавливаются (см. предупреждения в конце).
+    Models are NOT downloaded - they are loaded via the studio UI.
+    Folders upscale/bin and stt are not part of the repository and are not
+    restored by the installer (see warnings at the end).
 
 .PARAMETER Root
-    Папка проекта. По умолчанию - родительская для папки install.
+    Project root directory. Default - parent of the install folder.
 
 .PARAMETER Force
-    Переустановить всё заново (удаляет node_modules, ComfyUI, ноды, кэш).
+    Reinstall everything from scratch (removes node_modules, ComfyUI, nodes, cache).
 
 .PARAMETER SkipApp
-    Не трогать Node.js, node_modules и сборку приложения.
+    Do not touch Node.js, node_modules, or app build.
 
 .PARAMETER SkipComfy
-    Не трогать ComfyUI-часть (Python, пакеты, ноды).
+    Do not touch ComfyUI components (Python, packages, nodes).
 
 .PARAMETER KeepCache
-    Оставить скачанные архивы и pip-кэш (ускоряет повторную установку).
+    Keep downloaded archives and pip cache (speeds up repeated installation).
 
 .PARAMETER NoPause
-    Не ждать нажатия клавиши в конце.
+    Do not wait for a key press at the end.
 #>
 [CmdletBinding()]
 param(
@@ -88,20 +88,20 @@ function Fail { param([string]$M) $script:Failures.Add($M); Write-Log ("  [ERROR
 function Get-Download {
     param([string]$Url, [string]$Dest)
     if ((Test-Path $Dest) -and (Get-Item $Dest).Length -gt 0) {
-        Info ("уже скачано: " + (Split-Path $Dest -Leaf))
+        Info ("already downloaded: " + (Split-Path $Dest -Leaf))
         return
     }
     $dir = Split-Path -Parent $Dest
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
     $part = $Dest + '.part'
     if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
-    Info ("скачивание: " + $Url)
+    Info ("downloading: " + $Url)
     $curl = Join-Path $env:SystemRoot 'System32\curl.exe'
     if (Test-Path $curl) {
         & $curl -L --fail --retry 5 --retry-delay 3 --connect-timeout 30 --progress-bar -o $part $Url
         if ($LASTEXITCODE -ne 0) {
             if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
-            throw ('не удалось скачать: ' + $Url)
+            throw ('failed to download: ' + $Url)
         }
     } else {
         Invoke-WebRequest -Uri $Url -OutFile $part -UseBasicParsing
@@ -115,7 +115,7 @@ function Expand-ZipSafe {
     $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
     if (Test-Path $tar) {
         & $tar -xf $Zip -C $Dest
-        if ($LASTEXITCODE -ne 0) { throw ('не удалось распаковать архив: ' + $Zip) }
+        if ($LASTEXITCODE -ne 0) { throw ('failed to unpack archive: ' + $Zip) }
     } else {
         Expand-Archive -Path $Zip -DestinationPath $Dest -Force
     }
@@ -125,7 +125,7 @@ function Invoke-Pip {
     param([string[]]$PipArgs, [string]$Title)
     Info ('pip: ' + $Title)
     & $script:Python @PipArgs
-    if ($LASTEXITCODE -ne 0) { throw ('pip завершился с ошибкой: ' + $Title) }
+    if ($LASTEXITCODE -ne 0) { throw ('pip exited with an error: ' + $Title) }
 }
 
 function Write-TextFileNoBom {
@@ -145,22 +145,22 @@ function Get-Tail {
 
 Write-Log ''
 Write-Log '  ============================================================'
-Write-Log '    MiniMax H3 Studio 7 - установка зависимостей'
+Write-Log '    MiniMax H3 Studio 7 - dependency installation'
 Write-Log '  ============================================================'
 Write-Log ''
-Write-Log ('  Папка проекта: ' + $Root)
-Write-Log ('  Лог:           ' + $LogFile)
-if ($Force)     { Write-Log '  Режим:         полная переустановка (-Force)' }
-if ($SkipApp)   { Write-Log '  Режим:         без Node.js и сборки (-SkipApp)' }
-if ($SkipComfy) { Write-Log '  Режим:         без ComfyUI (-SkipComfy)' }
+Write-Log ('  Project directory: ' + $Root)
+Write-Log ('  Log:               ' + $LogFile)
+if ($Force)     { Write-Log '  Mode:              full reinstallation (-Force)' }
+if ($SkipApp)   { Write-Log '  Mode:              without Node.js and build (-SkipApp)' }
+if ($SkipComfy) { Write-Log '  Mode:              without ComfyUI (-SkipComfy)' }
 Write-Log ''
 
-# ------------------------------------------------------- 1. проверки системы ---
+# ------------------------------------------------------- 1. system checks ---
 
-Step 1 8 'Проверка системы'
+Step 1 8 'System check'
 
 if (-not [Environment]::Is64BitOperatingSystem) {
-    throw 'Нужна 64-битная Windows (x64). 32-битные системы не поддерживаются.'
+    throw '64-bit Windows (x64) required. 32-bit systems are not supported.'
 }
 Ok 'Windows x64'
 
@@ -171,24 +171,24 @@ try {
 } catch { }
 
 if ($null -ne $freeGB) {
-    Info ("свободно на диске " + $drive.Name + ": " + $freeGB + " ГБ")
+    Info ("free disk space on " + $drive.Name + ": " + $freeGB + " GB")
     if ($freeGB -lt 12) {
-        throw ("Недостаточно места: нужно минимум 12 ГБ, свободно " + $freeGB + " ГБ.")
+        throw ("Insufficient disk space: minimum 12 GB required, free " + $freeGB + " GB.")
     }
     if ($freeGB -lt 25) {
-        Warn ("свободно " + $freeGB + " ГБ. Рекомендуется 25+ ГБ: окружение занимает ~12 ГБ, плюс место под модели.")
+        Warn ("free space " + $freeGB + " GB. 25+ GB recommended: environment takes ~12 GB, plus space for models.")
     } else {
-        Ok 'места достаточно'
+        Ok 'sufficient disk space'
     }
 } else {
-    Warn 'не удалось определить свободное место на диске'
+    Warn 'unable to determine free disk space'
 }
 
 try {
     $probe = Invoke-WebRequest -Uri 'https://pypi.org/simple/' -UseBasicParsing -TimeoutSec 20 -Method Head
-    if ($probe.StatusCode -ge 200) { Ok 'интернет есть' }
+    if ($probe.StatusCode -ge 200) { Ok 'internet connection available' }
 } catch {
-    throw 'Нет доступа к интернету (pypi.org). Проверьте подключение, VPN/прокси и повторите.'
+    throw 'No internet access (pypi.org). Check connection, VPN/proxy, and try again.'
 }
 
 $nvidia = Get-Command nvidia-smi -ErrorAction SilentlyContinue
@@ -197,10 +197,10 @@ if ($nvidia) {
         $gpu = (& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>$null | Select-Object -First 1)
         Ok ('GPU: ' + $gpu)
     } catch {
-        Warn 'nvidia-smi найден, но видеокарта не ответила'
+        Warn 'nvidia-smi found, but GPU did not respond'
     }
 } else {
-    Warn 'nvidia-smi не найден: не установлен драйвер NVIDIA. Студия сможет запуститься, но генерация без GPU невозможна.'
+    Warn 'nvidia-smi not found: NVIDIA driver is not installed. The studio can start, but generation without GPU is not possible.'
 }
 
 # ------------------------------------------------------------- 2. Node.js ---
@@ -220,15 +220,15 @@ if (-not $SkipApp) {
             if ($major -ge 18) {
                 $nodeOk = $true
                 $nodeExe = 'node'
-                Ok ('Node.js в системе: ' + $verText)
+                Ok ('System Node.js: ' + $verText)
             } else {
-                Warn ('в системе Node.js ' + $verText + ' - слишком старый, ставлю портативный')
+                Warn ('System Node.js ' + $verText + ' is too old, installing portable version')
             }
         }
     } elseif (Test-Path (Join-Path $runtimeDir 'node.exe')) {
         $nodeOk = $true
         $nodeExe = Join-Path $runtimeDir 'node.exe'
-        Ok 'найден портативный runtime\node.exe'
+        Ok 'found portable runtime\node.exe'
     }
 
     if (-not $nodeOk) {
@@ -244,58 +244,58 @@ if (-not $SkipApp) {
         Get-ChildItem $inner.FullName -Force | Move-Item -Destination $runtimeDir -Force
         Remove-Item $tmp -Recurse -Force
         $nodeExe = 'node'
-        Ok ('Node.js ' + $nodeVersion + ' установлен в runtime\')
+        Ok ('Node.js ' + $nodeVersion + ' installed into runtime\')
     }
 
     $env:PATH = $runtimeDir + ';' + $env:PATH
     $checkVer = (& node --version 2>$null)
-    if (-not $checkVer) { throw 'Node.js не запускается после установки.' }
+    if (-not $checkVer) { throw 'Node.js does not run after installation.' }
 
     $npmVersion = (& npm.cmd --version 2>$null)
     if (-not $npmVersion) {
-        Warn 'npm не найден рядом с Node.js'
-        throw 'npm недоступен. Установите Node.js 18+ с https://nodejs.org и запустите установщик снова.'
+        Warn 'npm not found next to Node.js'
+        throw 'npm unavailable. Install Node.js 18+ from https://nodejs.org and run installer again.'
     }
     Ok ('npm ' + $npmVersion)
 } else {
-    Info 'пропущено (-SkipApp)'
+    Info 'skipped (-SkipApp)'
 }
 
-# ------------------------------------------- 3. node_modules и сборка .next ---
+# ------------------------------------------- 3. node_modules and .next build ---
 
 if (-not $SkipApp) {
-    Step 3 8 'Node-зависимости и production-сборка'
+    Step 3 8 'Node dependencies and production build'
 
     Push-Location $Root
     try {
         if ($Force -and (Test-Path 'node_modules')) {
-            Info 'удаляю node_modules (-Force)'
+            Info 'removing node_modules (-Force)'
             Remove-Item 'node_modules' -Recurse -Force
         }
 
         if (-not (Test-Path 'node_modules')) {
-            Info 'npm ci - скачивается ~1.2 ГБ, займёт 5-15 минут'
+            Info 'npm ci - downloading ~1.2 GB, takes 5-15 minutes'
             & npm.cmd ci --no-audit --no-fund
             if ($LASTEXITCODE -ne 0) {
-                Warn 'npm ci не удался, пробую npm install'
+                Warn 'npm ci failed, trying npm install'
                 & npm.cmd install --no-audit --no-fund
-                if ($LASTEXITCODE -ne 0) { throw 'не удалось установить node-зависимости (npm).' }
+                if ($LASTEXITCODE -ne 0) { throw 'failed to install node dependencies (npm).' }
             }
-            Ok 'node_modules установлены'
+            Ok 'node_modules installed'
         } else {
-            Ok 'node_modules уже на месте'
+            Ok 'node_modules already in place'
         }
 
-        # Electron 44+ больше не качает бинарник при npm ci: он скачивается
-        # лениво при первом require('electron'). start.bat проверяет
-        # node_modules\electron\dist\electron.exe и без него уходит в браузер,
-        # поэтому качаем бинарник сразу, на этапе установки.
+        # Electron 44+ no longer downloads the binary during npm ci: it is downloaded
+        # lazily on the first require('electron'). start.bat checks
+        # node_modules\electron\dist\electron.exe and falls back to browser without it,
+        # so we download the binary right away during installation.
         $elDir = Join-Path $Root 'node_modules\electron'
         if (Test-Path $elDir) {
             if (Test-Path (Join-Path $elDir 'dist\electron.exe')) {
-                Ok 'Electron уже скачан (окно приложения)'
+                Ok 'Electron already downloaded (app window)'
             } else {
-                Info 'скачиваю бинарник Electron (~110 МБ, один раз)...'
+                Info 'downloading Electron binary (~110 MB, one-time)...'
                 Push-Location $Root
                 try {
                     & $nodeExe (Join-Path $elDir 'install.js')
@@ -303,34 +303,34 @@ if (-not $SkipApp) {
                     Pop-Location
                 }
                 if (Test-Path (Join-Path $elDir 'dist\electron.exe')) {
-                    Ok 'Electron скачан: приложение откроется в отдельном окне'
+                    Ok 'Electron downloaded: app will open in a dedicated window'
                 } else {
-                    Warn 'Electron не скачался: start.bat откроет приложение в браузере. Запустите install.bat ещё раз.'
+                    Warn 'Electron failed to download: start.bat will open app in browser. Run install.bat again.'
                 }
             }
         }
 
         if ($Force -and (Test-Path '.next')) {
-            Info 'удаляю старую сборку .next (-Force)'
+            Info 'removing old .next build (-Force)'
             Remove-Item '.next' -Recurse -Force
         }
 
         if (-not (Test-Path '.next\BUILD_ID')) {
-            Info 'npm run build - сборка Next.js, займёт 2-5 минут'
+            Info 'npm run build - Next.js build, takes 2-5 minutes'
             & npm.cmd run build
-            if ($LASTEXITCODE -ne 0) { throw 'сборка приложения (npm run build) завершилась ошибкой.' }
-            Ok 'сборка .next готова'
+            if ($LASTEXITCODE -ne 0) { throw 'app build (npm run build) exited with an error.' }
+            Ok '.next build ready'
         } else {
-            Ok 'сборка .next уже есть'
+            Ok '.next build already exists'
         }
     } finally {
         Pop-Location
     }
 } else {
-    Info 'пропущено (-SkipApp)'
+    Info 'skipped (-SkipApp)'
 }
 
-# ---------------------------------------------------- 4. ComfyUI и Python ---
+# ---------------------------------------------------- 4. ComfyUI and Python ---
 
 $comfyRoot = Join-Path $Root 'ComfyUI-Easy-Install'
 $comfyApp = Join-Path $comfyRoot 'ComfyUI'
@@ -339,10 +339,10 @@ $python = Join-Path $pythonDir 'python.exe'
 $script:Python = $python
 
 if (-not $SkipComfy) {
-    Step 4 8 'ComfyUI (сборка 5f0c4e1)'
+    Step 4 8 'ComfyUI (build 5f0c4e1)'
 
     if ($Force -and (Test-Path $comfyApp)) {
-        Info 'удаляю ComfyUI (-Force)'
+        Info 'removing ComfyUI (-Force)'
         Remove-Item $comfyApp -Recurse -Force
     }
 
@@ -357,20 +357,20 @@ if (-not $SkipComfy) {
         if (-not (Test-Path $comfyRoot)) { New-Item -ItemType Directory -Force -Path $comfyRoot | Out-Null }
         Move-Item $inner.FullName $comfyApp
         Remove-Item $tmp -Recurse -Force
-        Ok 'ComfyUI распакован'
+        Ok 'ComfyUI unpacked'
     } else {
-        Ok 'ComfyUI уже на месте'
+        Ok 'ComfyUI already in place'
     }
 
-    # Патчи проекта поверх ядра ComfyUI. Применяются при каждом запуске установщика,
-    # поэтому повторный запуск чинит и уже испорченную установку.
-    # Без них не работает часть узлов MiniMax H3:
-    #   comfy/ldm/minimax/model.py      - слой to_gate_compress для VSA-весов,
-    #                                     minimax_h3_layout и block_index для Veda;
-    #   comfy/model_detection.py        - определение gate_compress в чекпоинтах VSA;
-    #   comfy_extras/nodes_minimax_h3.py - правки keyframe-latent (правки 146/149);
-    #   utils/extra_config.py           - списки путей в extra_model_paths.yaml
-    #                                     (студия пишет их именно списками).
+    # Project patches on top of ComfyUI core. Applied on every run of the installer,
+    # so re-running also fixes an already broken installation.
+    # Without them, several MiniMax H3 nodes fail to work:
+    #   comfy/ldm/minimax/model.py       - to_gate_compress layer for VSA weights,
+    #                                      minimax_h3_layout and block_index for Veda;
+    #   comfy/model_detection.py         - gate_compress detection in VSA checkpoints;
+    #   comfy_extras/nodes_minimax_h3.py - keyframe-latent fixes (patches 146/149);
+    #   utils/extra_config.py            - path lists in extra_model_paths.yaml
+    #                                      (studio writes them specifically as lists).
     $patchDir = Join-Path $InstallDir 'comfy-patches'
     if (Test-Path $patchDir) {
         $patched = 0
@@ -382,13 +382,13 @@ if (-not $SkipComfy) {
             Copy-Item $_.FullName $dest -Force
             $patched++
         }
-        Ok ('патчи проекта применены: ' + $patched + ' файл(а) ядра')
+        Ok ('project patches applied: ' + $patched + ' core file(s)')
     } else {
-        Warn 'папка install\comfy-patches не найдена: ядро ComfyUI останется без патчей проекта, узлы H3/VSA могут не работать.'
+        Warn 'folder install\comfy-patches not found: ComfyUI core remains without project patches, H3/VSA nodes may not work.'
     }
 
     if ($Force -and (Test-Path $pythonDir)) {
-        Info 'удаляю Python-окружение (-Force)'
+        Info 'removing Python environment (-Force)'
         Remove-Item $pythonDir -Recurse -Force
     }
 
@@ -401,16 +401,16 @@ if (-not $SkipComfy) {
         $getpip = Join-Path $Cache 'get-pip.py'
         Get-Download 'https://bootstrap.pypa.io/get-pip.py' $getpip
         & $python $getpip --no-warn-script-location
-        if ($LASTEXITCODE -ne 0) { throw 'не удалось установить pip в портативный Python.' }
-        Ok 'Python 3.12.10 установлен'
+        if ($LASTEXITCODE -ne 0) { throw 'failed to install pip into portable Python.' }
+        Ok 'Python 3.12.10 installed'
     } else {
-        Ok 'Python уже на месте'
+        Ok 'Python already in place'
     }
 
-    # Патчим python312._pth при каждом запуске (а не только при первой установке).
-    # Строка ../ComfyUI обязательна: start.bat запускает python с ключом -I,
-    # который отключает добавление папки скрипта в sys.path, и без неё
-    # main.py падает с ModuleNotFoundError: No module named 'comfy'.
+    # Patch python312._pth on every run (not just during first install).
+    # The line ../ComfyUI is mandatory: start.bat launches python with -I flag,
+    # which disables adding script folder to sys.path, and without it
+    # main.py fails with ModuleNotFoundError: No module named 'comfy'.
     $pth = Get-ChildItem $pythonDir -Filter 'python*._pth' | Select-Object -First 1
     if ($pth) {
         $lines = @(Get-Content $pth.FullName)
@@ -422,44 +422,44 @@ if (-not $SkipComfy) {
             $lines = @('../ComfyUI') + $lines
         }
         if ($lines -match '^\.\./ComfyUI\s*$') {
-            Ok 'python312._pth настроен (../ComfyUI + Lib\site-packages)'
+            Ok 'python312._pth configured (../ComfyUI + Lib\site-packages)'
         } else {
-            Warn 'не удалось проверить python312._pth'
+            Warn 'failed to verify python312._pth'
         }
         [IO.File]::WriteAllLines($pth.FullName, $lines, (New-Object Text.ASCIIEncoding))
     }
 
-    # --- 5. библиотеки ---
-    Step 5 8 'Библиотеки Python (~7 ГБ, самый долгий шаг)'
+    # --- 5. libraries ---
+    Step 5 8 'Python libraries (~7 GB, longest step)'
 
-    Invoke-Pip @('-m', 'pip', 'install', '--upgrade', 'pip', 'setuptools', 'wheel', '--no-warn-script-location', '--disable-pip-version-check') 'обновление pip'
+    Invoke-Pip @('-m', 'pip', 'install', '--upgrade', 'pip', 'setuptools', 'wheel', '--no-warn-script-location', '--disable-pip-version-check') 'pip upgrade'
 
     Invoke-Pip @('-m', 'pip', 'install',
         'torch==2.11.0+cu130', 'torchvision==0.26.0+cu130', 'torchaudio==2.11.0+cu130',
         '--index-url', 'https://download.pytorch.org/whl/cu130',
-        '--no-warn-script-location', '--disable-pip-version-check') 'torch 2.11.0+cu130 (~3.5 ГБ)'
-    Ok 'torch установлен'
+        '--no-warn-script-location', '--disable-pip-version-check') 'torch 2.11.0+cu130 (~3.5 GB)'
+    Ok 'torch installed'
 
     Invoke-Pip @('-m', 'pip', 'install', '--no-deps', '--no-warn-script-location', '--disable-pip-version-check',
-        '-r', (Join-Path $InstallDir 'requirements.lock.txt')) 'основные пакеты (288)'
-    Ok 'основные пакеты установлены'
+        '-r', (Join-Path $InstallDir 'requirements.lock.txt')) 'main packages (288)'
+    Ok 'main packages installed'
 
     Invoke-Pip @('-m', 'pip', 'install', '--no-deps', '--no-build-isolation', '--no-warn-script-location', '--disable-pip-version-check',
-        '-r', (Join-Path $InstallDir 'requirements.sdist.txt')) 'пакеты без готовых колёс (8)'
-    Ok 'сборка из исходников завершена'
+        '-r', (Join-Path $InstallDir 'requirements.sdist.txt')) 'packages without pre-built wheels (8)'
+    Ok 'build from source completed'
 
     $optionalFile = Join-Path $InstallDir 'requirements.optional.txt'
     if (Test-Path $optionalFile) {
         try {
-            Invoke-Pip @('-m', 'pip', 'install', '--no-deps', '--no-build-isolation', '--no-warn-script-location', '--disable-pip-version-check', '-r', $optionalFile) 'необязательные пакеты'
-            Ok 'необязательные пакеты установлены'
+            Invoke-Pip @('-m', 'pip', 'install', '--no-deps', '--no-build-isolation', '--no-warn-script-location', '--disable-pip-version-check', '-r', $optionalFile) 'optional packages'
+            Ok 'optional packages installed'
         } catch {
-            Warn 'kornia_rs не собрался (нужен Rust). Это не критично: kornia работает без него, только чуть медленнее.'
+            Warn 'kornia_rs failed to build (requires Rust). Non-critical: kornia works without it, just slightly slower.'
         }
     }
 
-    # --- 6. кастомные ноды ---
-    Step 6 8 'Кастомные ноды (22 из GitHub + 3 локальные)'
+    # --- 6. custom nodes ---
+    Step 6 8 'Custom nodes (22 from GitHub + 3 local)'
 
     $nodesDir = Join-Path $comfyApp 'custom_nodes'
     if (-not (Test-Path $nodesDir)) { New-Item -ItemType Directory -Force -Path $nodesDir | Out-Null }
@@ -469,10 +469,10 @@ if (-not $SkipComfy) {
     foreach ($node in $nodes) {
         $idx++
         $target = Join-Path $nodesDir $node.name
-        Write-Progress -Activity 'Кастомные ноды' -Status $node.name -PercentComplete (($idx / $nodes.Count) * 100)
+        Write-Progress -Activity 'Custom nodes' -Status $node.name -PercentComplete (($idx / $nodes.Count) * 100)
 
         if (Test-Path $target) {
-            if (-not $Force) { Info ($node.name + ': уже установлена'); continue }
+            if (-not $Force) { Info ($node.name + ': already installed'); continue }
             Remove-Item $target -Recurse -Force
         }
 
@@ -490,45 +490,45 @@ if (-not $SkipComfy) {
             Fail ($node.name + ': ' + $_.Exception.Message)
         }
     }
-    Write-Progress -Activity 'Кастомные ноды' -Completed
+    Write-Progress -Activity 'Custom nodes' -Completed
 
     $localNodes = Join-Path $Root 'custom nodes'
     if (Test-Path $localNodes) {
         foreach ($dir in Get-ChildItem $localNodes -Directory) {
             $dest = Join-Path $nodesDir $dir.Name
             Copy-Item $dir.FullName $dest -Recurse -Force
-            Ok ('локальная нода ' + $dir.Name)
+            Ok ('local node ' + $dir.Name)
         }
     } else {
-        Warn 'папка "custom nodes" не найдена - собственные ноды студии не установлены'
+        Warn 'folder "custom nodes" not found - studio internal nodes not installed'
     }
 } else {
-    Info 'пропущено (-SkipComfy)'
+    Info 'skipped (-SkipComfy)'
 }
 
-# --------------------------------------- 7. конфигурация и папки моделей ---
+# --------------------------------------- 7. configuration and model folders ---
 
 if (-not $SkipComfy) {
-    Step 7 8 'Конфигурация и папки моделей'
+    Step 7 8 'Configuration and model folders'
 
     $flag = Join-Path $comfyRoot '.no-auto-update'
     if (-not (Test-Path $flag)) { New-Item -ItemType Directory -Force -Path $flag | Out-Null }
-    Ok 'автообновление ComfyUI заблокировано (.no-auto-update)'
+    Ok 'ComfyUI auto-update locked (.no-auto-update)'
 
     $yaml = Join-Path $comfyApp 'extra_model_paths.yaml'
     if (-not (Test-Path $yaml)) {
         $yamlText = @(
-            '# MiniMax Studio: дополнительные пути моделей.',
-            '# Этот файл перезаписывается студией при изменении настроек моделей.',
+            '# MiniMax Studio: extra model paths.',
+            '# This file is overwritten by the studio when model settings change.',
             'minimax_studio_detectors:',
             '    ultralytics:',
             '        - "models/ultralytics"',
             ''
         ) -join "`r`n"
         Write-TextFileNoBom $yaml $yamlText
-        Ok 'extra_model_paths.yaml создан'
+        Ok 'extra_model_paths.yaml created'
     } else {
-        Ok 'extra_model_paths.yaml уже есть'
+        Ok 'extra_model_paths.yaml already exists'
     }
 
     $modelDirs = @(
@@ -548,30 +548,30 @@ if (-not $SkipComfy) {
         $p = Join-Path $comfyApp $d
         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Force -Path $p | Out-Null }
     }
-    Ok ('создано папок моделей: ' + $modelDirs.Count)
+    Ok ('model folders created: ' + $modelDirs.Count)
 
     if (-not (Test-Path (Join-Path $Root 'upscale\bin'))) {
-        Warn 'вкладка Upscale не заработает: папки upscale\bin нет (это проприетарный DLSS-рантайм NVIDIA, в репозиторий он не входит).'
+        Warn 'Upscale tab will not work: upscale\bin folder missing (proprietary NVIDIA DLSS runtime, not included in repository).'
     }
     if (-not (Test-Path (Join-Path $Root 'stt\models'))) {
-        Warn 'голосовой ввод не заработает: папки stt\ нет (движок whisper в репозиторий не входит).'
+        Warn 'Voice input will not work: stt\ folder missing (whisper engine is not included in repository).'
     }
 }
 
-# -------------------------------------------------------- 8. проверка ---
+# -------------------------------------------------------- 8. verification ---
 
 if (-not $SkipComfy) {
-    Step 8 8 'Проверка установки'
+    Step 8 8 'Installation verification'
 
-    Info 'проверяю импорт torch...'
+    Info 'verifying torch import...'
     & $python -c "import torch, torchvision, torchaudio; print('      torch', torch.__version__, '| cuda:', torch.cuda.is_available())"
-    if ($LASTEXITCODE -ne 0) { Fail 'torch не импортируется' } else { Ok 'torch работает' }
+    if ($LASTEXITCODE -ne 0) { Fail 'torch cannot be imported' } else { Ok 'torch is working' }
 
-    Info 'проверяю ключевые библиотеки...'
+    Info 'verifying key libraries...'
     & $python -c "import cv2, numpy, scipy, transformers, safetensors, comfy_kitchen; print('      cv2', cv2.__version__, '| numpy', numpy.__version__)"
-    if ($LASTEXITCODE -ne 0) { Fail 'часть библиотек не импортируется' } else { Ok 'ключевые библиотеки работают' }
+    if ($LASTEXITCODE -ne 0) { Fail 'some libraries failed to import' } else { Ok 'key libraries are working' }
 
-    Info 'проверяю импорт ComfyUI и всех нод (пробный запуск, 1-3 минуты)...'
+    Info 'verifying ComfyUI and all nodes import (smoke test, 1-3 minutes)...'
     $outLog = Join-Path $Cache 'smoke-out.log'
     $errLog = Join-Path $Cache 'smoke-err.log'
     if (Test-Path $outLog) { Remove-Item $outLog -Force }
@@ -593,9 +593,9 @@ if (-not $SkipComfy) {
         }
 
         if ($ready) {
-            Ok 'ComfyUI стартует, сервер отвечает'
+            Ok 'ComfyUI starts, server responding'
         } else {
-            Fail 'ComfyUI не поднялся за 180 секунд - смотрите install.log'
+            Fail 'ComfyUI did not start within 180 seconds - check install.log'
             foreach ($l in Get-Tail $outLog 20) { Write-Log ('      ' + $l) }
             foreach ($l in Get-Tail $errLog 20) { Write-Log ('      ' + $l) }
         }
@@ -605,13 +605,13 @@ if (-not $SkipComfy) {
             $importErrors = @(Get-Content $outLog -ErrorAction SilentlyContinue | Where-Object { $_ -match 'IMPORT FAILED|Cannot import|ModuleNotFoundError' })
         }
         if ($importErrors.Count -gt 0) {
-            Warn ('ноды с ошибками импорта: ' + $importErrors.Count)
+            Warn ('nodes with import errors: ' + $importErrors.Count)
             foreach ($l in ($importErrors | Select-Object -First 10)) { Write-Log ('      ' + $l.Trim()) }
         } elseif ($ready) {
-            Ok 'все кастомные ноды загрузились без ошибок'
+            Ok 'all custom nodes loaded without errors'
         }
     } catch {
-        Warn ('пробный запуск не удался: ' + $_.Exception.Message)
+        Warn ('smoke test failed: ' + $_.Exception.Message)
     } finally {
         if ($proc -and -not $proc.HasExited) {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
@@ -624,52 +624,52 @@ if (-not $SkipComfy) {
     }
 }
 
-# ------------------------------------------------------------ очистка ---
+# ------------------------------------------------------------ cleanup ---
 
 if (-not $KeepCache) {
     if (Test-Path $Cache) {
-        Info 'удаляю временные архивы...'
+        Info 'removing temporary archives...'
         Remove-Item $Cache -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($script:Python -and (Test-Path $script:Python)) {
-        Info 'очищаю pip-кэш...'
+        Info 'clearing pip cache...'
         & $script:Python -m pip cache purge 2>$null | Out-Null
     }
 }
 
-# ------------------------------------------------------------ итог ---
+# ------------------------------------------------------------ summary ---
 
 Write-Log ''
 Write-Log '  ============================================================'
 if ($script:Failures.Count -eq 0) {
-    Write-Log '   УСТАНОВКА ЗАВЕРШЕНА' 'ok'
+    Write-Log '   INSTALLATION COMPLETED' 'ok'
 } else {
-    Write-Log ('   УСТАНОВКА ЗАВЕРШЕНА С ОШИБКАМИ: ' + $script:Failures.Count) 'err'
+    Write-Log ('   INSTALLATION COMPLETED WITH ERRORS: ' + $script:Failures.Count) 'err'
     foreach ($f in $script:Failures) { Write-Log ('   - ' + $f) 'err' }
 }
 Write-Log '  ============================================================'
 
 if ($script:Warnings.Count -gt 0) {
     Write-Log ''
-    Write-Log '  Предупреждения:' 'warn'
+    Write-Log '  Warnings:' 'warn'
     foreach ($w in $script:Warnings) { Write-Log ('   - ' + $w) 'warn' }
 }
 
 Write-Log ''
-Write-Log '  Дальше:'
-Write-Log '    1. Запустите start.bat'
-Write-Log '    2. Откройте Настройки -> Модели и скачайте нужные модели'
-Write-Log '       (они большие: diffusion ~23 ГБ, text encoder ~16 ГБ и т.д.)'
-Write-Log '    3. После скачивания моделей можно генерировать'
+Write-Log '  Next steps:'
+Write-Log '    1. Run start.bat'
+Write-Log '    2. Open Settings -> Models and download required models'
+Write-Log '       (they are large: diffusion ~23 GB, text encoder ~16 GB, etc.)'
+Write-Log '    3. Once models are downloaded, you can start generating'
 Write-Log ''
-Write-Log ('  Полный лог: ' + $LogFile)
+Write-Log ('  Full log: ' + $LogFile)
 Write-Log ''
 
 $exitCode = 0
 if ($script:Failures.Count -gt 0) { $exitCode = 1 }
 
 if (-not $NoPause) {
-    Write-Host '  Нажмите Enter, чтобы закрыть окно...' -ForegroundColor DarkGray
+    Write-Host '  Press Enter to close window...' -ForegroundColor DarkGray
     try { [void](Read-Host) } catch { }
 }
 

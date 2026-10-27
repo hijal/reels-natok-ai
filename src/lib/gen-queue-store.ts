@@ -6,9 +6,9 @@
  *   - Each item has its own progress tracking
  *   - Auto-cleanup removes finished items after a timeout
  *
- * ComfyUI-режимы (video/refine/controlnet/fps/tile-upscale/face-refine)
- * сериализуются единым FIFO-шлюзом `comfy-turn.ts`; параллельно может идти
- * только отдельный DLSS Upscale (`upscale`).
+ * ComfyUI modes (video/refine/controlnet/fps/tile-upscale/face-refine)
+ * are serialized by a single FIFO gateway `comfy-turn.ts`; in parallel, only
+ * separate DLSS Upscale (`upscale`) can run.
  *
  * Persisted so the queue (and its ComfyUI prompt_ids) survives a page
  * reload — useVideoGen re-attaches polling for active items on mount.
@@ -45,12 +45,12 @@ export interface QueueItem {
   /** Real-time status message from the backend (e.g. "Downloading model..."). */
   message: string | null
   createdAt: number
-  /** (правка 587) Фактическое время старта выполнения (при переходе в running). */
+  /** (fix 587) Actual execution start time (on transition to running). */
   startedAt?: number | null
   completedAt: number | null
-  /** (правка 331) Токен inflight-восстановления: фронт генерит на submit и
-   *  шлёт в POST /generate; сервер журналирует token → prompt_id. После
-   *  перезагрузки во время POST фронт по токену находит prompt_id. */
+  /** (fix 331) Inflight recovery token: frontend generates upon submit and
+   *  sends to POST /generate; server logs token → prompt_id. After a
+   *  reload during POST, frontend looks up prompt_id by token. */
   clientToken?: string | null
 }
 
@@ -61,23 +61,23 @@ export const TYPE_ACCENT: Record<QueueItemType, string> = {
   music: '#10B981',
   sound: '#14B8A6',
   video: '#06B6D4',
-  refine: '#34D399', // (правка 261) рефайн в общей очереди
-  upscale: '#A78BFA', // (правка 262) upscale в общей очереди
-  controlnet: '#F97316', // (правка 512) ControlNet в общей очереди
-  fps: '#22D3EE', // (правка 554) FPS (frame interpolation) в общей очереди
+  refine: '#34D399', // (fix 261) refine in global queue
+  upscale: '#A78BFA', // (fix 262) upscale in global queue
+  controlnet: '#F97316', // (fix 512) ControlNet in global queue
+  fps: '#22D3EE', // (fix 554) FPS (frame interpolation) in global queue
   'tile-upscale': '#F59E0B',
   'face-refine': '#EC4899',
 }
 
 export const TYPE_LABEL: Record<QueueItemType, string> = {
-  image: 'Изображение',
-  music: 'Музыка',
-  sound: 'Звук',
-  video: 'Видео',
-  refine: 'Рефайн',
-  upscale: 'Апскейл',
-  controlnet: 'ControlNet', // (правка 512)
-  fps: 'FPS', // (правка 554)
+  image: 'Image',
+  music: 'Music',
+  sound: 'Sound',
+  video: 'Video',
+  refine: 'Refine',
+  upscale: 'Upscale',
+  controlnet: 'ControlNet', // (fix 512)
+  fps: 'FPS', // (fix 554)
   'tile-upscale': 'Tile Upscale',
   'face-refine': 'Face Refine',
 }
@@ -85,8 +85,8 @@ export const TYPE_LABEL: Record<QueueItemType, string> = {
 /* ──────────────────── Auto-cleanup ──────────────────── */
 
 const AUTO_REMOVE_DONE_MS = 30000
-// (фикс Phase 4) 10 с → 30 с: ошибка исчезала мгновенно, пользователь не
-// успевал прочитать сообщение. 30 с — достаточно, чтобы увидеть причину.
+// (fix Phase 4) 10s → 30s: error disappeared instantly, user didn't have
+// time to read the message. 30s is enough to see the reason.
 const AUTO_REMOVE_ERROR_MS = 30000
 /** Rehydrated items older than this are dropped (stale across sessions). */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -124,7 +124,7 @@ interface GenQueueState {
   /** Set the ComfyUI prompt_id for a queue item. */
   setPromptId: (id: string, promptId: string) => void
 
-  /** (правка 331) Запомнить clientToken для inflight-восстановления. */
+  /** (fix 331) Remember clientToken for inflight recovery. */
   setClientToken: (id: string, clientToken: string) => void
 
   /** Update the status of a queue item. Triggers auto-cleanup for done/error. */
@@ -189,14 +189,14 @@ export const useGenQueue = create<GenQueueState>()(
         const finished = status === 'done' || status === 'error' || status === 'cancelled'
         const completedAt = finished ? Date.now() : null
 
-        // (фикс) Диагностика: логируем все переходы состояний для отладки
+        // (fix) Diagnostics: log all state transitions for debugging
         const currentItem = useGenQueue.getState().items.find((i) => i.id === id)
         const previousStatus = currentItem?.status
 
-        // (правка 716) startedAt фиксируется ТОЛЬКО на переходе в running.
-        // Раньше он перезаписывался на каждом тике поллера (setStatus(id,
-        // 'running') зовётся раз в секунду), из-за чего «время старта» всегда
-        // было ≈ «сейчас» и любая оценка elapsed по нему была бессмысленной.
+        // (fix 716) startedAt is pinned ONLY on transition to running.
+        // Previously it was overwritten on each poller tick (setStatus(id,
+        // 'running') is called once per second), which caused "start time"
+        // to always be ≈ "now" making any elapsed estimation based on it meaningless.
         const startedAt =
           status === 'running' && previousStatus !== 'running' ? Date.now() : undefined
 
@@ -204,10 +204,10 @@ export const useGenQueue = create<GenQueueState>()(
           console.log(`[queue-store] ${id}: ${previousStatus} → ${status}`, error || '')
         }
         
-        // (фикс) BLOCK terminal → non-terminal transitions (resurrection).
-        // Это последний рубеж защиты: если предыдущие guards не сработали
-        // (race condition), store сам откажет в переводе error/done/cancelled
-        // обратно в submitting/queued/running.
+        // (fix) BLOCK terminal → non-terminal transitions (resurrection).
+        // This is the last line of defense: if previous guards didn't fire
+        // (race condition), the store itself rejects transitioning error/done/cancelled
+        // back to submitting/queued/running.
         const TERMINAL: QueueItemStatus[] = ['done', 'error', 'cancelled']
         const NON_TERMINAL: QueueItemStatus[] = ['submitting', 'queued', 'running']
         if (currentItem && TERMINAL.includes(currentItem.status) && NON_TERMINAL.includes(status)) {
@@ -215,28 +215,28 @@ export const useGenQueue = create<GenQueueState>()(
           return
         }
 
-        // (фикс) «Отменено» — терминальное решение пользователя: ничто не
-        // может перезаписать его. ComfyUI помечает прерванный промпт как
-        // 'error', и статус-поллеры после await успевали перекатить
-        // cancelled → error — вкладка показывала «Ошибка / Попробовать
-        // снова» после отмены.
+        // (fix) "Cancelled" is a terminal user decision: nothing can
+        // overwrite it. ComfyUI marks an aborted prompt as
+        // 'error', and status pollers after await managed to roll over
+        // cancelled → error — tab showed "Error / Try
+        // again" after cancellation.
         if (currentItem && currentItem.status === 'cancelled' && status !== 'cancelled') {
           console.warn(`[queue-store] BLOCKED overwrite of cancelled: ${id} → ${status}`)
           return
         }
         
-        // (фикс) Запускаем таймер удаления ТОЛЬКО если статус изменился с предыдущего.
-        // Это предотвращает race condition: если элемент уже был 'done',
-        // повторный setStatus('done') не запустит новый таймер.
+        // (fix) Start removal timer ONLY if status changed from previous.
+        // This prevents race condition: if item was already 'done',
+        // repeated setStatus('done') will not launch a new timer.
         const shouldStartTimer = previousStatus !== status && finished
 
-        // (правка 716) Поле error больше не «залипает».
-        // Раньше: error ?? item.error — и любая последующая смена статуса без
-        // явного error сохраняла старую ошибку. В итоге УСПЕШНО завершённая
-        // задача (done) показывала красную строку «Ожидание освобождения
-        // GPU…» / «Страница перезагружена…». Теперь ошибка привязана к
-        // статусу 'error'; на любом другом переходе она очищается.
-        const nextError = error ?? (status === 'error' ? currentItem?.error ?? 'Ошибка' : null)
+        // (fix 716) The error field no longer "sticks".
+        // Previously: error ?? item.error — and any subsequent status change without
+        // explicit error preserved the old error. As a result, a SUCCESSFUL
+        // task (done) showed red text "Waiting for GPU release…" /
+        // "Page reloaded…". Now error is tied to the 'error' status;
+        // on any other transition it is cleared.
+        const nextError = error ?? (status === 'error' ? currentItem?.error ?? 'Error' : null)
 
         set((s) => ({
           items: s.items.map((item) =>
@@ -246,7 +246,7 @@ export const useGenQueue = create<GenQueueState>()(
           ),
         }))
 
-        // (фикс) Auto-remove finished items after a delay
+        // (fix) Auto-remove finished items after a delay
         if (shouldStartTimer) {
           if (status === 'done' || status === 'cancelled') {
             setTimeout(() => {

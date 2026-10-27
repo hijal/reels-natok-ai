@@ -1,12 +1,12 @@
 'use client'
 
 /**
- * Diffusion Model Selector — строка с текущей моделью,
- * по клику раскрывается список альтернативных моделей.
- * (правка 45; правка 90 — кнопка «Добавить» с загрузкой файла
- * в models/diffusion_models/, как у LoRA;
- * правка 104 — прогресс загрузки в общем store: закрытие окна
- * настроек больше не сбрасывает индикатор и не прерывает загрузку.)
+ * Diffusion Model Selector — row with current model,
+ * clicks open a list of alternative models.
+ * (edit 45; edit 90 — "Add" button with file upload
+ * to models/diffusion_models/, like LoRA;
+ * edit 104 — upload progress in shared store: closing the settings
+ * dialog no longer resets the indicator or cancels the upload.)
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
@@ -29,9 +29,9 @@ export function DiffusionModelSelector() {
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // (правка 104) Состояние загрузки — в общем store (живёт вне React-дерева):
-  // Radix при закрытии диалога размонтирует панель, но загрузка и её прогресс
-  // сохраняются; повторное открытие подхватывает тот же индикатор.
+  // (edit 104) Upload state lives in shared store (outside React tree):
+  // Radix unmounts the panel when dialog closes, but upload and progress
+  // are preserved; reopening picks up the same indicator.
   const uploading = useModelUploadStore((s) => s.active && s.target === 'diffusion')
   const uploadProgress = useModelUploadStore((s) => s.progress)
 
@@ -49,11 +49,11 @@ export function DiffusionModelSelector() {
 
   useEffect(() => { void refresh() }, [refresh])
 
-  /* (правка 90) Загрузка файла модели в models/diffusion_models/.
-   * XHR ради прогресса (fetch не умеет upload progress).
-   * (правка 104) Прогресс пишется в общий store — запрос живёт в этом
-   * промисе вне компонента, поэтому закрытие окна настроек его НЕ
-   * прерывает; тост и refresh() выполнятся в любом случае. */
+  /* (edit 90) Upload model file to models/diffusion_models/.
+   * Uses XHR for progress (fetch does not support upload progress).
+   * (edit 104) Progress is written to shared store — request lives in this
+   * promise outside the component, so closing settings window does NOT
+   * cancel it; toast and refresh() will execute in either case. */
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -82,10 +82,10 @@ export function DiffusionModelSelector() {
         xhr.onerror = () => reject(new Error('Network error'))
         xhr.send(form)
       })
-      toast.success('Модель загружена', { description: file.name })
+      toast.success('Model uploaded', { description: file.name })
       await refresh()
     } catch (err) {
-      toast.error('Ошибка загрузки модели', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to upload model', { description: err instanceof Error ? err.message : String(err) })
     } finally {
       done()
     }
@@ -101,12 +101,12 @@ export function DiffusionModelSelector() {
       })
       if (res.ok) {
         toast.success(
-          value && value !== defaultModel ? `Модель: ${value}` : 'Базовая модель',
+          value && value !== defaultModel ? `Model: ${value}` : 'Base model',
           { duration: 2500 },
         )
       }
     } catch {
-      toast.error('Не удалось сохранить')
+      toast.error('Failed to save')
     } finally {
       setSaving(false)
     }
@@ -123,7 +123,7 @@ export function DiffusionModelSelector() {
 
   return (
     <div className="pt-2 border-t border-border">
-      {/* Header row + «Добавить» (правка 90) */}
+      {/* Header row + "Add" (edit 90) */}
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -134,7 +134,7 @@ export function DiffusionModelSelector() {
           <div className="flex-1 min-w-0">
             <span className="text-xs font-medium block truncate">{displayName}</span>
             <span className="text-[10px] text-muted-foreground">
-              {isDefault ? 'Базовая модель' : 'Альтернативная модель'}
+              {isDefault ? 'Base model' : 'Alternative model'}
             </span>
           </div>
           <ChevronDownIcon className={cn('w-4 h-4 text-muted-foreground transition-transform shrink-0', expanded && 'rotate-180')} />
@@ -147,7 +147,7 @@ export function DiffusionModelSelector() {
           className="h-7 gap-1.5 text-xs shrink-0"
         >
           {uploading ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <PlusIcon className="w-3.5 h-3.5" />}
-          Добавить
+          Add
         </Button>
         <input
           ref={fileInputRef}
@@ -158,7 +158,7 @@ export function DiffusionModelSelector() {
         />
       </div>
 
-      {/* Upload progress (правка 90; правка 104 — состояние из общего store) */}
+      {/* Upload progress (edit 90; edit 104 — state from shared store) */}
       {uploading && (
         <div className="space-y-1 px-1">
           <div className="h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
@@ -191,7 +191,7 @@ export function DiffusionModelSelector() {
               <span className="flex-1 truncate">{m}</span>
               {m === defaultModel && (
                 <span className="text-[10px] px-1 py-0.5 rounded bg-muted-foreground/20 text-muted-foreground shrink-0">
-                  базовая
+                  base
                 </span>
               )}
             </button>
@@ -206,7 +206,7 @@ export function DiffusionModelSelector() {
               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
             >
               <RotateCcwIcon className="w-3 h-3 shrink-0" />
-              Вернуть базовую модель
+              Reset to base model
             </button>
           )}
         </div>

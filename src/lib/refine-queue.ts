@@ -1,18 +1,18 @@
 /**
- * Очередь рефайна — (правка 261).
+ * Refine Queue — (fix 261).
  *
- * Прежде вкладка «Рефайн» выполняла задачи напрямую: одна задача занимала
- * вкладку до конца, вторую поставить было нельзя, а об общей очереди с
- * генерациями речи не шло. Теперь рефайн «Целый»/«Частями» ставится в
- * ОБЩУЮ очередь (useGenQueue, type 'refine') рядом с генерациями и
- * продлением — задачи выполняются по одной, карточка очереди показывает
- * все, отмена работает.
+ * Previously the "Refine" tab executed tasks directly: one task occupied
+ * the tab until completion, a second could not be queued, and there was no
+ * unified queue with generations. Now whole/chunks refine is queued in the
+ * COMMON queue (useGenQueue, type 'refine') alongside generations and
+ * extensions — tasks execute one by one, the queue card displays
+ * all tasks, and cancellation works.
  *
- * Раннер — синглтон на уровне модуля (как движок ассистента): переживает
- * переключение вкладок; в фоне сабмитит задачу, опрашивает статус/прогресс,
- * для «Частями» сшивает куски и сигналит галерее. Продление и генерация
- * ходят в ту же очередь через use-video-gen (type 'video'); единый FIFO
- * исполнения ComfyUI обеспечивает `comfy-turn.ts`.
+ * The runner is a module-level singleton (like the assistant engine): survives
+ * tab switching; submits task in background, polls status/progress,
+ * stitches chunks for "chunks" mode, and notifies the gallery. Extension and generation
+ * use the same queue via use-video-gen (type 'video'); unified FIFO
+ * ComfyUI execution is guaranteed by `comfy-turn.ts`.
  */
 import { useGenQueue, type QueueItem } from './gen-queue-store'
 import { acquireComfyTurn, isComfyTurnActive } from './comfy-turn'
@@ -20,63 +20,63 @@ import { useGalleryRefresh } from './gallery-refresh-store'
 
 export interface RefineTask {
   mode: 'whole' | 'chunks'
-  /** Оригинал из галереи (output), из которого делается рефайн. */
+  /** Original video from gallery (output) being refined. */
   source: { filename: string; subfolder: string }
-  /** (правка 265) Файл с диска, уже в ComfyUI input/ (через /api/comfy/upload).
-      При наличии — источник, а не копия из output. */
+  /** (fix 265) File from disk, already in ComfyUI input/ (via /api/comfy/upload).
+      When present — source, rather than a copy from output. */
   inputSource?: string
-  /** (правка 494) 'free' — свободное разрешение: сервер считает короткую
-   *  сторону из targetMp по реальным размерам источника. */
+  /** (fix 494) 'free' — custom resolution: server computes short
+   *  side from targetMp based on actual source dimensions. */
   target: 'same' | 'x2' | number | 'free'
-  /** (правка 494) Цель в мегапикселях для target='free' (до 4K = 8.3 Мп). */
+  /** (fix 494) Megapixel target for target='free' (up to 4K = 8.3 MP). */
   targetMp?: number
   steps: number
-  /** σ_start лестницы (0.1–0.95) — ползунок «сколько шума убирать». */
+  /** Ladder σ_start (0.1–0.95) — slider for "how much noise to remove". */
   sigmaStart?: number
   seed: number
   prompt: string
   chunkSeconds: number
-  /** (правка 315) Режим размера референсов ('match' | 'max', дефолт 'max'
-   *  на сервере) — переключатель вкладки Refine. */
+  /** (fix 315) Reference sizing mode ('match' | 'max', default 'max'
+   *  on server) — toggle from Refine tab. */
   refImageSize?: 'match' | 'max'
-  /** (правка 407) Veda Sparse Attention + настройки ноды (из gen-store). */
+  /** (fix 407) Veda Sparse Attention + node settings (from gen-store). */
   vedaAttention?: boolean
   vedaGeneratedSparsity?: string
   vedaReferenceSparsity?: string
   vedaFullAttentionLayers?: string
   vedaFullAttentionSteps?: string
   vedaVerbose?: boolean
-  /** (правка 466) Sol-Attn + настройки ноды (из gen-store). */
+  /** (fix 466) Sol-Attn + node settings (from gen-store). */
   sparseAttention?: boolean
   sparseTau?: number
   sparseStartPercent?: number
   sparseEndPercent?: number
   sparseMinTokens?: number
   sparseExtraTokens?: number
-  /** (правка 492) Оригинальная дорожка вместо перегенерированного звука. */
+  /** (fix 492) Original audio track instead of regenerated sound. */
   keepOriginalAudio?: boolean
-  /** (правка 509) Картинки-референсы от пользователя (имена в input/) —
-   *  для источников с диска без метаданных. */
+  /** (fix 509) Reference images from user (names in input/) —
+   *  for disk sources without metadata. */
   refImages?: string[]
 }
 
-/** Задачи, ожидающие своей очереди (module-level — переживает вкладки). */
+/** Tasks waiting in queue (module-level — survives tab switching). */
 const tasks = new Map<string, RefineTask>()
 /**
- * Ход в единой ComfyUI-очереди запрашивается СРАЗУ при постановке, а не
- * когда раннер доберётся до задачи. Иначе refine №2, поставленный раньше
- * видео, не участвовал бы в FIFO и видео могло обогнать его.
+ * Turn in the unified ComfyUI queue is requested IMMEDIATELY upon enqueueing, rather than
+ * when runner reaches the task. Otherwise refine #2 enqueued before
+ * video wouldn't participate in FIFO and video could overtake it.
  */
 const turns = new Map<string, Promise<boolean>>()
 let running = false
 /**
- * (правка 716) id элемента очереди, который раннер обрабатывает ПРЯМО СЕЙЧАС.
- * Позволяет sweep'у отличить живую задачу от сироты после перезагрузки
- * страницы (module-level Map обнуляется при reload, элементы очереди — нет).
+ * (fix 716) Queue item id that the runner is processing RIGHT NOW.
+ * Allows sweep to distinguish a live task from an orphan after page reload
+ * (module-level Map resets on reload, queue items do not).
  */
 let activeItemId: string | null = null
 
-/** Поставить рефайн в общую очередь. Возвращает id элемента очереди. */
+/** Enqueue refine in global queue. Returns queue item id. */
 export function enqueueRefine(task: RefineTask): string {
   const id = useGenQueue.getState().enqueue('refine', `Refine: ${task.source.filename}`)
   tasks.set(id, task)
@@ -85,20 +85,20 @@ export function enqueueRefine(task: RefineTask): string {
   return id
 }
 
-/** Все активные элементы очереди типа «рефайн». */
+/** All active queue items of type 'refine'. */
 export function activeRefineItems(items: QueueItem[]): QueueItem[] {
   return items.filter(
     (i) => i.type === 'refine' && (i.status === 'submitting' || i.status === 'queued' || i.status === 'running'),
   )
 }
 
-/** Отменить все активные рефайны (кнопка «Остановить» на вкладке). */
+/** Cancel all active refines ("Stop" button on tab). */
 export async function cancelActiveRefines(): Promise<void> {
   const { setStatus } = useGenQueue.getState()
   for (const item of activeRefineItems(useGenQueue.getState().items)) {
     setStatus(item.id, 'cancelled')
-    // (правка 334) Ожидающая очереди задача — из Map тоже: иначе запись-
-    // сирота оставалась навсегда (раннер её не возьмёт — элемент cancelled).
+    // (fix 334) Queued task waiting its turn — delete from Map as well: otherwise orphan
+    // record remained forever (runner won't pick it up — item is cancelled).
     tasks.delete(item.id)
     turns.delete(item.id)
     if (item.promptId) {
@@ -114,8 +114,8 @@ export async function cancelActiveRefines(): Promise<void> {
 }
 
 /**
- * (правки 329/334) Отмена ОДНОГО рефайна из QueueIndicator: статус cancelled,
- * запись из Map (у ещё не запущенной) и отмена в ComfyUI по prompt_id.
+ * (fixes 329/334) Cancel a SINGLE refine from QueueIndicator: cancelled status,
+ * deleted from Map (for not-yet-started task) and cancelled in ComfyUI by prompt_id.
  */
 export async function cancelRefineItem(id: string): Promise<void> {
   const { setStatus } = useGenQueue.getState()
@@ -139,7 +139,7 @@ function kick() {
   running = true
   void runLoop().finally(() => {
     running = false
-    // За время выполнения могли добавиться новые задачи — крутим дальше.
+    // New tasks may have been added during execution — keep loop going.
     if (activeRefineItems(useGenQueue.getState().items).some((i) => tasks.has(i.id))) kick()
   })
 }
@@ -159,8 +159,8 @@ async function runLoop(): Promise<void> {
     tasks.delete(item.id)
 
     try {
-      // (правка 716) Помечаем элемент как «в работе» — sweep не считает его
-      // сиротой и не запускает второго финализатора.
+      // (fix 716) Mark item as "in progress" — sweep won't consider it
+      // an orphan and won't launch a second finalizer.
       activeItemId = item.id
       await runTask(item.id, task)
     } catch (e) {
@@ -180,8 +180,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 async function runTask(id: string, task: RefineTask): Promise<void> {
   const q = () => useGenQueue.getState()
 
-  // Ход уже запрошен в enqueueRefine — ждём его здесь, сохраняя глобальный
-  // порядок постановки. Отменённая в ожидании задача просто выходит.
+  // Turn already requested in enqueueRefine — await here, preserving global
+  // enqueue order. A task cancelled while waiting simply exits.
   const turn = turns.get(id)
   const granted = turn ? await turn : true
   turns.delete(id)
@@ -189,8 +189,8 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
 
   q().setStatus(id, 'submitting')
 
-  // (правка 264) Время генерации для сайдкара итогового файла:
-  // от отправки в ComfyUI до done (генерация + для «Частями» сшивка).
+  // (fix 264) Generation time for resulting file sidecar:
+  // from submission to ComfyUI to done (generation + stitching for "chunks").
   const t0 = Date.now()
 
   const res = await fetch('/api/comfy/refine', {
@@ -200,15 +200,15 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
       sourceFilename: task.source.filename,
       sourceSubfolder: task.source.subfolder,
       ...(task.inputSource ? { inputSource: task.inputSource } : {}),
-      // (правка 494) free-режим: сервер конвертирует Мп в короткую сторону
+      // (fix 494) free mode: server converts MP to short side
       target: task.target === 'free' ? 'same' : task.target,
       ...(task.target === 'free' && task.targetMp ? { targetMp: task.targetMp } : {}),
       steps: task.steps,
       ...(task.sigmaStart ? { sigmaStart: task.sigmaStart } : {}),
       seed: task.seed,
       prompt: task.prompt.trim() ? task.prompt.trim() : undefined,
-      refImageSize: task.refImageSize ?? 'max', // (правка 315)
-      // (правка 407) Veda + настройки ноды — только при включённом тоггле
+      refImageSize: task.refImageSize ?? 'max', // (fix 315)
+      // (fix 407) Veda + node settings — only when toggle enabled
       ...(task.vedaAttention === true && {
         vedaAttention: true,
         vedaGeneratedSparsity: task.vedaGeneratedSparsity,
@@ -217,7 +217,7 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
         vedaFullAttentionSteps: task.vedaFullAttentionSteps,
         vedaVerbose: task.vedaVerbose === true,
       }),
-      // (правка 466) Sol-Attn + настройки ноды — только при включённом тоггле
+      // (fix 466) Sol-Attn + node settings — only when toggle enabled
       ...(task.sparseAttention === true && {
         sparseAttention: true,
         sparseTau: task.sparseTau,
@@ -227,9 +227,9 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
         sparseExtraTokens: task.sparseExtraTokens,
       }),
       ...(task.mode === 'chunks' ? { mode: 'chunks', chunkSeconds: task.chunkSeconds } : {}),
-      // (правка 492) Оригинальный звук — галочка вкладки Refine
+      // (fix 492) Original sound — checkbox on Refine tab
       ...(task.keepOriginalAudio === true && { keepOriginalAudio: true }),
-      // (правка 509) Референсы от пользователя (источник с диска)
+      // (fix 509) User references (source from disk)
       ...(task.refImages && task.refImages.length > 0 && { refImages: task.refImages }),
     }),
   })
@@ -237,18 +237,18 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
     prompt_id?: string
     error?: string
     chunks?: number
-    /** Промпт, который сервер реально подал в воркфлоу (мета исходника +
-     *  её картинки-референсы резолвятся на сервере) — для сайдкара сшивки. */
+    /** Prompt actually sent by server into workflow (source meta +
+     *  its image references are resolved on server) — for stitch sidecar. */
     promptUsed?: string
   }
   if (!res.ok || data.error) {
     throw new Error(data.error || `HTTP ${res.status}`)
   }
   const promptId = data.prompt_id
-  if (!promptId) throw new Error('ComfyUI не вернул prompt_id')
+  if (!promptId) throw new Error('ComfyUI did not return prompt_id')
 
-  // Отменили/удалили очередь, пока POST был в полёте: задача уже принята
-  // ComfyUI — гасим её и не запускаем поллинг-сироту.
+  // Cancelled/removed from queue while POST was in-flight: task already accepted
+  // by ComfyUI — abort it and do not launch orphan polling.
   if (!isComfyTurnActive(id) || isCancelled(id)) {
     try {
       await fetch('/api/comfy/cancel', {
@@ -263,7 +263,7 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
   q().setPromptId(id, promptId)
   q().setStatus(id, 'queued')
 
-  // ── Опрос статуса + прогресса (как awaitJobDone прежней вкладки) ──
+  // ── Poll status + progress (like awaitJobDone of previous tab) ──
   let unknownStreak = 0
   for (;;) {
     if (isCancelled(id)) return
@@ -274,19 +274,19 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
       if (!r.ok) throw new Error(`status ${r.status}`)
       s = await r.json()
     } catch {
-      if (++unknownStreak >= 20) throw new Error('ComfyUI не отвечает (30 с подряд)')
+      if (++unknownStreak >= 20) throw new Error('ComfyUI is not responding (30s consecutive)')
       continue
     }
-    // (правка 552) Перепроверка после await: отмена могла прийти, пока запрос
-    // был в полёте. ComfyUI помечает прерванный промпт как 'error' — без
-    // этой проверки статус «Отменено» перекатывался в «Ошибка».
+    // (fix 552) Re-check after await: cancellation could arrive while request
+    // was in-flight. ComfyUI marks aborted prompt as 'error' — without
+    // this check, "Cancelled" status was overwritten by "Error".
     if (isCancelled(id)) return
-    // (правка 552) Сброс счётчика unknown — ТОЛЬКО при достоверном статусе.
-    // Раньше сброс стоял в try-блоке (любой HTTP-200) и обнулял счётчик
-    // ПЕРЕД проверкой status:'unknown' — при «отвечает, но задачи нет»
-    // (ComfyUI перезапущен / промпт удалён из очереди) счётчик никогда не
-    // дорастал до 20, таймаут «Задача не найдена» был мёртв, цикл опроса
-    // висел вечно и блокировал всю очередь рефайна (running = true в kick()).
+    // (fix 552) Reset unknown counter ONLY on credible status.
+    // Previously reset was in try-block (any HTTP 200) and cleared counter
+    // BEFORE checking status:'unknown' — when "responding but task not found"
+    // (ComfyUI restarted / prompt removed from queue) counter never reached 20,
+    // "Task not found" timeout was dead, polling loop hung forever
+    // and blocked entire refine queue (running = true in kick()).
     if (s.status !== 'unknown') unknownStreak = 0
     if (s.status === 'running' && q().items.find((i) => i.id === id)?.status !== 'running') {
       q().setStatus(id, 'running')
@@ -303,26 +303,26 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
       } catch { /* non-critical */ }
       continue
     }
-    if (s.status === 'error') throw new Error(s.detail || 'Ошибка выполнения')
+    if (s.status === 'error') throw new Error(s.detail || 'Execution error')
     if (s.status === 'unknown') {
-      if (++unknownStreak >= 20) throw new Error('Задача не найдена в ComfyUI')
+      if (++unknownStreak >= 20) throw new Error('Task not found in ComfyUI')
       continue
     }
     if (s.status !== 'done') continue
 
     // ── done ──
     if (task.mode === 'chunks') {
-      // (правка 311) Новый воркфлоу (правка 314 в refine-template.ts) склеивает
-      // окна В ЛАТЕНТЕ и отдаёт ОДИН файл Minimax_Studio_refine_* — ffmpeg-
-      // сшивка и повторное кодирование больше не нужны, мета пишется
-      // сервером (recordPendingMetaRaw в /api/comfy/refine → финализация в
-      // /api/comfy/status на done), как в режиме «Целиком».
-      // LEGACY-путь: если в outputs пришли refinepart_* (старый воркфлоу) —
-      // сортируем по номеру окна и сшиваем жёсткой конкатенацией, как раньше.
+      // (fix 311) New workflow (fix 314 in refine-template.ts) concatenates
+      // windows IN LATENT space and produces ONE Minimax_Studio_refine_* file — ffmpeg
+      // stitch and re-encoding are no longer needed, metadata is written
+      // by server (recordPendingMetaRaw in /api/comfy/refine → finalize in
+      // /api/comfy/status on done), just like in "whole" mode.
+      // LEGACY path: if refinepart_* outputs returned (old workflow) —
+      // sort by window number and stitch with hard concatenation as before.
       const parts = (s.outputs || [])
         .filter((o) => o.type === 'output' && /refinepart.*[.]mp4$/i.test(o.filename))
         .sort((a, b) => {
-          // (правка 310) Индекс окна явно в префиксе: refinepart_0, refinepart_1, …
+          // (fix 310) Window index explicitly in prefix: refinepart_0, refinepart_1, …
           const num = (f: string) => {
             const m = f.match(/refinepart_(\d+)/i)
             return m ? parseInt(m[1], 10) : 0
@@ -330,18 +330,18 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
           return num(a.filename) - num(b.filename)
         })
       if (!parts.length) {
-        // Новый путь: один файл результата, ничего сшивать не надо.
+        // New path: single output file, nothing to stitch.
         const single = (s.outputs || []).find(
           (o) => o.type === 'output' && /Minimax_Studio_refine(?!part).*[.]mp4$/i.test(o.filename),
         )
-        if (!single) throw new Error('ComfyUI не вернул файл рефайна')
+        if (!single) throw new Error('ComfyUI did not return refine file')
         if (isCancelled(id)) return
       } else {
       if (isCancelled(id)) return
-      q().setMessage(id, 'Сшивка кусков…')
-      // (правка 272) Латент-цепочка: куски без дублей (голова срезана),
-      // стыки непрерывны — жёсткая concat. (правка 311) LEGACY: только для
-      // воркфлоу старого образца с покусочными refinepart_*.
+      q().setMessage(id, 'Stitching chunks…')
+      // (fix 272) Latent chain: chunks without duplicates (head trimmed),
+      // continuous seams — hard concat. (fix 311) LEGACY: only for
+      // old-style workflows with chunked refinepart_*.
       const st = await fetch('/api/comfy/refine/stitch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -351,8 +351,8 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
           outSubfolder: task.source.subfolder || '',
           hard: true,
           meta: {
-            // Сервер уже резолвил промпт (мета исходника + картинки) —
-            // в сайдкар итога пишем его, а не сырое поле задачи.
+            // Server already resolved prompt (source meta + images) —
+            // write it to final sidecar rather than raw task prompt field.
             prompt: data.promptUsed || task.prompt,
             model_type: 'minimax_h3_ref2va',
             workflow: 'refine-chunks-latent-chain',
@@ -363,7 +363,7 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
             sigma_start: task.sigmaStart,
             seed: task.seed,
             chunks: parts.length,
-            // (правка 407) veda-настройки — «Повторить» восстанавливает
+            // (fix 407) veda settings — "Retry" restores them
             ...(task.vedaAttention === true && {
               veda_attention: true,
               veda_generated_sparsity: task.vedaGeneratedSparsity ?? '90%',
@@ -372,7 +372,7 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
               veda_full_attention_steps: task.vedaFullAttentionSteps ?? '',
               veda_verbose: task.vedaVerbose === true,
             }),
-            // (правка 264) Время генерации: submit → done (+ сшивка кусков).
+            // (fix 264) Generation time: submit → done (+ chunk stitching).
             generation_time: Math.max(1, Math.round((Date.now() - t0) / 1000)),
           },
         }),
@@ -389,39 +389,33 @@ async function runTask(id: string, task: RefineTask): Promise<void> {
 }
 
 /**
- * Чистка после перезагрузки страницы: задачи очереди пережили reload
- * (persist), а их Runtime (Map задач / раннер) — нет. Отмечаем честной
- * ошибкой: файлы могли успеть сгенерироваться на сервере.
- * Вызывается с монтирования вкладки «Рефайн».
- */
-/**
- * Чистка после перезагрузки страницы: задачи очереди пережили reload
- * (persist), а их Runtime (Map задач / раннер) — нет. Отмечаем честной
- * ошибкой: файлы могли успеть сгенерироваться на сервере.
- * Вызывается с монтирования вкладки «Рефайн».
+ * Cleanup after page reload: queue items survived reload (persist),
+ * but their Runtime (task Map / runner) did not. Mark with an honest
+ * error: files may have finished generating on server.
+ * Called on mount of Refine tab.
  */
 export function sweepOrphanRefineItems(): void {
   const { items, setStatus } = useGenQueue.getState()
   for (const it of items) {
     if (it.type !== 'refine') continue
     if (it.status !== 'submitting' && it.status !== 'queued' && it.status !== 'running') continue
-    // (правка 716) Живая задача — та, что в очереди (tasks) или которую
-    // раннер обрабатывает прямо сейчас (activeItemId). Раньше sweep
-    // запускал recoverOrphanRefineItem для ЛЮБОГО элемента с prompt_id, в
-    // том числе для идущей прямо сейчас задачи: получались ДВА поллера на
-    // одном промпте, оба вызывали /api/comfy/refine/stitch → чанки
-    // склеивались дважды, а два выхода писались параллельно.
+    // (fix 716) Live task is one in queue (tasks) or being processed
+    // right now by the runner (activeItemId). Previously sweep ran
+    // recoverOrphanRefineItem for ANY item with prompt_id, including
+    // the currently running task: leading to TWO pollers on a single prompt,
+    // both calling /api/comfy/refine/stitch → chunks stitched twice,
+    // and two outputs written in parallel.
     if (tasks.has(it.id) || it.id === activeItemId) continue
-    // У активной задачи с prompt_id статус доведёт глобальный поллер
-    // очереди (queue-indicator): файлы могли сохраниться. А вот ещё не
-    // отправленные (без prompt_id) — потеряны вместе с задачей.
+    // Active task with prompt_id will be completed by global queue poller
+    // (queue-indicator): files might have been preserved. But tasks not yet
+    // dispatched (without prompt_id) are lost with the task.
     if (!it.promptId) {
-      setStatus(it.id, 'error', 'Страница перезагружена — задача не была отправлена. Запустите заново.')
+      setStatus(it.id, 'error', 'Page reloaded — task was not dispatched. Please run again.')
     } else {
-      // (правка 332) Задача с prompt_id: доводим до конца сами. Раньше её
-      // done ставил глобальный поллер queue-indicator — БЕЗ legacy-stitch
-      // покусочных refinepart_* и без bump галереи («Готово» без сшитого
-      // файла). Теперь финализация refine-элементов — только здесь/в раннере.
+      // (fix 332) Task with prompt_id: finish it ourselves. Previously its
+      // done was set by global queue-indicator poller — WITHOUT legacy stitch
+      // of chunked refinepart_* and without gallery bump ("Done" without stitched
+      // file). Now finalization of refine items is only here / in runner.
       void recoverOrphanRefineItem(it).catch((err) => {
         console.warn('[refine-queue] recoverOrphanRefineItem failed:', err instanceof Error ? err.message : String(err))
       })
@@ -429,15 +423,15 @@ export function sweepOrphanRefineItems(): void {
   }
 }
 
-/* (правка 332) Восстановление refine-задачи после перезагрузки страницы.
- * Раннер (tasks Map) пережить reload не может, но задача в ComfyUI жива.
- * Опрашиваем статус; на done:
- *  • один файл Minimax_Studio_refine_* (новый воркфлоу) — просто done + bump;
- *  • refinepart_* (legacy) — сшиваем через /api/comfy/refine/stitch, как
- *    делал раннер: исходник и мета берём из сайдкара куска (его пишет
- *    pending-meta статусного роута на 'done' — recordPendingMetaRaw в
- *    /api/comfy/refine содержит source_video). Нет сайдкара — честная
- *    ошибка с понятным текстом, а не молчаливое «Готово». */
+/* (fix 332) Recovery of refine task after page reload.
+ * Runner (tasks Map) cannot survive reload, but task in ComfyUI is alive.
+ * Poll status; on done:
+ *  • single file Minimax_Studio_refine_* (new workflow) — simply done + bump;
+ *  • refinepart_* (legacy) — stitch via /api/comfy/refine/stitch, as
+ *    runner did: source and meta taken from chunk sidecar (written by
+ *    status route pending-meta on 'done' — recordPendingMetaRaw in
+ *    /api/comfy/refine contains source_video). No sidecar — honest
+ *    error with clear text, rather than silent "Done". */
 const orphanRecovery = new Set<string>()
 
 async function recoverOrphanRefineItem(item: QueueItem): Promise<void> {
@@ -462,7 +456,7 @@ async function recoverOrphanRefineItem(item: QueueItem): Promise<void> {
         s = await r.json()
       } catch {
         if (++unknownStreak >= 20) {
-          q().setStatus(item.id, 'error', 'ComfyUI не отвечает после перезагрузки страницы')
+          q().setStatus(item.id, 'error', 'ComfyUI is not responding after page reload')
           return
         }
         continue
@@ -473,13 +467,13 @@ async function recoverOrphanRefineItem(item: QueueItem): Promise<void> {
       }
       if (s.status === 'unknown') {
         if (++unknownStreak >= 20) {
-          q().setStatus(item.id, 'error', 'Задача не найдена в ComfyUI (сервер был перезапущен)')
+          q().setStatus(item.id, 'error', 'Task not found in ComfyUI (server was restarted)')
           return
         }
         continue
       }
       if (s.status === 'error') {
-        q().setStatus(item.id, 'error', s.detail || 'Ошибка выполнения')
+        q().setStatus(item.id, 'error', s.detail || 'Execution error')
         return
       }
       if (s.status !== 'done') continue
@@ -495,17 +489,17 @@ async function recoverOrphanRefineItem(item: QueueItem): Promise<void> {
           return num(a.filename) - num(b.filename)
         })
       if (!parts.length) {
-        // Новый воркфлоу: один файл, сшивать нечего.
+        // New workflow: single file, nothing to stitch.
         q().setStatus(item.id, 'done')
         q().setProgress(item.id, 100, 100)
         useGalleryRefresh.getState().bump()
         return
       }
 
-      // LEGACY: куски refinepart_* — сшиваем.
-      q().setMessage(item.id, 'Сшивка кусков…')
-      // Исходник и промпт — из сайдкара первого куска (pending-meta пишет
-      // их на 'done' даже без живого браузера).
+      // LEGACY: refinepart_* chunks — stitch them.
+      q().setMessage(item.id, 'Stitching chunks…')
+      // Source and prompt from first chunk's sidecar (pending-meta writes
+      // them on 'done' even without active browser).
       let source: { filename: string; subfolder: string } | null = null
       let promptUsed = ''
       try {
@@ -524,18 +518,18 @@ async function recoverOrphanRefineItem(item: QueueItem): Promise<void> {
           }
           if (typeof m?.prompt === 'string') promptUsed = m.prompt
         }
-      } catch { /* ниже — честная ошибка */ }
+      } catch { /* honest error below */ }
       if (!source) {
         q().setStatus(
           item.id,
           'error',
-          'Рефайн «Частями» завершён, но страница была перезагружена: куски refinepart_* остались несшитыми (исходник не найден в метаданных кусков). Запустите рефайн заново.',
+          'Refine "Chunks" completed, but page was reloaded: refinepart_* chunks remained unstitched (source not found in chunk metadata). Please run refine again.',
         )
         return
       }
-      // stitch резолвит audioSource только в output/: у рефайна с диска
-      // (inputSource) исходник лежит в input/ — тогда якорем существования
-      // файла служит первый кусок (hard-склейка берёт звук из самих кусков).
+      // stitch resolves audioSource only in output/: for refine from disk
+      // (inputSource) the original file is in input/ — in that case the first
+      // chunk serves as file anchor (hard concatenation takes audio from chunks themselves).
       const audioSource =
         source.subfolder === 'input'
           ? { filename: parts[0].filename, subfolder: parts[0].subfolder || '' }
@@ -565,7 +559,7 @@ async function recoverOrphanRefineItem(item: QueueItem): Promise<void> {
         q().setStatus(
           item.id,
           'error',
-          `Сшивка кусков после перезагрузки не удалась: ${sd.error || `HTTP ${st.status}`}. Куски refinepart_* остались в галерее.`,
+          `Chunk stitching failed after reload: ${sd.error || `HTTP ${st.status}`}. refinepart_* chunks remained in gallery.`,
         )
         return
       }

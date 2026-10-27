@@ -31,14 +31,14 @@ export interface VideoRefItem {
   imageIntent: 'identity' | 'scene' | 'style' | 'composition'
   /** Videos: include the reference's own audio track. */
   includeAudio: boolean
-  /** (правка 493) Videos: сжать до 480p перед подачей в conditioning. */
+  /** (fix 493) Videos: compress to 480p before feeding into conditioning. */
   compress?: boolean
-  /** (правка 302) Audio: обрезка референса, секунды. trimEnd null/0 = до конца.
-      Обрезка виртуальная (нода AudioTrim) — копий файла не создаётся. */
+  /** (fix 302) Audio: reference trimming in seconds. trimEnd null/0 = until end.
+      Virtual trimming (AudioTrim node) — no file copies created. */
   trimStart?: number
   trimEnd?: number | null
-  /** (правка 694) Audio: громкость референса 0–1 (default 0.5). Виртуальная
-      (нода AudioGain) — без копий файла. */
+  /** (fix 694) Audio: reference volume 0–1 (default 0.5). Virtual
+      (AudioGain node) — without file copies. */
   audioVolume?: number
 }
 
@@ -49,9 +49,9 @@ export interface VideoFrameSlot {
   name: string
   /** Local blob URL preview — runtime only, stripped on persist. */
   previewUrl: string
-  /** (правка 152) Ширина изображения в пикселях (из первого кадра — для aspect ratio). */
+  /** (fix 152) Image width in pixels (from first frame — for aspect ratio). */
   width?: number
-  /** (правка 152) Высота изображения в пикселях. */
+  /** (fix 152) Image height in pixels. */
   height?: number
 }
 
@@ -60,44 +60,44 @@ export interface VideoGenState {
   seed: number
   /** Selected model_type (single workflow: minimax_h3_ref2va). */
   modelType: string
-  /** (правка 146) Режим генерации: 'ref' | 't2v' | 'flf' | 'extend' (правка 161). Default 'ref'. */
+  /** (fix 146) Generation mode: 'ref' | 't2v' | 'flf' | 'extend' (fix 161). Default 'ref'. */
   mode: 'ref' | 't2v' | 'flf' | 'extend'
-  /** ref + аудио-реф: вести генерацию аудио-гайдом и подставить оригинальный
-   *  звук в итоговое видео (опция на вкладке «Генерация»). */
+  /** ref + audio-ref: guide generation with audio and insert original
+   *  sound into final video (option on "Generation" tab). */
   audioGuide: boolean
-  /** Пайплайн: 'draft' — один проход на low-res канве (быстрый черновик,
-   *  апгрейд вкладкой Refine); 'full' — два прохода, как раньше. Default 'full'. */
+  /** Pipeline: 'draft' — single pass on low-res canvas (fast draft,
+   *  upgraded via Refine tab); 'full' — two passes, as before. Default 'full'. */
   pipeline: 'draft' | 'full'
-  /** (правка 161) extend: клипы для продления. (правка 587) id — стабильный
-   *  ключ карточки (key={i} после удаления из середины переносил внутреннее
-   *  состояние MentionTextarea на соседний клип); у старых записей нет. */
+  /** (fix 161) extend: clips for extension. (fix 587) id — stable
+   *  card key (key={i} after deleting from middle carried MentionTextarea
+   *  internal state to neighboring clip); absent in old entries. */
   extendClips: Array<{ prompt: string; duration: number; seed: number; id?: string }>
-  /** (правка 162) extend: ОТДЕЛЬНЫЕ картинки-рефы для продления (не путать с refs!). */
+  /** (fix 162) extend: SEPARATE image refs for extension (not to be confused with refs!). */
   extendImageRefs: VideoRefItem[]
-  /** (правка 164) extend: имя файла исходного видео в ComfyUI input/ (или staged). */
+  /** (fix 164) extend: filename of source video in ComfyUI input/ (or staged). */
   extendSourceVideoPath: string
-  /** (правка 291) Длительность исходного видео в секундах (ffprobe на клиенте при
-   *  выборе/импорте). Показывается в badges и карточках клипов — пользователь
-   *  видит, сколько секунд будет по итогу вместе с оригиналом. */
+  /** (fix 291) Source video duration in seconds (client-side ffprobe upon
+   *  selection/import). Displayed in badges and clip cards — user
+   *  sees total duration including original. */
   extendSourceDuration: number
-  /** (правка 363) extend: подпапка output, из которой взят источник-ГАЛЕРЕЯ
-   *  ('' = корень output). null = источник с диска / не из галереи — тогда
-   *  результат продления идёт в outputFolder, как раньше. Источник из галереи
-   *  → результат падает в папку оригинала (цепочки продлений не расползаются). */
+  /** (fix 363) extend: output subfolder where source GALLERY video came from
+   *  ('' = output root). null = source from disk / not from gallery — then
+   *  extension result goes to outputFolder as before. Source from gallery
+   *  → result placed in original's folder (extension chains don't get scattered). */
   extendSourceSubfolder: string | null
-  /** (правка 385) extend: ИМЯ файла-оригинала в output/ (до импорта в input/,
-   *  где копия получает случайное имя). Вместе с extendSourceSubfolder —
-   *  адрес сайдкара исходника: роут по нему резолвит ЛАТЕНТ исходника
-   *  (lossless-сид и lossless-часть комбинированного). null = с диска. */
+  /** (fix 385) extend: NAME of original file in output/ (before importing to input/,
+   *  where copy receives random name). Together with extendSourceSubfolder —
+   *  source sidecar address: route resolves source LATENT with it
+   *  (lossless seed and lossless portion of combined). null = from disk. */
   extendSourceName: string | null
-  /** (правка 423) extend: двухпроходный режим (low-res pass 1 → апскейл →
-   *  pass 2 рефайн до размера исходника). Default false = один проход. */
+  /** (fix 423) extend: two-pass mode (low-res pass 1 → upscale →
+   *  pass 2 refine to source size). Default false = single pass. */
   extendTwoPass: boolean
-  /** Resolution label — ТОЧНЫЙ номинал (правка 124): "1280x720", "1920x1080", ... */
+  /** Resolution label — EXACT value (fix 124): "1280x720", "1920x1080", ... */
   resolution: string
-  /** Total output frames (H3: 17n+5 grid, min 60 ≈ 2.5 с, правка 138). */
+  /** Total output frames (H3: 17n+5 grid, min 60 ≈ 2.5 s, fix 138). */
   videoLength: number
-  /** ref2va reference detail: 'match' | 'max'. (правка 286) — в режиме продления всегда 'match'. */
+  /** ref2va reference detail: 'match' | 'max'. (fix 286) — in extend mode always 'match'. */
   referenceDetail: 'match' | 'max'
   /** FL2VA: first frame (image_prompt_type 'S'). */
   startFrame: VideoFrameSlot | null
@@ -114,59 +114,59 @@ export interface VideoGenState {
   /** Pass 1 effective sampling steps (SplitSigmas split point, default 6, max 30). */
   firstSamplerSteps: number
   /**
-   * ВСЕГО шагов в расписании BasicScheduler для pass 1.
-   * По умолчанию 6 — столько же, сколько забирает сплит («6 из 6»).
-   * Задаётся отдельно, чтобы можно было взять, например, «6 из 8».
+   * TOTAL steps in BasicScheduler schedule for pass 1.
+   * Default 6 — same as split takes ("6 of 6").
+   * Configured separately to allow e.g. "6 of 8".
    */
   firstSamplerTotalSteps?: number
   /**
-   * (правка 719) Шаги клипа в режиме продления.
+   * (fix 719) Clip steps in extend mode.
    *
-   * В Extend это НЕ точка сплита: там один BasicScheduler на клип
-   * (steps = это значение, denoise = 1, сплита нет вообще) — смысл другой,
-   * чем в генерации.
-   * undefined = «авто»: шаги первого прохода исходника из его .meta.json
-   * (продление продолжает видео — расписание клипа берётся из исходника),
-   * без меты — firstSamplerSteps. Явное значение (2–30) побеждает авто.
-   * (история: раньше поле из UI молча терялось в хуке и клипы всегда
-   * генерились с firstSamplerSteps — теперь поле реально доходит до шаблона)
+   * In Extend this is NOT a split point: there is one BasicScheduler per clip
+   * (steps = this value, denoise = 1, no split at all) — meaning is different
+   * than in generation.
+   * undefined = "auto": steps of source pass 1 from its .meta.json
+   * (extension continues video — clip schedule is inherited from source),
+   * without meta — firstSamplerSteps. Explicit value (2–30) overrides auto.
+   * (history: previously field from UI was silently lost in hook and clips always
+   * generated with firstSamplerSteps — now field actually reaches template)
    */
   extendClipSteps?: number
-  /** Draft pipeline: direct step count of the single pass (default 4 = turbo-эталон). */
+  /** Draft pipeline: direct step count of the single pass (default 4 = turbo-reference). */
   draftSteps: number
   /** Pass 2 sigma profile: '3step' | '4step' | '5step' | '6step' | '7step'. */
   sigmaVariant: string
-  /** (правка 69) Pass 2 sampler (default 'euler'). */
+  /** (fix 69) Pass 2 sampler (default 'euler'). */
   pass2Sampler: string
-  /** (правка 70) Pass 1 sampler (default 'euler'). */
+  /** (fix 70) Pass 1 sampler (default 'euler'). */
   pass1Sampler: string
-  /** (правка 70) Pass 1 scheduler (default 'simple'). */
+  /** (fix 70) Pass 1 scheduler (default 'simple'). */
   pass1Scheduler: string
-  /** (правка 70) Влияние турбо-лоры (default 1.0). */
+  /** (fix 70) Turbo LoRA strength (default 1.0). */
   turboLoraStrength: number
-  /** (правка 168) Разреженное внимание (Sol-Attn): ускоряет длинные последовательности. */
+  /** (fix 168) Sparse Attention (Sol-Attn): speeds up long sequences. */
   sparseAttention: boolean
-  /** (правка 466) Sol-Attn: порог разреженности tau (0–4, default 1.3). */
+  /** (fix 466) Sol-Attn: sparsity threshold tau (0–4, default 1.3). */
   sparseTau: number
-  /** (правка 466) Sol-Attn: с какой доли шагов включается (0–0.9, default 0.2). */
+  /** (fix 466) Sol-Attn: start step fraction (0–0.9, default 0.2). */
   sparseStartPercent: number
-  /** (правка 466) Sol-Attn: до какой доли шагов работает (0.1–1, default 1.0). */
+  /** (fix 466) Sol-Attn: end step fraction (0.1–1, default 1.0). */
   sparseEndPercent: number
-  /** (правка 466) Sol-Attn: минимум токенов для включения (default 12288 — короткие клипы остаются плотными). */
+  /** (fix 466) Sol-Attn: minimum token count to enable (default 12288 — short clips remain dense). */
   sparseMinTokens: number
-  /** (правка 466) Sol-Attn: доп. токены контекста (default 256). */
+  /** (fix 466) Sol-Attn: extra context tokens (default 256). */
   sparseExtraTokens: number
-  /** (правка 301) Veda Sparse Attention: обученный предиктор, для длинных видео. */
+  /** (fix 301) Veda Sparse Attention: trained predictor, for long videos. */
   vedaAttention: boolean
-  /** (правка 400) Veda: спарсити генерации, 'N%' (50–95, default '90%'). Выше = быстрее, но грубее. */
+  /** (fix 400) Veda: generation sparsity, 'N%' (50–95, default '90%'). Higher = faster, but coarser. */
   vedaGeneratedSparsity: string
-  /** (правка 400) Veda: спарсити референсов, 'N%' (0–95, default '90%'). 0% = полное внимание к референсам (точнее лицо, медленнее). */
+  /** (fix 400) Veda: reference sparsity, 'N%' (0–95, default '90%'). 0% = full attention to references (more accurate face, slower). */
   vedaReferenceSparsity: string
-  /** (правка 400) Veda: 0-based блоки DiT с полным вниманием («0, 1, 47-49»; '' = все sparse). */
+  /** (fix 400) Veda: 0-based DiT blocks with full attention ("0, 1, 47-49"; '' = all sparse). */
   vedaFullAttentionLayers: string
-  /** (правка 400) Veda: 0-based шаги сэмплера с полным вниманием («0, 1»; '' = нет). */
+  /** (fix 400) Veda: 0-based sampler steps with full attention ("0, 1"; '' = none). */
   vedaFullAttentionSteps: string
-  /** (правка 400) Veda: подробный лог ноды (default false). */
+  /** (fix 400) Veda: verbose node log (default false). */
   vedaVerbose: boolean
   /** MiniMaxLowVRAMAttention: head-chunked attention (saves VRAM). */
   lowVramAttention: boolean
@@ -176,8 +176,8 @@ export interface VideoGenState {
   chunkFFChunks: number
   /** ChunkFF: sequence length threshold above which chunking kicks in. */
   chunkFFThreshold: number
-  /** (правка 91) Активная папка галереи: '' = общая, иначе имя подпапки output.
-   *  Вкладка «Генерация» фильтрует галерею по ней и складывает новые видео в неё. */
+  /** (fix 91) Active gallery folder: '' = root, otherwise name of output subfolder.
+   *  "Generation" tab filters gallery by it and saves new videos into it. */
   outputFolder: string
 }
 
@@ -185,19 +185,19 @@ export const DEFAULT_VIDEO_STATE: VideoGenState = {
   prompt: '',
   seed: -1,
   modelType: 'minimax_h3_ref2va',
-  mode: 'ref', // (правка 146)
-  audioGuide: false, // аудио-гайд + оригинальный звук — опция, по умолчанию выкл
-  pipeline: 'full', // два прохода (low-res → upscale → Pass 2) по умолчанию
-  extendClips: [], // (правка 161) extend: клипы для продления
-  extendImageRefs: [], // (правка 162) extend: отдельные картинки-рефы
-  extendSourceVideoPath: '', // (правка 164) extend: путь к исходному видео
-  extendSourceDuration: 0, // (правка 291) длительность исходника, с (0 = неизвестно)
-  extendSourceSubfolder: null, // (правка 363) подпапка галереи-источника (null = с диска)
-  extendSourceName: null, // (правка 385) имя файла-оригинала в output/ (null = с диска)
-  extendTwoPass: true, // (правка 437) extend: два прохода — default ON (был OFF, правка 423)
-  resolution: '854x480', // (правка 138) дефолт 480p 16:9 — быстрее и дешевле в VRAM
-  videoLength: 60, // (правка 138) минимум 2.5 с (60 кадров при 24 fps, сетка 17n+5)
-  referenceDetail: 'match', // (правка 286) по умолчанию — Match (быстро)
+  mode: 'ref', // (fix 146)
+  audioGuide: false, // audio guide + original sound — optional, default off
+  pipeline: 'full', // two passes (low-res → upscale → Pass 2) by default
+  extendClips: [], // (fix 161) extend: clips for extension
+  extendImageRefs: [], // (fix 162) extend: separate image refs
+  extendSourceVideoPath: '', // (fix 164) extend: path to source video
+  extendSourceDuration: 0, // (fix 291) source duration, sec (0 = unknown)
+  extendSourceSubfolder: null, // (fix 363) source gallery subfolder (null = from disk)
+  extendSourceName: null, // (fix 385) original filename in output/ (null = from disk)
+  extendTwoPass: true, // (fix 437) extend: two passes — default ON (was OFF, fix 423)
+  resolution: '854x480', // (fix 138) default 480p 16:9 — faster and cheaper in VRAM
+  videoLength: 60, // (fix 138) min 2.5 s (60 frames at 24 fps, 17n+5 grid)
+  referenceDetail: 'match', // (fix 286) default — Match (fast)
   startFrame: null,
   endFrame: null,
   refs: [],
@@ -205,31 +205,31 @@ export const DEFAULT_VIDEO_STATE: VideoGenState = {
   freeResolution: false,
   lowResMP: 0.2,
   firstSamplerSteps: 6,
-  // Всего шагов в расписании pass 1. По умолчанию столько же, сколько
-  // забирает сплит, — «6 из 6». Можно увеличить (например, «6 из 8»).
+  // Total steps in pass 1 schedule. Default is same as
+  // split takes — "6 of 6". Can be increased (e.g. "6 of 8").
   firstSamplerTotalSteps: 6,
-  // Шаги клипа продления — undefined = «авто» (шаги исходника из его меты).
+  // Extend clip steps — undefined = "auto" (source steps from its metadata).
   extendClipSteps: undefined,
-  draftSteps: 4, // turbo-эталон; минимум 2 — максимально быстрый черновик
+  draftSteps: 4, // turbo reference; min 2 — fastest draft
   sigmaVariant: '3step',
   pass2Sampler: 'euler',
   pass1Sampler: 'euler',
   pass1Scheduler: 'simple',
   turboLoraStrength: 1.0,
-  // (правка 575) SOL-Attn включен по умолчанию; при сбросе к заводским — тоже ON.
+  // (fix 575) SOL-Attn enabled by default; on factory reset — also ON.
   sparseAttention: true,
-  sparseTau: 1.3, // (правка 466)
-  sparseStartPercent: 0.2, // (правка 466)
-  sparseEndPercent: 1.0, // (правка 466)
-  sparseMinTokens: 12288, // (правка 466)
-  sparseExtraTokens: 256, // (правка 466)
-  // (правка 575) Veda по умолчанию и при сбросе к заводским — OFF, SOL-Attn приоритетнее.
+  sparseTau: 1.3, // (fix 466)
+  sparseStartPercent: 0.2, // (fix 466)
+  sparseEndPercent: 1.0, // (fix 466)
+  sparseMinTokens: 12288, // (fix 466)
+  sparseExtraTokens: 256, // (fix 466)
+  // (fix 575) Veda default and on factory reset — OFF, SOL-Attn takes precedence.
   vedaAttention: false,
-  vedaGeneratedSparsity: '90%', // (правка 400)
-  vedaReferenceSparsity: '90%', // (правка 400)
-  vedaFullAttentionLayers: '', // (правка 400)
-  vedaFullAttentionSteps: '', // (правка 400)
-  vedaVerbose: false, // (правка 400)
+  vedaGeneratedSparsity: '90%', // (fix 400)
+  vedaReferenceSparsity: '90%', // (fix 400)
+  vedaFullAttentionLayers: '', // (fix 400)
+  vedaFullAttentionSteps: '', // (fix 400)
+  vedaVerbose: false, // (fix 400)
   lowVramAttention: true,
   chunkFeedForward: true,
   chunkFFChunks: 2,
@@ -240,14 +240,14 @@ export const DEFAULT_VIDEO_STATE: VideoGenState = {
 /* ──────────────────────────── Store ──────────────────────────── */
 
 /**
- * Освобождение blob-URL превью. URL.createObjectURL держит файл в памяти,
- * пока URL не отозван (или страница не закрыта) — без отзыва каждое
- * удаление/замена референса копило блобы на всю сессию.
- * Серверные URL (/api/…) не трогаем — отзыв применим только к blob:.
+ * Free preview blob-URL. URL.createObjectURL holds file in memory
+ * until URL is revoked (or page is closed) — without revocation each
+ * reference deletion/replacement accumulated blobs for the entire session.
+ * Server URLs (/api/…) are left alone — revocation only applies to blob:.
  */
 function revokePreview(url?: string): void {
   if (url && url.startsWith('blob:') && typeof URL !== 'undefined' && URL.revokeObjectURL) {
-    try { URL.revokeObjectURL(url) } catch { /* уже отозван */ }
+    try { URL.revokeObjectURL(url) } catch { /* already revoked */ }
   }
 }
 
@@ -284,11 +284,11 @@ export const useGenStore = create<GenStoreState>()(
       setVideoResolution: (v) => set((s) => ({ video: { ...s.video, resolution: v } })),
       setVideoLength: (v) => set((s) => ({ video: { ...s.video, videoLength: v } })),
       setVideoReferenceDetail: (v) => set((s) => ({ video: { ...s.video, referenceDetail: v } })),
-      // (правка 716) Отзыв blob-URL сравнивается по previewUrl, а НЕ по
-      // identity объекта. Раньше `slot !== s.video.startFrame` срабатывал и
-      // при эквивалентном, но новом объекте ({...slot}) — и отзывался URL,
-      // который новый слот всё ещё показывает (битое превью). В patchVideo
-      // (правка 339) это уже исправлено — здесь тоже.
+      // (fix 716) Revoke blob-URL compared by previewUrl, NOT by
+      // object identity. Previously `slot !== s.video.startFrame` triggered
+      // on equivalent new object ({...slot}) — revoking URL
+      // that the new slot still displays (broken preview). In patchVideo
+      // (fix 339) this was already fixed — here as well.
       setVideoStartFrame: (slot) =>
         set((s) => {
           if (s.video.startFrame && s.video.startFrame.previewUrl !== slot?.previewUrl) {
@@ -337,17 +337,17 @@ export const useGenStore = create<GenStoreState>()(
         }),
       patchVideo: (patch) =>
         set((s) => {
-          // Полная замена списков/слотов патчем (restore-from-meta) — отзываем
-          // blob-URL того, что не переехало в новый список
+          // Complete replacement of lists/slots by patch (restore-from-meta) — revoke
+          // blob-URLs of what was not carried over into new list
           if (patch.refs) {
             const kept = new Set(patch.refs.map((r) => r.previewUrl))
             for (const r of s.video.refs) {
               if (!kept.has(r.previewUrl)) revokePreview(r.previewUrl)
             }
           }
-          // (правка 339) Отзываем previewUrl только если у нового слота
-          // ДРУГОЙ URL — иначе patch с тем же blob отзывал превью, которое
-          // продолжает показываться новым слотом (битая картинка).
+          // (fix 339) Revoke previewUrl only if the new slot has a
+          // DIFFERENT URL — otherwise patch with the same blob revoked preview
+          // that continues to be shown by new slot (broken image).
           if (patch.startFrame !== undefined && patch.startFrame?.previewUrl !== s.video.startFrame?.previewUrl) {
             revokePreview(s.video.startFrame?.previewUrl)
           }
@@ -359,52 +359,52 @@ export const useGenStore = create<GenStoreState>()(
     }),
     {
       name: 'h3-gen-store',
-      // (правка 340) version 3: миграция draftSteps 8→4 перенесена из merge
-      // (она срабатывала при КАЖДОЙ ре-гидратации и стирала осознанный выбор
-      // пользователя «8 шагов») в разовый migrate по версии persist.
-      // (правка 449) version 6: Veda снова default OFF (отмена правки 425).
-      // version 7: новый дефолт точки сплита pass 1 = 6.
-      // (Ниже, в DEFAULT_VIDEO_STATE, всего шагов тоже 6 — «6 из 6».)
-      // version 8: extendClipSteps → «авто» (undefined). Поле раньше из UI
-      // молча терялось в хуке и НЕ влияло на генерацию; хранённое значение
-      // (обычно старый дефолт 4) вдруг стало бы работать — сбрасываем в авто,
-      // чтобы поведение не изменилось молча. Ручной выбор делается ПОСЛЕ
-      // миграции и уже сохраняется честно.
+      // (fix 340) version 3: draftSteps 8→4 migration moved from merge
+      // (it triggered on EVERY re-hydration and wiped user's deliberate
+      // choice of "8 steps") to one-time migrate by persist version.
+      // (fix 449) version 6: Veda back to default OFF (reverts fix 425).
+      // version 7: new default pass 1 split point = 6.
+      // (Below, in DEFAULT_VIDEO_STATE, total steps is also 6 — "6 of 6".)
+      // version 8: extendClipSteps → "auto" (undefined). Field previously in UI
+      // was silently lost in hook and did NOT affect generation; stored value
+      // (usually old default 4) would suddenly start working — reset to auto
+      // so behavior doesn't silently change. Manual choice is made AFTER
+      // migration and is preserved faithfully.
       version: 8,
-      // (правка 97) Новый дефолт шагов pass 1 = 4 (был 2).
-      // Сбрасываем только значение, равное старому дефолту (2), — оно означает
-      // «пользователь слайдер не трогал». Осознанный выбор (3–30) сохраняется.
+      // (fix 97) New default pass 1 steps = 4 (was 2).
+      // Reset only value equal to old default (2) — it signifies
+      // "user didn't touch slider". Deliberate choice (3–30) is preserved.
       migrate: (persisted: any, oldVersion: number) => {
         const state = (persisted ?? {}) as any
         if (oldVersion < 2 && state?.video && state.video.firstSamplerSteps === 2) {
           state.video = { ...state.video, firstSamplerSteps: 4 }
         }
-        // (правка 340) Разовая миграция старого дефолта draftSteps 8 → 4
-        // (новый эталон turbo) — только для состояний, сохранённых до v3.
+        // (fix 340) One-time migration of old default draftSteps 8 → 4
+        // (new turbo reference) — only for states saved before v3.
         if (oldVersion < 3 && state?.video && state.video.draftSteps === 8) {
           state.video = { ...state.video, draftSteps: 4 }
         }
-        // (правка 449) Veda снова default OFF (отменяет правку 425):
-        // разово гасим сохранённое «вкл»; осознанное включение делается
-        // свитчем ПОСЛЕ миграции (та же схема, что у правок 340/425).
+        // (fix 449) Veda back to default OFF (reverts fix 425):
+        // one-time reset of saved "on"; deliberate enable is done
+        // via switch AFTER migration (same pattern as in fixes 340/425).
         if (oldVersion < 6 && state?.video && state.video.vedaAttention === true) {
           state.video = { ...state.video, vedaAttention: false }
         }
-        // (правка 437) Двухпроходный extend теперь default ON: сохранённые
-        // снимки со старым дефолтом false → true (та же оговорка, что у 425:
-        // осознанный «Драфт» переживёт миграцию, только если выбрать его
-        // ПОСЛЕ неё).
+        // (fix 437) Two-pass extend is now default ON: saved
+        // snapshots with old default false → true (same caveat as in 425:
+        // deliberate "Draft" survives migration only if selected
+        // AFTER it).
         if (oldVersion < 5 && state?.video && state.video.extendTwoPass === false) {
           state.video = { ...state.video, extendTwoPass: true }
         }
-        // Новый дефолт точки сплита pass 1: 4 → 6.
-        // Сбрасываем ТОЛЬКО старое значение дефолта (4) — оно означает
-        // «пользователь ползунок не трогал». Осознанный выбор (2, 3, 5…30)
-        // сохраняется.
+        // New default pass 1 split point: 4 → 6.
+        // Reset ONLY old default value (4) — it signifies
+        // "user didn't touch slider". Deliberate choice (2, 3, 5…30)
+        // is preserved.
         if (oldVersion < 7 && state?.video && state.video.firstSamplerSteps === 4) {
           state.video = { ...state.video, firstSamplerSteps: 6 }
         }
-        // version 8: шаги клипа продления — «авто» (см. комментарий у version).
+        // version 8: extend clip steps — "auto" (see comment on version).
         if (oldVersion < 8 && state?.video && 'extendClipSteps' in state.video) {
           const { extendClipSteps: _wiped, ...rest } = state.video
           state.video = rest
@@ -426,9 +426,9 @@ export const useGenStore = create<GenStoreState>()(
           if (typeof result.video.draftSteps !== 'number' || isNaN(result.video.draftSteps)) {
             result.video.draftSteps = DEFAULT_VIDEO_STATE.draftSteps
           }
-          // (правка 340) Миграция draftSteps 8→4 перенесена в migrate
-          // (version 3) — здесь она выполнялась при каждой ре-гидратации
-          // и стирала осознанный выбор пользователя.
+          // (fix 340) draftSteps 8→4 migration moved to migrate
+          // (version 3) — here it ran on every re-hydration
+          // and erased user's deliberate choice.
           if (typeof result.video.finalResolution !== 'number' || isNaN(result.video.finalResolution)) {
             result.video.finalResolution = DEFAULT_VIDEO_STATE.finalResolution
           }
@@ -456,7 +456,7 @@ export const useGenStore = create<GenStoreState>()(
           if (typeof result.video.sparseAttention !== 'boolean') {
             result.video.sparseAttention = DEFAULT_VIDEO_STATE.sparseAttention
           }
-          // (правка 400) регидрация старых persist-снимков без veda-настроек
+          // (fix 400) rehydration of old persist snapshots without veda settings
           if (typeof result.video.vedaGeneratedSparsity !== 'string') {
             result.video.vedaGeneratedSparsity = DEFAULT_VIDEO_STATE.vedaGeneratedSparsity
           }
@@ -499,19 +499,19 @@ export const useGenStore = create<GenStoreState>()(
           if (typeof result.video.extendSourceDuration !== 'number' || isNaN(result.video.extendSourceDuration)) {
             result.video.extendSourceDuration = 0
           }
-          // (правка 363) регидрация старых persist-снимков без поля
+          // (fix 363) rehydration of old persist snapshots without field
           if (typeof result.video.extendSourceSubfolder !== 'string' && result.video.extendSourceSubfolder !== null) {
             result.video.extendSourceSubfolder = null
           }
-          // (правка 385) регидрация старых persist-снимков без поля
+          // (fix 385) rehydration of old persist snapshots without field
           if (typeof result.video.extendSourceName !== 'string' && result.video.extendSourceName !== null) {
             result.video.extendSourceName = null
           }
-          // (правка 423) регидрация старых persist-снимков без поля
+          // (fix 423) rehydration of old persist snapshots without field
           if (typeof result.video.extendTwoPass !== 'boolean') {
             result.video.extendTwoPass = DEFAULT_VIDEO_STATE.extendTwoPass
           }
-          // (правка 466) регидрация старых persist-снимков без полей Sol-Attn
+          // (fix 466) rehydration of old persist snapshots without Sol-Attn fields
           for (const k of ['sparseTau', 'sparseStartPercent', 'sparseEndPercent', 'sparseMinTokens', 'sparseExtraTokens'] as const) {
             if (typeof result.video[k] !== 'number' || isNaN(result.video[k])) {
               result.video[k] = DEFAULT_VIDEO_STATE[k]

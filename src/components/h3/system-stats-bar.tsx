@@ -184,24 +184,24 @@ export function SystemStatsBar({ collapsed }: { collapsed: boolean }) {
               const comfyOk = comfyRes.status === 'fulfilled' && comfyRes.value.ok
               const llmOk = llmRes.status === 'fulfilled' && llmRes.value.ok
               if (comfyOk && llmOk) {
-                toast.success('Кэш VRAM выгружен (ComfyUI + LLM)')
+                toast.success('VRAM cache unloaded (ComfyUI + LLM)')
               } else if (comfyOk || llmOk) {
-                toast.success('Часть выгружена из VRAM')
+                toast.success('Partially unloaded from VRAM')
               } else {
                 const errors: string[] = []
                 if (comfyRes.status === 'fulfilled' && comfyRes.value.error) errors.push(comfyRes.value.error)
                 if (llmRes.status === 'fulfilled' && llmRes.value.error) errors.push(llmRes.value.error)
-                toast.error(errors.join('; ') || 'Не удалось выгрузить кэш')
+                toast.error(errors.join('; ') || 'Failed to unload cache')
               }
             } catch {
-              toast.error('Сервисы недоступны')
+              toast.error('Services unavailable')
             }
           }}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-red-400 transition-colors"
-          title="Выгрузить модели ComfyUI и LLM из VRAM"
+          title="Unload ComfyUI and LLM models from VRAM"
         >
           <Trash2Icon className="w-3 h-3" />
-          Выгрузить кэш VRAM
+          Unload VRAM cache
         </button>
       </div>
     </div>

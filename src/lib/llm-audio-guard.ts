@@ -1,47 +1,46 @@
 /**
- * LLM audio-reliability guard — «нормальная работа с аудио-рефами без Whisper».
+ * LLM audio-reliability guard — "proper audio ref handling without Whisper".
  *
- * Проблема: маленькая локальная LLM нестабильна на «сыром» аудио. Часть
- * прогонов дегенерирует (зацикливание: артефакты thought-канала
- * `<|channel>thought\n<channel|>` × N или повтор одной фразы × N), часть —
- * «осмысленные», но взаимопротиворечивые ответы (конфабуляция, а не
- * реальное слушание).
+ * Problem: small local LLM is unstable on "raw" audio. Some runs degenerate
+ * (infinite loop: thought-channel artifacts `<|channel>thought\n<channel|>` × N
+ * or repeating a single phrase × N), some give "coherent" but contradictory
+ * responses (confabulation rather than actual listening).
  *
- * Что делаем (без установки ничего нового):
- *  1) STOP-ТОКЕНЫ — `LLM_STOP_TOKENS` передаются в каждый запрос: генерация
- *     физически обрывается, как только модель начинает вываливать
- *     thought-канал. Дегенерация больше не «доедает» max_tokens.
- *  2) ПРОБА С РЕТРАЕМ — если к сообщению приложено аудио, ПЕРЕД реальным
- *     ответом делаем короткий не-стриминговый прогон (~48 токенов) с
- *     возрастающей температурой. Первый НЕ-дегенеративный прогон побеждает —
- *     его температура используется в основном ответе (темп, на котором модель
- *     «слышит» стабильнее, в среднем выигрывает). Если все пробы дегенеративны
- *     — идём с исходной температурой (stop-токены всё равно срежут цикл).
- *  3) ЧЕСТНОСТЬ ПРОМПТА — формулировки «описывай ТОЛЬКО то, что реально
- *     слышно; если не уверен — скажи, ничего не выдумывай» (route.ts и
+ * What we do (without installing anything new):
+ *  1) STOP TOKENS — `LLM_STOP_TOKENS` are passed to every request: generation
+ *     is physically cut off as soon as the model begins dumping the
+ *     thought channel. Degeneration no longer consumes max_tokens.
+ *  2) PROBE WITH RETRY — if audio is attached to the message, BEFORE the real
+ *     answer we run a short non-streaming probe (~48 tokens) with
+ *     increasing temperature. The first NON-degenerate run wins —
+ *     its temperature is used in the main response (the temp at which the model
+ *     "hears" more stably wins on average). If all probes degenerate —
+ *     we proceed with base temperature (stop tokens will cut the loop anyway).
+ *  3) PROMPT HONESTY — phrasing "describe ONLY what is actually
+ *     audible; if unsure, say so, do not invent anything" (route.ts and
  *     assistant-stream.ts).
  *
- * Модуль ЧИСТОЙ (без импортов Next) — его можно тестировать напрямую:
- *   node src/lib/llm-audio-guard.selftest.ts  (или внешний скрипт).
+ * PURE module (no Next imports) — can be tested directly:
+ *   node src/lib/llm-audio-guard.selftest.ts  (or external script).
  *
- * (правка 135) тип SamplingParams импортируется из ./llm-sampling
- * (тоже чистый модуль, без Next) — один источник правды для формы
- * сэмплинга: и основной ответ, и аудио-проба передают в llm_server
- * одинаковый набор top_p / top_k / min_p / presence_penalty /
- * frequency_penalty / repeat_penalty.
+ * (fix 135) SamplingParams type is imported from ./llm-sampling
+ * (also a pure module, no Next) — single source of truth for sampling
+ * parameters: both main response and audio probe pass identical sets of
+ * top_p / top_k / min_p / presence_penalty / frequency_penalty / repeat_penalty
+ * to llm_server.
  */
 
 import type { SamplingParams } from './llm-sampling'
 
-/** Артефакты thought-канала шаблона чата, которыми дегенерирует модель. */
+/** Chat template thought-channel artifacts produced during model degeneration. */
 export const LLM_STOP_TOKENS = ['<|channel>', '<channel|>']
 
 /**
- * Детектор дегенеративного ответа.
- *  • пустой/короткий (< 12 символов) — не ответ;
- *  • любой thought-канал (`<|channel` / `channel|>`) — артефакт шаблона;
- *  • зацикливание: одно и то же окно из 8/16/32 символов встречается ≥ 5 раз
- *    (покрывает «Yes, I'm on the train.» × N и подобные повторы).
+ * Degenerate response detector.
+ *  • empty/short (< 12 characters) — not an answer;
+ *  • any thought channel (`<|channel` / `channel|>`) — template artifact;
+ *  • looping: identical window of 8/16/32 chars repeated ≥ 5 times
+ *    (covers "Yes, I'm on the train." × N and similar repetitions).
  */
 export function isDegenerateAnswer(text: string | undefined | null): boolean {
   const t = (text ?? '').trim()
@@ -68,35 +67,35 @@ export function isDegenerateAnswer(text: string | undefined | null): boolean {
 }
 
 export interface ProbeResult {
-  /** Температура, которую надо использовать в основном (стриминговом) ответе. */
+  /** Temperature to use in main (streaming) response. */
   temperature: number
-  /** Сколько проб было сделано (1..3). */
+  /** Number of probe attempts made (1..3). */
   attempts: number
-  /** Текст последней пробы (для отладки/логирования). */
+  /** Last probe text (for debugging/logging). */
   lastProbeText: string | null
-  /** Человеческое описание исхода. */
+  /** Human-readable outcome description. */
   note: string
 }
 
 const PROBE_MAX_TOKENS = 48
 const PROBE_TIMEOUT_MS = 90_000
-/** Шаги температуры: base, base+0.1, base+0.2 (кап — 1.0). */
+/** Temperature steps: base, base+0.1, base+0.2 (capped at 1.0). */
 const PROBE_STEPS = [0, 0.1, 0.2]
 
 /**
- * Пробный прогон LLM (не-стриминг, ~48 токенов) с ретраем по температуре.
- * Возвращает температуру первого не-дегенеративного прогона (или base,
- * если все пробы дегенеративны — тогда stop-токены спасают основной ответ).
+ * Trial LLM run (non-streaming, ~48 tokens) with temperature retry.
+ * Returns temperature of the first non-degenerate run (or base
+ * if all probes degenerate — then stop tokens protect the main answer).
  *
- * Не бросает исключений: любой сбой (сеть, таймаут, 5xx) — просто «идём
- * дальше с исходной температурой», ассистент не должен падать из-за пробы.
+ * Never throws: any error (network, timeout, 5xx) falls back to "proceed
+ * with base temperature", the assistant must not crash due to probing.
  */
 export async function probeAudioAnswer(opts: {
   baseUrl: string
   messages: Array<{ role: string; content: unknown }>
   baseTemperature: number
   maxTokens?: number
-  /** (правка 135) набор сэмплинга — передаётся в каждую пробу, как в основной ответ. */
+  /** (fix 135) sampling params — passed to each probe matching the main answer. */
   sampling?: SamplingParams
   fetchImpl?: typeof fetch
   log?: (msg: string) => void
@@ -119,11 +118,11 @@ export async function probeAudioAnswer(opts: {
         body: JSON.stringify({
           messages,
           max_tokens: opts.maxTokens ?? PROBE_MAX_TOKENS,
-          // (правка 135) — та же форма сэмплинга, что и в основном ответе,
-          // только температура меняется по шагам PROBE_STEPS.
-          // (правка 421) temperature ПОСЛЕ spread: SamplingParams включает
-          // своё temperature, и spread затирал шаговую temp — все пробы шли
-          // на одной температуре, лестница PROBE_STEPS не работала.
+          // (fix 135) — same sampling shape as main answer,
+          // with temperature varying across PROBE_STEPS.
+          // (fix 421) temperature AFTER spread: SamplingParams includes
+          // its own temperature, and spread overwrote stepped temp — causing all
+          // probes to run at the same temperature and breaking PROBE_STEPS.
           ...(sampling ?? {}),
           temperature: temp,
           stream: false,
@@ -132,7 +131,7 @@ export async function probeAudioAnswer(opts: {
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       })
       if (!res.ok) {
-        log(`probe temp=${temp}: HTTP ${res.status} — следующая проба`)
+        log(`probe temp=${temp}: HTTP ${res.status} — trying next probe`)
         continue
       }
       const data = (await res.json().catch(() => null)) as {
@@ -141,29 +140,29 @@ export async function probeAudioAnswer(opts: {
         error?: string
       } | null
       if (!data?.ok) {
-        log(`probe temp=${temp}: ${data?.error ?? 'ответ без ok'} — следующая проба`)
+        log(`probe temp=${temp}: ${data?.error ?? 'response not ok'} — trying next probe`)
         continue
       }
       const text = (data.text ?? '').trim()
       lastText = text
       if (!isDegenerateAnswer(text)) {
-        log(`probe temp=${temp}: OK (${text.length} симв.)`)
+        log(`probe temp=${temp}: OK (${text.length} chars)`)
         return {
           temperature: temp,
           attempts: i + 1,
           lastProbeText: text,
-          note: `audio-probe passed (temp ${temp}, попытка ${i + 1})`,
+          note: `audio-probe passed (temp ${temp}, attempt ${i + 1})`,
         }
       }
-      log(`probe temp=${temp}: ДЕГЕНЕРАЦИЯ (${text.length} симв.) — следующая проба`)
+      log(`probe temp=${temp}: DEGENERATION (${text.length} chars) — trying next probe`)
     } catch (e) {
-      log(`probe temp=${temp}: ${e instanceof Error ? e.message : String(e)} — следующая проба`)
+      log(`probe temp=${temp}: ${e instanceof Error ? e.message : String(e)} — trying next probe`)
     }
   }
   return {
     temperature: baseTemperature,
     attempts: temps.length,
     lastProbeText: lastText,
-    note: 'все аудио-пробы дегенеративны — идём с исходной температурой (stop-токены срежут цикл в основном ответе)',
+    note: 'all audio probes degenerate — proceeding with base temperature (stop tokens will cut loop in main answer)',
   }
 }

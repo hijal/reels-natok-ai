@@ -1,464 +1,389 @@
 # MiniMax H3 Studio 7
 
-Локальный веб-интерфейс для генерации кинематографичных видео со звуком на базе модели **MiniMax H3**. Работает полностью offline — нужен только NVIDIA GPU.
+Local web interface for generating cinematic videos with synchronized audio powered by the **MiniMax H3** model. Operates completely offline — requires only an NVIDIA GPU.
 
 | | |
 | --- | --- |
-| **Версия** | 7.0.0 |
-| **Платформа** | Windows 10/11 x64 |
-| **Режим работы** | полностью локальный, без облака и телеметрии |
-| **Требования** | NVIDIA GPU 8+ ГБ VRAM (12+ рекомендуется), драйвер CUDA 12.x |
-| **Запуск** | `start.bat` — один файл, никаких установок |
+| **Version** | 7.0.0 |
+| **Platform** | Windows 10/11 x64 |
+| **Operation Mode** | Fully local, no cloud, no telemetry |
+| **Requirements** | NVIDIA GPU with 8+ GB VRAM (12+ GB recommended), CUDA 12.x driver |
+| **Launch** | `start.bat` — single file entry point, zero installation |
 
-> **Статус:** проект опубликован. Установка из исходников — через `install.bat`,
-> проверка локальной сборки — командой `npm run release`
-> (clean → typecheck → build → prune → prepare → verify). Подробности —
-> в разделе [Сборка релиза](#сборка-релиза).
+> **Status:** Project released. Installation from source — via `install.bat`,
+> verification of local build — via `npm run release`
+> (clean → typecheck → build → prune → prepare → verify). Details in
+> the [Release Build](#release-build) section.
 
-## Скриншоты
+## Screenshots
 
-| Главное окно | Генерация по референсу | Результат |
+| Main Window | Reference Generation | Result Lightbox |
 | :---: | :---: | :---: |
-| [![Главное окно](screenshots/main-window.jpg)](screenshots/main-window.jpg) | [![Генерация по референсу](screenshots/reference-generation.jpg)](screenshots/reference-generation.jpg) | [![Результат](screenshots/result-lightbox.jpg)](screenshots/result-lightbox.jpg) |
+| [![Main Window](screenshots/main-window.jpg)](screenshots/main-window.jpg) | [![Reference Generation](screenshots/reference-generation.jpg)](screenshots/reference-generation.jpg) | [![Result Lightbox](screenshots/result-lightbox.jpg)](screenshots/result-lightbox.jpg) |
 
-## Установка на новую машину
+## Installation on a New Machine
 
-Если проект **склонирован с GitHub** (то есть без `node_modules`,
-`ComfyUI-Easy-Install`, `runtime` и других тяжёлых папок — они не хранятся в
-репозитории), всё окружение ставится одним файлом:
+If the project was **cloned from GitHub** (i.e. without `node_modules`,
+`ComfyUI-Easy-Install`, `runtime`, and other heavy folders — which are omitted from
+the repository), the entire environment is installed with a single file:
 
 ```
 install.bat
 ```
 
-Скрипт скачает и настроит:
+The installer script downloads and configures:
 
-| Компонент | Версия |
+| Component | Version |
 | --- | --- |
-| ComfyUI | сборка `5f0c4e1` (25.08.2026) + 4 патча проекта |
+| ComfyUI | build `5f0c4e1` (25.08.2026) + 4 project patches |
 | Python | 3.12.10 (embedded) |
 | torch / torchvision / torchaudio | 2.11.0+cu130 / 0.26.0 / 2.11.0 |
-| Python-пакеты | 288, точные версии рабочего окружения |
-| Кастомные ноды | 22 по зафиксированным коммитам + 4 собственные |
-| Node.js | 22.20.0 (портативный, если в системе нет 18+) |
-| Electron | 44.9.0 (окно приложения, а не браузер) |
+| Python packages | 288 pinned working environment versions |
+| Custom nodes | 22 pinned commit nodes + 4 internal custom nodes |
+| Node.js | 22.20.0 (portable, if system lacks 18+) |
+| Electron | 44.9.0 (native desktop window, not a browser) |
 
-Скачивается ~9 ГБ, установка занимает 20–60 минут в зависимости от скорости
-интернета. Нужно **25 ГБ** свободного места.
+Downloads ~9 GB, installation takes 20–60 minutes depending on internet connection speed.
+Requires **25 GB** of free disk space.
 
-**Модели не скачиваются** — после установки запустите `start.bat` и загрузите
-их через UI: Настройки → Модели.
+**Model weights are not downloaded automatically** — after installation launch `start.bat`
+and download them via UI: Settings → Models.
 
-> **Что не восстанавливается.** Папки `upscale/bin` (DLSS 5, ~1.1 ГБ) и
-> `stt` (whisper, ~168 МБ) не входят в репозиторий. Без них студия работает,
-> но вкладки «Upscale» и «Голос» недоступны. Чтобы они заработали, скопируйте
-> эти папки с рабочей машины рядом с `start.bat`.
+> **What is not restored:** The folders `upscale/bin` (DLSS 5, ~1.1 GB) and
+> `stt` (whisper, ~168 MB) are not part of the git repo. Without them the studio functions,
+> but the "Upscale" and "Voice" tabs will be unavailable. To enable them, copy
+> these folders from a working machine next to `start.bat`.
 
-Параметры установщика (`-Force`, `-SkipApp`, `-SkipComfy`, `-KeepCache`) и
-разбор ошибок — в [install/README.md](install/README.md).
+Installer flags (`-Force`, `-SkipApp`, `-SkipComfy`, `-KeepCache`) and
+troubleshooting details are available in [install/README.md](install/README.md).
 
-## Возможности
+## Features
 
-- **Генерация видео + аудио** — двухпроходная (low-res → latent upscale → high-res)
-- **Референсы** — изображения (до 9), видео (до 3), аудио (до 3, с обрезкой по секундам)
-- **Режим Draft** — быстрая однопроходная генерация; в галерее такие видео помечены красным бейджем «Draft»
-- **LLM-ассистент** — по умолчанию **Qwen3.5 9B** (Q4_K_M, ~5.7 ГБ, со зрением); необязательный **Bonsai 2 27B** скачивается по запросу в `Bonsai_2_27B/`. Бэкенды `standard | bonsai | custom` (свой .gguf), в `[llm] model` маркеры `bonsai` / `bonsai_light` (лёгкий квант PTQ1_0) — помощь с промптами, видение референсов
-- **Кастомные LoRAs** — добавление, удаление, триггер-ворды; встроенная Turbo LoRA включена по умолчанию во всех режимах (кроме «Кадров» с аудио, где пропускается автоматически)
-- **Свободное разрешение** — от 0.2 до 3.0 МП, любой aspect ratio
-- **Очередь генераций** — параллельные задачи, авто-очистка
-- **Видеоплеер** — встроенный, с метаданными
-- **Звуковой сигнал** — уведомление при завершении генерации
-- **Голосовой ввод** — дикт (whisper, CPU): поле промпта, чат ассистента, редактор промптов (модели в `stt/models`, настройки — вкладка «Голос»)
-- **Upscale (DLSS 5)** — встроенный DLSS 5 Visual Enhancer: Neural Rendering (шум/тон/структура), RTX VSR (апскейл 1–4×, опц. HDR) — нативная вкладка, без Gradio/iframe
-- **Продление** — продолжение готового видео цепочкой клипов (вкладка «Продление»).
-  Стык якорится тремя механизмами: хвост предыдущего
-  клипа идёт в conditioning нативным keyframe-каналом H3, зона перекрытия
-  жёстко фиксируется модель-обёрткой (перегенерация невозможна), а последний
-  кадр предыдущего клипа подаётся картинкой-референсом с фразой
-  непрерывности. Окно контекста 2 с, перекрытие сегментов 56 кадров. Шаги
-  клипа — «авто» (из метаданных исходника), можно задать вручную
-- **Refine** — повторная генерация с теми же референсами, но в большем разрешении (720p–2160p)
-- **Tile Upscale** — чанковый апскейл: экономия VRAM, 720p–2160p, защита от выбора разрешения меньше исходника
-- **FPS** — увеличение частоты кадров: RIFE VFI и FILM VFI (×2–×4), плавность движения на слабых GPU
-- **Face Refine** — перерисовка мелких лиц в готовом ролике: нода находит лицо
-  покадрово, перегенерирует его крупно и вклеивает обратно только область лица.
-  Выбор субъекта — **кликом по лицу в кадре исходника**, правилом (самое
-  крупное/левое/центр…) или **по фото конкретного человека** (сопоставление
-  лиц, insightface). Живое превью генерации; на кадрах без лица работает
-  детектор человека («далёкие планы»). Результат сохраняет AV-латент для
-  lossless-рефайна
-- **ControlNet (движение)** — генерация видео по карте движения из исходника
-  (depth-препроцессор), для управления траекторией и хореографией сцены
-- **Портативность** — один bat-файл, никаких установок
+- **Video + Audio Generation** — two-pass workflow (low-res → latent upscale → high-res).
+- **References** — images (up to 9), videos (up to 3), audio (up to 3, with millisecond trimming).
+- **Draft Mode** — fast single-pass generation; draft videos are marked with a red "Draft" badge in the gallery.
+- **LLM Assistant** — default **Qwen3.5 9B** (Q4_K_M, ~5.7 GB, vision-enabled); optional **Bonsai 2 27B** downloaded on-demand into `Bonsai_2_27B/`. Backends `standard | bonsai | custom` (custom .gguf), in `[llm] model` markers `bonsai` / `bonsai_light` (PTQ1_0 light quantization) — prompt engineering assistance, reference analysis.
+- **Custom LoRAs** — add, remove, and trigger words; integrated Turbo LoRA enabled by default across all modes (except "Frames" mode with audio where skipped automatically).
+- **Flexible Resolution** — from 0.2 to 3.0 MP, arbitrary aspect ratio.
+- **Generation Queue** — parallel jobs, auto-cleanup.
+- **Video Player** — built-in lightbox player with rich metadata inspection.
+- **Sound Alerts** — audible notification upon generation finish.
+- **Voice Input** — voice dictation (whisper, CPU): prompt textarea, assistant chat, prompt editor (models in `stt/models`, settings in "Voice" tab).
+- **Upscale (DLSS 5)** — integrated DLSS 5 Visual Enhancer: Neural Rendering (noise/tone/structure), RTX VSR (1–4× upscale, optional HDR) — native UI tab without Gradio/iframes.
+- **Extension** — seamlessly extend finished videos with chained clips ("Extend" tab).
+  The seam is anchored by three mechanisms: the tail of previous clip feeds
+  into conditioning via native H3 keyframe channel, the overlap zone is locked
+  rigidly via model wrapper (eliminating ghosting and drift), and the last frame
+  of previous clip acts as an image reference with continuity phrasing.
+  Context window 2s, segment overlap 56 frames. Clip steps "auto" (from source metadata)
+  or manually configurable.
+- **Refine** — re-render with identical references at higher resolution (720p–2160p) from AV latents.
+- **Tile Upscale** — chunked tiled upscaling: saves VRAM, 720p–2160p, guards against downscaling.
+- **FPS** — frame rate multiplication: RIFE VFI and FILM VFI (×2–×4), smooth motion on budget GPUs.
+- **Face Refine** — detail enhancement for small faces in completed videos: frame-by-frame face detection,
+  high-res re-generation, and localized blending.
+  Subject selection — **by clicking on face in source frame preview**, rule-based (largest/leftmost/center…),
+  or **by reference photo of a person** (face matching, insightface). Live preview;
+  falls back to human detector on long shots without clear face.
+- **ControlNet (Motion)** — video generation guided by motion depth maps from source clip.
+- **Portability** — single bat file, zero installation steps.
 
-## Структура проекта
+## Project Structure
 
 ```
 Minimax_Studio_V7/
-├── start.bat                    ← запуск (единственная точка входа)
-├── start_hidden.vbs             ← скрытый запуск (правка 570: консоль не видна в таскбаре)
-├── install.bat                  ← установка окружения на чистой машине
-├── install/                     ← установщик: install.ps1 + lock-файлы версий + comfy-patches/
-├── README.md                    ← этот файл
-├── CHANGELOG.md                 ← история изменений по версиям
+├── start.bat                    ← launch script (main entry point)
+├── start_hidden.vbs             ← hidden launcher (console hidden from taskbar)
+├── install.bat                  ← environment installer for clean machine
+├── install/                     ← installer files: install.ps1 + lockfiles + comfy-patches/
+├── README.md                    ← this documentation file
+├── CHANGELOG.md                 ← version change history
 ├── server.js                    ← Next.js production server
-├── package.json                 ← зависимости и скрипты
-├── next.config.ts               ← конфигурация Next.js
+├── package.json                 ← dependencies and scripts
+├── next.config.ts               ← Next.js configuration
 ├── tsconfig.json                ← TypeScript (strict + noUnusedLocals/Parameters)
 ├── postcss.config.mjs           ← Tailwind CSS
-├── .env                         ← переменные окружения (COMFY_URL)
+├── .env                         ← environment variables (COMFY_URL)
 │
 ├── config/
-│   └── config.ini               ← настройки приложения (VRAM, LLM, звук)
-├── components.json              ← shadcn/ui
-├── data/                        ← рабочие данные студии (создаются при работе,
-│   │                              в репозиторий не входят)
-│   ├── loras.json               ← список LoRA (турбо + кастомные)
-│   └── assistant-chats.json     ← история чатов LLM-ассистента
-├── prompts/                     ← справочные копии системных промптов (см. prompts/README.md)
+│   └── config.ini               ← application configuration (VRAM, LLM, sound)
+├── components.json              ← shadcn/ui configuration
+├── data/                        ← working data (generated at runtime, not in git)
+│   ├── loras.json               ← LoRA registry (turbo + custom)
+│   └── assistant-chats.json     ← LLM assistant chat history
+├── prompts/                     ← reference copies of system prompts (see prompts/README.md)
 ├── scripts/
-│   ├── build.mjs                ← production build с хипом Node 8 ГБ
-│   ├── prune-build.mjs          ← ужатие сборки: кэш webpack + манифесты .nft.json
-│   ├── clean.mjs                ← очистка артефактов сборки и мусора
-│   ├── release.mjs              ← полный цикл релиза: clean → typecheck → build → prune → prepare → verify
-│   ├── prepare-electron.mjs     ← копия electron.exe под именем MinimaxH3Studio.exe
-│   ├── launch-electron.mjs      ← запуск окна (с правильным именем процесса)
-│   ├── pe-version.mjs           ← чтение/сборка ресурса версии PE
-│   ├── set-version-resource.ps1 ← вписывание ресурса версии (Win32 API)
-│   ├── make-icons.mjs           ← перегенерация иконок
-│   └── start_comfy.bat          ← запуск ComfyUI backend
-├── Bonsai_2_27B/                ← portable llama.cpp (форк PrismML) + тернарная
-│   │                              модель ассистента Bonsai 2 27B (llama-server);
-│   │                              создаётся автодокачкой при выборе Bonsai
-├── upscale/                     ← DLSS 5 Visual Enhancer (вкладка «Upscale»)
-│   ├── bridge.py                ← headless JSON-мост (stdlib, embedded Python)
-│   ├── src/                     ← пайплайны: NR / VSR / FI
+│   ├── build.mjs                ← production build with 8 GB Node heap
+│   ├── prune-build.mjs          ← build compression: webpack cache + .nft.json manifests
+│   ├── clean.mjs                ← build artifact and cache cleanup
+│   ├── release.mjs              ← full release cycle: clean → typecheck → build → prune → prepare → verify
+│   ├── prepare-electron.mjs     ← duplicate electron.exe under MinimaxH3Studio.exe
+│   ├── launch-electron.mjs      ← window launcher (with correct process name)
+│   ├── pe-version.mjs           ← PE version resource reader/builder
+│   ├── set-version-resource.ps1 ← inject version resources (Win32 API)
+│   ├── make-icons.mjs           ← icon generator
+│   └── start_comfy.bat          ← ComfyUI backend launcher
+├── Bonsai_2_27B/                ← portable llama.cpp + ternary Bonsai 2 27B model
+├── upscale/                     ← DLSS 5 Visual Enhancer ("Upscale" tab)
+│   ├── bridge.py                ← headless JSON bridge (stdlib, embedded Python)
+│   ├── src/                     ← pipelines: NR / VSR / FI
 │   └── bin/                     ← embedded Python 3.13 + ffmpeg (amd64)
-├── stt/                         ← встроенный whisper STT (вкладка «Голос») — рантайм
-├── tools/                       ← llm_server.py / stt_server.py (Python-обёртки)
-│   └── ck_pkg/                  ← офлайн-установщик comfy-kitchen (для --use-ck-attention;
-│                                  сам пакет уже установлен в python_embeded)
+├── stt/                         ← built-in whisper STT ("Voice" tab) runtime
+├── tools/                       ← llm_server.py / stt_server.py (Python bridges)
+│   └── ck_pkg/                  ← offline comfy-kitchen installer
 │
-├── src/                         ← исходный код (Next.js App Router)
-│   ├── app/                     ← страницы и API-маршруты
-│   ├── components/h3/           ← интерфейс студии
-│   ├── components/ui/           ← shadcn/ui
-│   ├── lib/                     ← бизнес-логика и состояние (zustand)
-│   └── hooks/                   ← React-хуки
-├── electron/                    ← окно приложения (main.js + preload.js + иконки)
-├── public/                      ← статические файлы (логотип, splash-videos/)
-├── .next/                       ← production build (создаётся `npm run build`)
+├── src/                         ← source code (Next.js App Router)
+│   ├── app/                     ← pages and API routes
+│   ├── components/h3/           ← studio user interface components
+│   ├── components/ui/           ← shadcn/ui primitives
+│   ├── lib/                     ← business logic and stores (zustand)
+│   └── hooks/                   ← React hooks
+├── electron/                    ← desktop app shell (main.js + preload.js + icons)
+├── public/                      ← static assets (logo, splash videos)
+├── .next/                       ← production build (created by `npm run build`)
 ├── runtime/
-│   └── node.exe                 ← bundled Node.js (если нет в PATH)
-├── node_modules/                ← npm зависимости
-└── ComfyUI-Easy-Install/        ← portable ComfyUI + модели
+│   └── node.exe                 ← bundled Node.js (if missing from PATH)
+├── node_modules/                ← npm packages
+└── ComfyUI-Easy-Install/        ← portable ComfyUI + models
 ```
 
-## Требования
+## Requirements
 
-| Компонент | Версия                                         |
-| --------- | ---------------------------------------------- |
-| ОС        | Windows 10/11 x64                              |
-| GPU       | NVIDIA, 12+ ГБ VRAM (рекомендуется), мин. 8 ГБ |
-| Драйвер   | CUDA 12.x                                      |
-| Node.js   | 18+ LTS (или bundled `runtime\node.exe`)       |
-| ComfyUI   | Portable, папка `ComfyUI-Easy-Install`         |
+| Component | Version |
+| --------- | ------- |
+| OS | Windows 10/11 x64 |
+| GPU | NVIDIA, 12+ GB VRAM recommended (min 8 GB) |
+| Driver | CUDA 12.x |
+| Node.js | 18+ LTS (or bundled `runtime\node.exe`) |
+| ComfyUI | Portable `ComfyUI-Easy-Install` directory |
 
-## Запуск
+## Launching
 
 ```
 start.bat
 ```
 
-Скрипт сразу перезапускает себя в **свёрнутом окне** (консоль не мешает) и автоматически:
+The script automatically relaunches itself in a **minimized or hidden window** and performs:
 
-1. Находит Node.js (PATH → `runtime\node.exe` → ошибка)
-2. Проверяет наличие `ComfyUI-Easy-Install/`
-3. Устанавливает `node_modules` если нет
-4. Собирает `.next` если нет
-5. Запускает студию в **собственном окне приложения (Electron)**: без адресной строки и табов, своя иконка и имя в таскбаре. Electron сам поднимает Web UI (:3000) и ComfyUI (:8188, флаги VRAM из `config.ini`), открывает окно с экраном-заставкой `/splash` — она сама ждёт готовности бэкенда и входит в приложение. **Закрытие окна останавливает всё** (веб-сервер, ComfyUI и их дочерние процессы); свёрнутая консоль — лог.
-6. Если Electron недоступен (например, `node_modules` скопирован без него) — фолбэк на прежний режим: сервер в фоне + обычная вкладка браузера.
+1. Resolves Node.js (PATH → `runtime\node.exe` → error).
+2. Verifies presence of `ComfyUI-Easy-Install/`.
+3. Installs `node_modules` if missing.
+4. Builds `.next` production bundles if missing.
+5. Launches studio in its **native desktop app window (Electron)**: no address bar or browser tabs, custom icon and window title in taskbar. Electron spawns Web UI (:3000) and ComfyUI (:8188 with VRAM flags from `config.ini`), loads `/splash` screen, and enters studio when backend is ready. **Closing the window stops all processes** (web server, ComfyUI, and their child processes).
+6. If Electron is unavailable — graceful fallback to browser mode: server runs in background, opens default browser.
 
-**Стоп:** закрыть окно приложения (или консоль — она держит фоновые процессы).
+**To stop:** Close the application window (or console window).
 
-### Имя процесса в диспетчере задач
+### Process Name in Task Manager
 
-Окно студии в диспетчере задач называется **MinimaxH3Studio**, а не «electron»:
-так его не перепутать с другими Electron-приложениями, если потребуется
-прибить процесс.
+The studio process appears in Windows Task Manager as **MinimaxH3Studio** rather than generic "electron", making it easy to identify.
 
-Механизм: `scripts/prepare-electron.mjs` создаёт рядом с `electron.exe`
-копию `MinimaxH3Studio.exe` (в той же папке `dist`, поэтому Electron находит
-свои ресурсы как обычно) и вписывает в неё ресурс версии — «Свойства
-файла» и колонка «Имя продукта» тоже показывают студию, а не
-`Electron / GitHub, Inc.`. Копия занимает ~236 МБ; штатный `electron.exe`
-остаётся нетронутым, поэтому `npm install` и `npm run desktop` работают
-как прежде.
+Mechanism: `scripts/prepare-electron.mjs` generates a `MinimaxH3Studio.exe` copy alongside `electron.exe` and embeds Win32 version resources so file properties and Task Manager columns display the studio name.
 
-Копия создаётся автоматически при `start.bat` (и при `npm run release`);
-вручную — `npm run prepare:electron`. Если копии нет, приложение
-запускается обычным `electron.exe` — просто в диспетчере будет «electron».
+## Configuration
 
-## Настройки
+All settings are editable via Web UI (gear icon) and in `config/config.ini`:
 
-Все настройки — в Web UI (иконка шестерёнки) и в `config/config.ini`:
+| Parameter | Description |
+| --------- | ----------- |
+| `reserve_gb` | VRAM reserved for OS / display (GB) |
+| `dynamic_vram` | ComfyUI dynamic VRAM management (1/0) |
+| `vram_headroom` | Extra free VRAM margin for DynamicVRAM (0–8 GB, default 2; 0 = off) |
+| `async_offload` | Async model offloading (0 = synchronous/stable; 1 = faster, may crash on RTX 50xx) |
+| `comfy.turbo_lora` | Reserved (Turbo LoRA toggled directly from UI) |
+| `comfy.diffusion_model` | Custom base diffusion model (empty = default) |
+| `llm.device` | `auto` / `gpu` / `cpu` — where LLM executes |
+| `llm.context_size` | LLM context window size (tokens, default 25600) |
+| `llm.max_output_tokens` | Max generation length |
+| `llm.model` | LLM backend: empty/`bonsai` = Bonsai PQ2_0, `bonsai_light` = Bonsai PTQ1_0, filename = standard backend |
+| `llm.temperature` / `llm.top_p` / `llm.min_p` / `llm.top_k` | Sampling parameters (active when `sampling_override=1`) |
+| `llm.repeat_penalty` / `llm.frequency_penalty` / `llm.presence_penalty` | Sampling penalties |
+| `llm.sampling_override` | 1 = apply custom sampling config over model defaults |
+| `llm.kv_cache` | KV cache type for llama.cpp: `off` / `q8_0` / `q5_1` / `q4_0` |
+| `llm.video_vision` | Assistant video reference perception (1/0; default 1 — cached digest) |
+| `llm.custom_model_path` | Custom .gguf (absolute path) — `custom` backend, overrides `llm.model` |
+| `llm.custom_mmproj_path` | Custom mmproj for custom vision model |
+| `ui.sound_on` | Sound alert on completion (1/0) |
+| `stt.enabled` | Voice dictation toggle (1/0) |
+| `stt.model` | STT model filename (empty = auto) |
+| `stt.language` | Recognition language code: `en` / `auto` |
+| `stt.threads` | CPU threads (0 = auto) |
+| `upscale.enabled` | Upscale tab enabled (1/0) |
+| `upscale.port` | DLSS bridge port (default 7890) |
+| `models.extra_paths` | JSON array `[{path, category}]` of extra search paths for models |
 
-| Параметр                | Описание                                        |
-| ----------------------- | ----------------------------------------------- |
-| `reserve_gb`            | VRAM, зарезервированная для системы (ГБ)        |
-| `dynamic_vram`          | Динамическое управление VRAM ComfyUI            |
-| `vram_headroom`         | Доп. запас свободной VRAM для DynamicVRAM (0–8 ГБ, по умолчанию 2; 0 = выкл) |
-| `async_offload`         | Асинхронный офлоад загрузки моделей (0 = синхронно, стабильно; 1 = быстрее, на RTX 50xx может падать) |
-| `comfy.turbo_lora`      | Зарезервировано (в коде не читается; Turbo LoRA управляется из UI) |
-| `comfy.diffusion_model` | Альтернативная базовая модель (пусто = default) |
-| `llm.device`            | `auto` / `gpu` / `cpu` — где считается LLM      |
-| `llm.context_size`      | Контекстное окно LLM (токены, default 25600)    |
-| `llm.max_output_tokens` | Макс. длина ответа LLM                          |
-| `llm.model`             | Бэкенд LLM: пусто/`bonsai` = Bonsai PQ2_0, `bonsai_light` = Bonsai PTQ1_0, имя файла = standard-бэкенд |
-| `llm.temperature` / `llm.top_p` / `llm.min_p` / `llm.top_k` | Сэмплинг LLM (действуют при `sampling_override=1`) |
-| `llm.repeat_penalty` / `llm.frequency_penalty` / `llm.presence_penalty` | Штрафы сэмплинга LLM |
-| `llm.sampling_override` | 1 = применять параметры сэмплинга из config поверх дефолтов |
-| `llm.kv_cache`          | Тип KV-кэша llama.cpp: `off` / `q8_0` / `q5_1` / `q4_0` |
-| `llm.video_vision`      | Видение видео-рефов ассистентом (1/0; по умолчанию 1 — сжатый digest с кэшем) |
-| `llm.custom_model_path` | Свой .gguf (абсолютный путь) — бэкенд `custom`, приоритетнее `llm.model` |
-| `llm.custom_mmproj_path` | Свой mmproj для custom-модели (зрение)         |
-| `ui.sound_on`           | Звук при завершении генерации (1/0)             |
-| `stt.enabled`           | Голосовой ввод вкл/выкл (1/0)                   |
-| `stt.model`              | Модель STT (пусто = авто, первая найденная)     |
-| `stt.language`           | Язык распознавания: `ru` / `en` / `auto`        |
-| `stt.threads`            | Потоки CPU (0 = авто)                           |
-| `upscale.enabled`         | Вкладка Upscale вкл/выкл (1/0)                  |
-| `upscale.port`            | Порт DLSS-моста (по умолчанию 7890)             |
-| `models.extra_paths`      | JSON-массив `[{path, category}]` дополнительных путей поиска моделей |
+## Models
 
-## Модели
+All models are downloaded through Web UI → Settings → Models. Registry defined in `src/lib/models-config.ts`.
+Main weights reside in `ComfyUI-Easy-Install/ComfyUI/models/`:
 
-Все модели скачиваются из Web UI → Настройки → Модели. Реестр — `src/lib/models-config.ts`;
-размеры в нём записаны **точным числом байт** (= `content-length` на сервере), поэтому
-проверка «файл скачан целиком» не срабатывает ложно.
+| Type | File | Size |
+| ---- | ---- | ---- |
+| Diffusion | `diffusion_models/minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors` | ~22.9 GB |
+| Text Encoder | `text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` | ~15.7 GB |
+| VAE (video) | `vae/minimax_h3_video_vae_int8_convrot.safetensors` | ~2.8 GB |
+| VAE (audio) | `vae/minimax_h3_audio_vae_fp32.safetensors` | ~0.6 GB |
+| Turbo LoRA | `loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` (mandatory; default enabled) | ~1.8 GB |
+| Latent Upscaler | `latent_upscale_models/minimax_h3_latent_upscaler_3d_fp16.safetensors` | ~691 MB |
+| TAE Preview | `vae_approx/taeh3.safetensors` | ~9.8 MB |
+| Veda (optional) | `veda/minimax_h3_t2va_veda_8nfe_600step_preview_fp8.safetensors` | ~275 MB |
 
-Основные файлы — в `ComfyUI-Easy-Install/ComfyUI/models/`:
+LLM Assistant options:
 
-| Тип             | Файл                                                                                         | Размер   |
-| --------------- | -------------------------------------------------------------------------------------------- | -------- |
-| Diffusion       | `diffusion_models/minimax_h3_fastvideo_vsa_datafree_1300step_4step_int8_convrot.safetensors`               | ~22.9 ГБ |
-| Text Encoder    | `text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`                                 | ~15.7 ГБ |
-| VAE (video)     | `vae/minimax_h3_video_vae_int8_convrot.safetensors`                                        | ~2.8 ГБ  |
-| VAE (audio)     | `vae/minimax_h3_audio_vae_fp32.safetensors`                                                  | ~0.6 ГБ  |
-| Turbo LoRA      | `loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` (обязательна; включена по умолчанию, кроме «Кадров» с аудио) | ~1.8 ГБ  |
-| Latent Upscaler | `latent_upscale_models/minimax_h3_latent_upscaler_3d_fp16.safetensors`                       | ~691 МБ  |
-| TAE Preview     | `vae_approx/taeh3.safetensors`                                                               | ~9.8 МБ  |
-| Veda (опциональна) | `veda/minimax_h3_t2va_veda_8nfe_600step_preview_fp8.safetensors`                          | ~275 МБ  |
+| Backend | Model File | Size |
+| ------- | ---------- | ---- |
+| standard | `llm/qwen3.5-9b/Qwen3.5-9B-Q4_K_M.gguf` (+ `mmproj-F16.gguf`) — **default** | ~5.7 GB + ~918 MB |
+| standard | `llm/gemma-4-12b-it-Q4_K_M.gguf` (+ `mmproj-BF16.gguf`) | ~7.1 GB |
+| bonsai | `Bonsai_2_27B/models/Ternary-Bonsai-2-27B-PQ2_0.gguf` | ~7.2 GB |
+| custom | custom `.gguf` via absolute path | — |
 
-LLM-ассистент — выбор через `[llm] model` (имя файла) в `config/config.ini`:
+FPS models are located in `ComfyUI/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/`:
 
-| Бэкенд | Файл | Размер |
-| ------ | ---- | ------ |
-| standard | `llm/gemma-4-12b-it-Q3_K_M.gguf` / `Q4_K_M` / `Q5_K_M` (+ `llm/mmproj-BF16.gguf` для зрения) | ~5.7 / 7.1 / 8.4 ГБ |
-| standard | `llm/qwen3.5-9b/Qwen3.5-9B-Q4_K_M.gguf` (+ `llm/qwen3.5-9b/mmproj-F16.gguf`) — **по умолчанию** | ~5.7 ГБ + ~918 МБ |
-| bonsai | `Bonsai_2_27B/models/Ternary-Bonsai-2-27B-PQ2_0.gguf` (+ `bonsai_light` = PTQ1_0) + `Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf` | ~7.2 / 5.95 ГБ + ~630 МБ |
-| custom | свой `.gguf` по абсолютному пути (`[llm] custom_model_path`) | — |
+| Type | File | Size |
+| ---- | ---- | ---- |
+| FPS (RIFE) | `ckpts/rife/rife49.pth` | ~21.3 MB |
+| FPS (FILM) | `ckpts/film/film_net_fp32.pt` | ~131.5 MB |
 
-Модели FPS лежат **вне** `ComfyUI/models` — в папке `ckpts` пакета
-ComfyUI-Frame-Interpolation:
+Depth preprocessor (ControlNet tab): `ckpts/depth-anything/Depth-Anything-V2-Small/depth_anything_v2_vits.pth` (~99 MB).
 
-| Тип | Файл | Размер |
-| --- | ---- | ------ |
-| FPS (RIFE) | `ComfyUI/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/rife49.pth` | ~21.3 МБ |
-| FPS (FILM) | `ComfyUI/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/film/film_net_fp32.pt` | ~131.5 МБ |
+## Upscale Tab (DLSS 5)
 
-Препроцессор глубины (вкладка «ControlNet», опционально) — в папке `ckpts` ноды
-`comfyui_controlnet_aux`: `ckpts/depth-anything/Depth-Anything-V2-Small/depth_anything_v2_vits.pth` (~99 МБ).
+Built-in **DLSS 5 Visual Enhancer** (`upscale/` folder, portable embedded Python runtime). Native UI tab — **no Gradio, no iframe**: full integration with parameters panel, real-time progress, and gallery.
 
-Скачивание моделей — в Web UI → Настройки → Общие → Модели.
+Operates **strictly on video files**.
 
-> **Примечание:** модели FPS скачиваются в общих настройках программы, а не при первом запуске генерации. В режиме RIFE VFI используется только `rife49.pth`, в режиме FILM VFI — `film_net_fp32.pt`.
+### Capabilities
 
-## Вкладка Upscale (DLSS 5)
+| Feature | Description |
+| ------- | ----------- |
+| **Neural Rendering** | Noise and artifact suppression: presets, style (Natural/Cinematic), intensity, local tone/structure, DLSS models (J/K/L/M), 1×–3× scaling, optional HDR preservation |
+| **RTX VSR** | Neural upscaling 1×–4× (Low to Ultra), arbitrary resolution, **optional HDR mode** (contrast/saturation/peak brightness) |
 
-Встроенный **DLSS 5 Visual Enhancer** (папка `upscale/`, полный портативный рантайм: embedded Python + DLL-рантаймы). Нативная вкладка программы — **не Gradio, не iframe**: форма, прогресс-бар и результат — внутри UI.
+Configurable GPU selection (AI pipeline and video pipeline independently), codecs (H.264/H.265/AV1/ProRes, CPU or NVENC), encoding quality, and container formats (MP4/MKV/MOV).
 
-Layout повторяет вкладку «Генерация»: слева — панель параметров (сервис, GPU, параметры режима, кодирование) и закреплённый блок статуса job; справа — выбор режима + загрузка видео + кнопка запуска; внизу — **общая галерея видео** (та же, что в «Генерация» и «Галерея»): результаты апскейла пишутся в общую папку output ComfyUI, поэтому видятся во всех местах и чистятся кнопкой «Удалить контент».
+### Usage
 
-Работаем **только с видео** (подрежимы картинок в UI не выводятся).
+1. Open **Upscale** tab — service boots automatically.
+2. Select mode: **Neural Rendering** or **RTX VSR**.
+3. Drag and drop or browse for a video — files stage into `data/upscale-input/` with probed metadata. You can also drag thumbnails directly from the gallery or click the **✨** button on any video card.
+4. Configure options in the left sidebar → click **Start**. Real-time progress is displayed; cancel anytime via **Cancel**.
+5. Rendered video appears in the shared gallery. Download via the ⬇ button on the video card.
 
-### Возможности
-
-| Фича | Что делает |
-| ---- | ---------- |
-| **Neural Rendering** | Подавление шума и артефактов: пресеты, стиль (Natural/Cinematic), интенсивность, локальный тон/структура, DLSS-модель (J/K/L/M), коэффициент 1×–3×, опц. «сохранить HDR» |
-| **RTX VSR** | Нейро-апскейл 1×–4× (Low→Ultra), произвольный размер, **опциональный HDR-режим** (контраст/насыщенность/пиковая яркость) |
-
-Для каждого режима: выбор GPU (AI-пайплайн и видео-пайплайн отдельно), кодек (H.264/H.265/AV1/ProRes, CPU или NVENC), качество кодирования, контейнер (MP4/MKV/MOV).
-
-### Как пользоваться
-
-1. Откройте вкладку **Upscale** — сервис поднимется автоматически (первый старт до 2–3 минут: подготовка DLL, детект GPU).
-2. Выберите режим: **Neural Rendering** или **RTX VSR**.
-3. Перетащите видео или выберите его — программа загрузит его в `data/upscale-input/` и покажет метаданные (разрешение, FPS, длительность, кодек, HDR).
-   Видео можно взять прямо из галереи: перетащите превьюшку в поле загрузки (работает из любой вкладки, где есть галерея) либо нажмите кнопку **✨** на карточке видео — программа сама переключится на Upscale и подхватит файл.
-4. Настройте параметры в левой панели → **Запустить**. Прогресс виден в реальном времени, отмена — кнопкой **Отменить**.
-5. Готовый файл появится в общей галерее ниже (и во вкладке «Галерея»). Скачать — кнопка ⬇ на карточке видео (появляется при наведении).
-
-### Требования
+### Requirements
 
 - Windows 10/11 x64
-- NVIDIA RTX (20/30/40/50) с актуальным драйвером — без RTX вкладка честно сообщает, что рантайм не готов
-- Live-режим (real-time/HLS) в студию **не входит**: это отдельный инструмент
-  (свой HLS-сервер и плеер), а не обработка файла. Вкладка «Upscale»
-  работает только с готовыми видеофайлами.
+- NVIDIA RTX (20/30/40/50 series) with modern driver.
 
-## Архитектура
+## Architecture
 
 ```
-Браузер (:3000)
+Browser (:3000) / Electron App
   │
-  ├─ Next.js App Router (React 19, Tailwind, shadcn/ui)
+  ├─ Next.js App Router (React 19, Tailwind v4, shadcn/ui)
   │
-  ├─ /api/comfy/*  ── прокси ──►  ComfyUI (:8188)
+  ├─ /api/comfy/*  ── proxy ──►  ComfyUI (:8188)
   │                                │
   │                                └─ Workflow: MiniMax H3 Ref2VA
   │                                   Two-Pass Latent Upscaler
   │
-  ├─ /api/llm/chat  ──►  llama.cpp: Bonsai 2 27B (llama-server из Bonsai_2_27B/,
-  │                      бэкенд bonsai, default) / GGUF standard (tools/llm_server.py)
-  │                      / custom (свой .gguf)
+  ├─ /api/llm/chat  ──►  llama.cpp: Qwen3.5 9B / Bonsai 2 27B / Custom GGUF
   │
-  ├─ /api/upscale/* ─►  bridge.py (DLSS 5, embedded Python, порт 7890)
-  │                     └─ пайплайны: Neural Rendering / RTX VSR
+  ├─ /api/upscale/* ──►  bridge.py (DLSS 5, embedded Python, port 7890)
+  │                      └─ pipelines: Neural Rendering / RTX VSR
   │
-  └─ Файлы: ComfyUI/output/ (видео), ComfyUI/input/ (референсы)
+  └─ Files: ComfyUI/output/ (videos), ComfyUI/input/ (staged references)
 ```
 
 **Workflow (Two-Pass):**
 
-1. **Pass 1** — low-res (default 0.2 MP; потолок `min(2, max(finalRes, 1.0))` МП, т.е. не выше финального разрешения, но не ниже 1.0 МП; 2–30 шагов, default 6 из 6; сэмплер и планировщик на выбор, default `euler` / `simple`)
-2. **Latent Upscale** — `MinimaxH3LatentUpscaler3D` → целевое разрешение (`enable_chunking: true`)
-3. **Pass 2** — high-res refinement (3–7 шагов, сэмплер на выбор (default `euler`), ManualSigmas)
+1. **Pass 1** — low-res (default 0.2 MP; ceiling `min(2, max(finalRes, 1.0))` MP; 2–30 steps, default 6; configurable sampler/scheduler, default `euler` / `simple`)
+2. **Latent Upscale** — `MinimaxH3LatentUpscaler3D` → target resolution (`enable_chunking: true`)
+3. **Pass 2** — high-res refinement (3–7 steps, default `euler`, ManualSigmas)
 4. **Decode** — VAEDecode (video) + VAEDecodeAudio (audio)
 5. **Output** — H.264 MP4, 24 fps
 
-Все параметры проходов (сэмплеры, планировщик, разрешение pass 1) + влияние турбо-лоры (default 1.0) настраиваются в «Дополнительных параметрах».
-
-**Оптимизация VRAM:**
+**VRAM Optimizations:**
 
 - `MiniMaxLowVRAMAttention` — head-chunked attention
-- `MiniMaxChunkFeedForward` — chunked FFN для длинных последовательностей
+- `MiniMaxChunkFeedForward` — chunked FFN for long sequence scaling
 
-## Кастомные ноды ComfyUI
+## Custom ComfyUI Nodes
 
-| Нода                                          | Назначение                     |
-| --------------------------------------------- | ------------------------------ |
-| `MiniMaxH3ReferenceToVideo`                   | Основной H3 узел               |
-| `MiniMaxH3AddGuide`                           | Подача аудио-референсов в t2v/flf (Audio Guide) |
-| `MiniMaxH3AudioOrSilent` / `MiniMaxH3AudioSliceFrom` | Аудио исходника (или тишина) и срез хвоста — в патче ядра `comfy-patches` |
-| `MiniMaxStudioSaveAVLatent` / `MiniMaxStudioLoadAVLatent` | Сохранение/загрузка AV-латента для lossless-рефайна (`custom nodes/minimax_studio_av_latent/`) |
-| `MiniMaxStudioAudioTrim` / `MiniMaxStudioAudioGain` | Обрезка/громкость аудио-референсов (`custom nodes/minimax_studio_audio_trim/`) |
-| `MiniMaxStudioExtendKeyframes` / `MiniMaxStudioLatentLock` | Якорь хвоста и жёсткий лок перекрытия в продлении (`custom nodes/minimax_studio_extend/`) |
-| `MiniMaxH3SigmaShift`                         | Сдвиг сигма-распределения      |
-| `MiniMaxLowVRAMAttention`                     | Экономия VRAM (attention)      |
-| `MiniMaxChunkFeedForward`                     | Экономия VRAM (FFN)            |
-| `MinimaxH3LatentUpscaler3D`                   | Апскейл латента                |
-| `LTXVSeparateAVLatent` / `LTXVConcatAVLatent` | Разделение AV латентов         |
-| `ModelPreviewOverrideKJ`                      | Живое превью шагов             |
-| `ComfyMathExpression`                         | Математические выражения       |
-| `VHS_VideoCombine`                            | Выход видео (VideoHelperSuite) |
+| Node | Purpose |
+| ---- | ------- |
+| `MiniMaxH3ReferenceToVideo` | Main H3 generation node |
+| `MiniMaxH3AddGuide` | Audio guide conditioning for t2v/flf |
+| `MiniMaxH3AudioOrSilent` / `MiniMaxH3AudioSliceFrom` | Source audio slicing / silence fallback in `comfy-patches` |
+| `MiniMaxStudioSaveAVLatent` / `MiniMaxStudioLoadAVLatent` | Save/load AV-latents for lossless refine (`custom nodes/minimax_studio_av_latent/`) |
+| `MiniMaxStudioAudioTrim` / `MiniMaxStudioAudioGain` | Trim and amplify audio references in memory (`custom nodes/minimax_studio_audio_trim/`) |
+| `MiniMaxStudioExtendKeyframes` / `MiniMaxStudioLatentLock` | Tail keyframe conditioning and rigid overlap lock (`custom nodes/minimax_studio_extend/`) |
+| `MiniMaxH3SigmaShift` | Sigma distribution shift |
+| `MiniMaxLowVRAMAttention` | VRAM conservation (attention) |
+| `MiniMaxChunkFeedForward` | VRAM conservation (FFN) |
+| `MinimaxH3LatentUpscaler3D` | 3D latent upscaling |
+| `LTXVSeparateAVLatent` / `LTXVConcatAVLatent` | Separate and concatenate AV latents |
+| `ModelPreviewOverrideKJ` | Step-by-step live latent preview |
+| `ComfyMathExpression` | Math expression evaluator |
+| `VHS_VideoCombine` | Video muxing and output |
 
-## Команды (разработка)
+## Commands (Development)
 
 ```bash
-npm install          # зависимости
+npm install          # install dependencies
 npm run dev          # dev server (:3000)
-npm run desktop      # окно приложения (Electron) — сервер и ComfyUI поднимутся сами
-npm run icons        # перегенерация иконок (electron/icons + public/icon-*) из logo.svg
-npm run build        # production build (автоматически поднимает хип Node до 8 ГБ)
-npm run build:default  # production build с хипом по умолчанию (без обёртки)
-npm run typecheck    # TypeScript проверка
-npm run check        # typecheck + build (то же, что делает release)
-npm run clean        # очистка .next, кэшей Python, логов и прочего мусора
-npm run release      # полный цикл релиза: clean → typecheck → build → prune → prepare → verify
-npm run prepare:electron  # пересоздать MinimaxH3Studio.exe (имя процесса в диспетчере)
+npm run desktop      # desktop window (Electron) — manages server and ComfyUI
+npm run icons        # regenerate app icons from logo.svg
+npm run build        # production build (auto-allocates 8 GB Node heap)
+npm run build:default  # production build with default heap
+npm run typecheck    # TypeScript typecheck
+npm run check        # typecheck + build
+npm run clean        # clean .next, python caches, and logs
+npm run release      # full release cycle: clean → typecheck → build → prune → prepare → verify
+npm run prepare:electron  # recreate MinimaxH3Studio.exe with embedded resources
 ```
 
-> **Сборка и память.** `npm run build` запускает `next build --webpack` через
-> обёртку [scripts/build.mjs](scripts/build.mjs), которая задаёт хип Node 8 ГБ
-> (`--max-old-space-size=8192`) — иначе сборка падает с
-> `JavaScript heap out of memory`. Размер хипа можно переопределить:
-> `NEXT_BUILD_HEAP_MB=12288 npm run build`. Lint-скрипт удалён: eslint в проекте
-> не используется (проверка типов — `npm run typecheck`).
+> **Memory & Build:** `npm run build` runs `next build --webpack` via wrapper
+> [scripts/build.mjs](scripts/build.mjs), which allocates an 8 GB Node heap
+> (`--max-old-space-size=8192`) to prevent `JavaScript heap out of memory`.
 
-> **Строгость типов.** В `tsconfig.json` включены `noUnusedLocals` и
-> `noUnusedParameters` — мёртвые импорты и неиспользуемые локальные
-> переменные ломают `npm run typecheck`. Это защищает от повторного
-> накопления «мёртвого» кода между релизами.
+> **Strict Typechecking:** `tsconfig.json` enforces `noUnusedLocals` and
+> `noUnusedParameters` to eliminate dead imports and unused variables.
 
-## Сборка релиза
+## Release Build
 
-Релиз — это **папка**, а не архив: распакованный проект запускается двойным
-кликом по `start.bat`, никакой установки не требуется. Для передачи папку
-можно упаковать в ZIP — содержимое и запуск от этого не меняются.
+A release is a **folder distribution**, ready to run by launching `start.bat`.
 
 ```bash
 npm run release
 ```
 
-Скрипт выполняет шесть шагов:
+The script performs six stages:
 
-1. **clean** — удаляет `.next/`, кэш TypeScript, `__pycache__/`, логи и
-   мусорные файлы в корне (в т.ч. `_nul` — ловушку Git Bash).
-2. **typecheck** — `tsc --noEmit` со `strict` + `noUnusedLocals`/`noUnusedParameters`.
-3. **build** — production-сборка Next.js в `.next/`.
-4. **prune** — ужимает сборку: удаляет `.next/cache/` (кэш webpack для
-   пересборок, ~300 МБ) и обрезает манифесты `.nft.json` (~530 МБ), в которых
-   перечислены ~87 000 файлов деревьев ComfyUI / embedded-Python. В рантайме
-   они не нужны: `server.js` запускает `next()` из `node_modules`.
-   **Итог: `.next` с 841 МБ → 8 МБ.**
-5. **prepare** — создаёт `MinimaxH3Studio.exe`, чтобы процесс окна в
-   диспетчере задач не назывался «electron».
-6. **verify** — проверяет, что релиз собран целиком:
+1. **clean** — removes `.next/`, TypeScript cache, `__pycache__/`, logs, and temporary files.
+2. **typecheck** — executes `tsc --noEmit` with `strict` mode enabled.
+3. **build** — compiles Next.js production build in `.next/`.
+4. **prune** — compresses build: purges `.next/cache/` (~300 MB) and trims `.nft.json` manifests (~530 MB).
+   **Result: `.next` size shrinks from 841 MB → 8 MB.**
+5. **prepare** — produces `MinimaxH3Studio.exe` so the desktop window shows the product name.
+6. **verify** — validates release completeness.
 
-   | Проверка | Зачем |
-   | -------- | ----- |
-   | `.next/BUILD_ID`, `.next/server`, `.next/static` | сборка действительно есть и полная |
-   | `node_modules/` + `node_modules/electron/dist/electron.exe` | без Electron приложение уйдёт в браузерный режим |
-   | `node_modules/electron/dist/MinimaxH3Studio.exe` | правильное имя процесса в диспетчере |
-   | `start.bat`, `start_hidden.vbs`, `server.js` | точка входа на месте |
-   | `.env` | без него не найдётся ComfyUI-бэкенд |
-   | `config/config.ini` | настройки по умолчанию |
-   | `public/splash-videos/`, `public/logo.svg` | заставка и логотип |
-   | в корне нет `*.log`, `_nul`, `*.tsbuildinfo` | в релиз не попадёт мусор |
-
-Проверить релиз **без пересборки** (например, перед копированием на флешку):
+To verify a release **without rebuilding**:
 
 ```bash
 node scripts/release.mjs --verify
 ```
 
-### Что копировать получателю
+### Distribution Checklist for Sharing
 
-| Копировать | Обязательно | Примечание |
-| ---------- | ----------- | ---------- |
-| Весь проект целиком | ✔ | включая `node_modules/`, `.next/`, `runtime/`, `stt/`, `upscale/` |
-| `ComfyUI-Easy-Install/` | ✔ | портативный ComfyUI **без моделей** — модели скачиваются через UI: Настройки → Модели (см. [Модели](#модели)) |
-| `Bonsai_2_27B/` | — | создаётся автодокачкой при выборе Bonsai |
-| `data/` | — | можно очистить: LoRA-лист и история чатов |
-| `config/config.ini` | ✔ | можно сбросить к дефолтам |
+| Item | Required | Notes |
+| ---- | -------- | ----- |
+| Entire project folder | Yes | Including `node_modules/`, `.next/`, `runtime/`, `stt/`, `upscale/` |
+| `ComfyUI-Easy-Install/` | Yes | Portable ComfyUI **without models** — weights downloaded via UI Settings → Models |
+| `Bonsai_2_27B/` | No | Downloaded on demand if Bonsai backend is chosen |
+| `data/` | No | Can be cleared before distribution (chat history and LoRA list) |
+| `config/config.ini` | Yes | Factory defaults |
 
-> **Модели в поставку не входят.** Портативная сборка занимает ~6 ГБ без
-> моделей; после первого запуска скачайте их через Настройки → Модели
-> (см. [Модели](#модели)). Так архив остаётся компактным, а модели не
-> дублируются у каждого получателя.
-
-> **Перед передачей программы другому человеку** откройте
-> Настройки → Сброс → **«Полный сброс (всё)»**. Он удаляет сгенерированные
-> видео и кэш ComfyUI, файлы апскейла, вложения и историю чатов, промпты,
-> журналы (включая внутренние логи и базу ComfyUI) и локальные данные, а
-> настройки/LoRA/`config.ini` возвращает к заводским. Модели, `custom_nodes`
-> и код программы не трогаются — после сброса не остаётся ничего вашего, а
-> программа продолжает работать.
-
-> **Важно:** `node_modules/` и `.next/` должны попасть к получателю **целиком**
-> и с того же Windows x64. Иначе `start.bat` попробует пересобрать проект
-> (нужен `npm` и время) или уйдёт в браузерный режим вместо окна приложения.
-
-# reels-natok-ai
+> **Before sharing with another person**, open Settings → Reset → **"Full Reset (All)"**.
+> This wipes generated videos, ComfyUI cache, upscale files, attachments, chat history,
+> prompts, and logs, while restoring factory defaults. Models, custom nodes, and
+> core program files remain untouched.

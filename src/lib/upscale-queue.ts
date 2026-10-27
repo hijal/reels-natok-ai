@@ -1,14 +1,14 @@
 /**
- * Очередь Upscale — (правка 262).
+ * Upscale Queue — (fix 262).
  *
- * Сервер DLSS-моста поддерживает только ОДИН активный рендер (409 busy).
- * Раньше кнопка «Запустить» блокировалась, пока идёт задача — вторую
- * поставить было нельзя. Теперь upscale-задачи ставятся в очередь:
- * раннер сериализует их и подаёт в useUpscaleService.run() по одной,
- * как только GPU освобождается.
+ * The DLSS bridge server supports only ONE active render (409 busy).
+ * Previously the "Start" button was disabled while a task was running —
+ * a second task could not be enqueued. Now upscale tasks are queued:
+ * the runner serializes them and feeds them to useUpscaleService.run() one by one,
+ * as soon as the GPU becomes free.
  *
- * Интеграция с общей очередью (useGenQueue, type 'upscale') — статус
- * виден в плавающем QueueIndicator и карточке статуса на вкладке.
+ * Integration with global queue (useGenQueue, type 'upscale') — status
+ * is visible in floating QueueIndicator and the status card on the tab.
  */
 import { useGenQueue, type QueueItem } from './gen-queue-store'
 import { useUpscaleService, isUpscaleJobActive } from './upscale-service'
@@ -19,24 +19,24 @@ export interface UpscaleTask {
   feature: string
   input: string
   options: Record<string, unknown>
-  /** (правка 264) Источник файла: имя из галереи/загрузки — попадает в сайдкар. */
+  /** (fix 264) File source: name from gallery/upload — saved to sidecar. */
   sourceName?: string
-  /** (правка 727) Папка исходника в галерее — туда переносится результат. */
+  /** (fix 727) Source folder in gallery — output is moved there. */
   subfolder?: string
 }
 
-/** Задачи, ожидающие своей очереди (module-level — переживает вкладки). */
+/** Tasks waiting in queue (module-level — survives tab switching). */
 const tasks = new Map<string, UpscaleTask>()
 let running = false
 /**
- * (правка 716) id элемента очереди, который раннер обрабатывает ПРЯМО СЕЙЧАС.
- * Нужен sweep'у, чтобы отличить живую задачу от сироты после перезагрузки
- * страницы: элемент в очереди (tasks) и элемент «в работе» (activeItemId)
- * — живые; всё остальное — сирота.
+ * (fix 716) Queue item id that the runner is processing RIGHT NOW.
+ * Needed by sweep to distinguish a live task from an orphan after page reload:
+ * items in queue (tasks) and item in progress (activeItemId)
+ * are live; everything else is an orphan.
  */
 let activeItemId: string | null = null
 
-/** Поставить upscale в общую очередь. Возвращает id элемента очереди. */
+/** Enqueue upscale task in global queue. Returns queue item id. */
 export function enqueueUpscale(task: UpscaleTask): string {
   const label = `Upscale: ${task.input.split('/').pop() || task.feature}`
   const id = useGenQueue.getState().enqueue('upscale', label)
@@ -45,24 +45,23 @@ export function enqueueUpscale(task: UpscaleTask): string {
   return id
 }
 
-/** Активные upscale-элементы очереди. */
+/** Active upscale queue items. */
 export function activeUpscaleItems(items: QueueItem[]): QueueItem[] {
   return items.filter(
     (i) => i.type === 'upscale' && (i.status === 'submitting' || i.status === 'queued' || i.status === 'running'),
   )
 }
 
-/** Отменить все активные upscale. */
+/** Cancel all active upscales. */
 export async function cancelActiveUpscales(): Promise<void> {
   const { setStatus } = useGenQueue.getState()
   for (const item of activeUpscaleItems(useGenQueue.getState().items)) {
     setStatus(item.id, 'cancelled')
-    // (правка 334) Ожидающая своей очереди задача — из Map тоже: иначе
-    // запись-сирота оставалась навсегда (раннер её не возьмёт — элемент
-    // уже cancelled, а Map чистится только при взятии задачи).
-    tasks.delete(item.id)
-    // Если задача ещё не запущена (нет активного job) — просто отменяем.
-    // Если job активен — cancel через сервис.
+    // (fix 334) Queued task waiting its turn — delete from Map as well: otherwise
+    // orphan record remained forever (runner won't pick it up — item is
+    // already cancelled, and Map was only cleaned when task is taken).
+    // If task not started yet (no active job) — simply cancel.
+    // If job active — cancel via service.
     const job = useUpscaleService.getState().job
     if (job && isUpscaleJobActive(job)) {
       await useUpscaleService.getState().cancel()
@@ -71,20 +70,19 @@ export async function cancelActiveUpscales(): Promise<void> {
 }
 
 /**
- * (правка 329) Отмена ОДНОГО upscale из QueueIndicator.
- * Раньше cancelQueueItem для upscale шёл по ветке !promptId (upscale-очередь
- * promptId никогда не ставит) → просто remove(item.id), а серверный DLSS-
- * рендер продолжал работать зомби. Теперь: статус cancelled + задача из Map
- * + реальная отмена активного рендера на мосту (тот же cancel, что у кнопки
- * вкладки Upscale). Сервер держит ОДИН активный рендер, а раннер
- * сериализует задачи — активный job соответствует running-элементу; если
- * отменяют queued-элемент, а рендер другой задачи ещё идёт, cancel на мосту
- * не шлём.
+ * (fix 329) Cancel a SINGLE upscale from QueueIndicator.
+ * Previously cancelQueueItem for upscale took the !promptId branch (upscale queue
+ * never sets promptId) → simply remove(item.id), while server-side DLSS
+ * render continued running as a zombie. Now: cancelled status + task removed from Map
+ * + actual cancellation of active render on bridge (same cancel as the button
+ * on Upscale tab). The server keeps ONE active render and the runner
+ * serializes tasks — active job corresponds to running item; if a queued
+ * item is cancelled while another task's render is running, we don't send cancel to bridge.
  */
 export async function cancelUpscaleItem(id: string): Promise<void> {
   const { setStatus } = useGenQueue.getState()
   const item = useGenQueue.getState().items.find((i) => i.id === id)
-  tasks.delete(id) // (правка 334) чистим ожидающую задачу
+  tasks.delete(id) // (fix 334) clean up waiting task
   setStatus(id, 'cancelled')
   if (item?.status === 'running') {
     const job = useUpscaleService.getState().job
@@ -94,24 +92,22 @@ export async function cancelUpscaleItem(id: string): Promise<void> {
   }
 }
 
-/** Чистка orphan-задач после перезагрузки страницы. */
+/** Clean up orphan tasks after page reload. */
 export function sweepOrphanUpscaleItems(): void {
   const { items, setStatus } = useGenQueue.getState()
   for (const it of items) {
     if (it.type !== 'upscale') continue
     if (it.status !== 'submitting' && it.status !== 'queued' && it.status !== 'running') continue
-    // (правка 716) У upscale-задач НЕТ ComfyUI prompt_id — DLSS-мост работает
-    // по своему API. Прежняя проверка `if (!it.promptId)` была истинна
-    // ВСЕГДА, поэтому sweep помечал ошибкой живые задачи при каждом
-    // переключении вкладки (вкладка размонтируется → sweep → элемент
-    // 'running' становился 'error'; store потом блокировал error→running).
-    // Теперь живыми считаются: элемент в очереди (tasks) и элемент, который
-    // раннер обрабатывает прямо сейчас (activeItemId), а также случай, когда
-    // на мосту действительно идёт рендер.
+    // (fix 716) Upscale tasks DO NOT have ComfyUI prompt_id — DLSS bridge works
+    // via its own API. The previous check `if (!it.promptId)` was ALWAYS true,
+    // so sweep marked live tasks with error on every tab switch (tab unmounts
+    // → sweep → 'running' item became 'error'; store then blocked error→running).
+    // Now live tasks are: items in queue (tasks) and the item the runner is
+    // processing right now (activeItemId), as well as when render is actually running on bridge.
     if (tasks.has(it.id) || it.id === activeItemId) continue
     const job = useUpscaleService.getState().job
     if (job && isUpscaleJobActive(job)) continue
-    setStatus(it.id, 'error', 'Страница перезагружена — задача не была отправлена. Запустите заново.')
+    setStatus(it.id, 'error', 'Page reloaded — task was not dispatched. Please run again.')
   }
 }
 
@@ -128,12 +124,12 @@ const isCancelled = (id: string) =>
   useGenQueue.getState().items.find((i) => i.id === id)?.status === 'cancelled'
 
 /**
- * (правка 716) Опрос job'а моста ПО ЕГО ID.
+ * (fix 716) Poll bridge job BY ITS ID.
  *
- * Раньше очередь следила за глобальным слотом useUpscaleService.job, который
- * перезаписывает ручная вкладка Upscale: поллер уезжал на чужой job и
- * завершался с безликим «Задача потеряна». Теперь очередь спрашивает свой
- * job напрямую и не зависит от глобального состояния.
+ * Previously the queue tracked the global slot useUpscaleService.job, which
+ * gets overwritten by manual Upscale tab: poller switched to the wrong job and
+ * completed with generic "Task lost". Now the queue queries its own
+ * job directly and does not depend on global state.
  */
 interface BridgeJob {
   id: string
@@ -162,7 +158,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function runLoop(): Promise<void> {
   for (;;) {
-    // Находим следующую задачу (submitting или queued)
+    // Find next task (submitting or queued)
     const item = useGenQueue
       .getState()
       .items.find(
@@ -177,8 +173,8 @@ async function runLoop(): Promise<void> {
     tasks.delete(item.id)
 
     try {
-      // (правка 716) Помечаем элемент как «в работе» — sweep не должен
-      // считать его сиротой.
+      // (fix 716) Mark item as "in progress" — sweep must not
+      // consider it an orphan.
       activeItemId = item.id
       await runTask(item.id, task)
     } catch (e) {
@@ -196,79 +192,79 @@ async function runTask(id: string, task: UpscaleTask): Promise<void> {
 
   q().setStatus(id, 'submitting')
 
-  // (правка 716) Старт отсчёта времени генерации (submit → done).
+  // (fix 716) Start generation timing (submit → done).
   const t0 = Date.now()
-  // Выходной путь собственного job'а (не глобального слота сервиса).
+  // Output path of own job (not the service global slot).
   let lastOutput: { output_path?: string } | null = null
 
-  // Ждём, пока GPU освободится (активный job завершится)
-  // Сервер вернёт 409, если занят — ждём и повторяем.
+  // Wait until GPU is free (active job finishes)
+  // Server returns 409 if busy — wait and retry.
   let attempts = 0
-  const MAX_WAIT = 3600 // 1 час максимум ожидания
+  const MAX_WAIT = 3600 // 1 hour max wait
 
   while (true) {
     if (isCancelled(id)) return
     if (attempts * 3 > MAX_WAIT) {
-      throw new Error('Слишком долго ждали освобождения GPU')
+      throw new Error('Timed out waiting for GPU to become free')
     }
 
-    // Если есть активный job — ждём его завершения
+    // If there is an active job — wait for it to finish
     const job = svc().job
     if (job && isUpscaleJobActive(job)) {
-      // (правка 716) setStatus(id, status, error?) — третий аргумент это
-      // ОШИБКА, а не сообщение. Раньше сюда клали «Ожидание освобождения
-      // GPU…», и поле error залипало (error ?? item.error) — успешный
-      // апскейл показывал красную строку. Сообщение — только через setMessage.
+      // (fix 716) setStatus(id, status, error?) — third argument is
+      // ERROR, not message. Previously "Waiting for GPU release…" was passed here,
+      // and error stuck (error ?? item.error) — successful
+      // upscale showed red text. Status message should only use setMessage.
       q().setStatus(id, 'queued')
-      q().setMessage(id, 'Ожидание освобождения GPU…')
+      q().setMessage(id, 'Waiting for GPU release…')
       await sleep(3000)
       attempts++
       continue
     }
 
-    // GPU свободна — запускаем
-    // (правка 716) Результат run() теперь возвращает ok/jobId/error: раньше
-    // run() НИЧЕГО не возвращал и не бросал, поэтому очередь не могла
-    // отличить «сервер не принял (GPU занята)» от «успешно запущено» и
-    // подставляла безликое «Задача потеряна».
+    // GPU is free — start task
+    // (fix 716) run() now returns ok/jobId/error: previously run() returned
+    // NOTHING and did not throw, so queue could not distinguish
+    // "server rejected (GPU busy)" from "started successfully" and
+    // showed generic "Task lost".
     const started = await svc().run(task.feature, task.input, task.options)
     if (!started.ok || !started.jobId) {
-      throw new Error(started.error || 'Сервер не принял задачу (GPU занята)')
+      throw new Error(started.error || 'Server did not accept task (GPU busy)')
     }
-    // Свой job id: дальше очередь опрашивает ИМЕННО его (а не глобальный
-    // слот useUpscaleService.job, который перезаписывает ручная вкладка
-    // Upscale). Раньше поллер следовал за ЧУЖИМ job'ом и завершался с
-    // «Задача потеряна».
+    // Own job id: queue polls SPECIFICALLY this job onwards (not global
+    // slot useUpscaleService.job which can be overwritten by manual
+    // Upscale tab). Previously poller followed someone else's job and failed with
+    // "Task lost".
     const jobId = started.jobId
     q().setStatus(id, 'running')
 
-    // Ждём завершения job через polling
+    // Wait for job completion via polling
     for (;;) {
       if (isCancelled(id)) return
       await sleep(2500)
       const cur = await fetchUpscaleJob(jobId)
       if (!cur) {
-        throw new Error('Задача потеряна')
+        throw new Error('Task lost')
       }
       if (cur.status === 'done') {
         lastOutput = cur.output ?? null
         break
       }
       if (cur.status === 'error') {
-        throw new Error(cur.error || 'Ошибка обработки')
+        throw new Error(cur.error || 'Processing error')
       }
       if (cur.status === 'cancelled') {
-        throw new Error('Отменено')
+        throw new Error('Cancelled')
       }
-      // Обновляем прогресс в очереди
+      // Update progress in queue
       if (cur.progress > 0) {
         q().setProgress(id, Math.round(cur.progress * 100), 100)
       }
     }
 
-    // (правка 727) DLSS-мост всегда пишет в корень output. Если ролик взят
-    // из папки галереи — переносим готовый файл (и сайдкар) туда же, ДО
-    // обновления галереи, чтобы результат сразу был на месте.
+    // (fix 727) DLSS bridge always writes to output root. If video came
+    // from a gallery folder — move finished file (and sidecar) there, BEFORE
+    // updating gallery, so the result is immediately in place.
     let outPath = lastOutput?.output_path
     if (typeof outPath === 'string' && outPath && task.subfolder) {
       try {
@@ -284,22 +280,22 @@ async function runTask(id: string, task: UpscaleTask): Promise<void> {
         })
         const pd = (await placed.json().catch(() => ({}))) as { ok?: boolean; path?: string }
         if (placed.ok && pd.ok && typeof pd.path === 'string') outPath = pd.path
-      } catch { /* не перенесли — файл остался в корне, результат не теряется */ }
+      } catch { /* move failed — file remained in root, result is not lost */ }
     }
 
-    // Успешное завершение
+    // Successful completion
     q().setStatus(id, 'done')
     q().setProgress(id, 100, 100)
     useGalleryRefresh.getState().bump()
     toast.success(task.subfolder
-      ? `Upscale готов — видео в папке «${task.subfolder}»`
-      : 'Upscale готов — видео в галерее')
+      ? `Upscale ready — video in folder "${task.subfolder}"`
+      : 'Upscale ready — video in gallery')
 
-    // (правка 264) Время генерации + DLSS-настройки → сайдкар результата.
-    // ensureUpscaleMeta создала .meta.json на первом 'done'-полле; finalize
-    // дописывает generation_time + feature + options (идемпотентно).
-    // (правка 716) Путь берём из СВОЕГО job'а (lastOutput), а не из
-    // svc().job — глобальный слот мог уже перезаписать ручная вкладка.
+    // (fix 264) Generation time + DLSS settings → result sidecar.
+    // ensureUpscaleMeta created .meta.json on first 'done' poll; finalize
+    // appends generation_time + feature + options (idempotent).
+    // (fix 716) Take path from OWN job (lastOutput), not from
+    // svc().job — global slot might have been overwritten by manual tab.
     if (typeof outPath === 'string' && outPath) {
       const genSec = Math.max(1, Math.round((Date.now() - t0) / 1000))
       void fetch('/api/upscale/finalize', {
@@ -311,7 +307,7 @@ async function runTask(id: string, task: UpscaleTask): Promise<void> {
           feature: task.feature,
           options: task.options,
         }),
-      }).catch(() => { /* метаданные не критичны для результата */ })
+      }).catch(() => { /* metadata is non-critical for result */ })
     }
     return
   }

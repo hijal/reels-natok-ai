@@ -7,10 +7,10 @@ import { COMFY_URL } from '@/lib/comfy/minimax-h3-client'
  */
 export async function GET() {
   try {
-    // (правка 54) 12 s вместо 5 s: во время активной генерации event-loop
-    // ComfyUI заблокирован долгими GPU-операциями (шаги диффузии,
-    // выгрузка/загрузка моделей при dynamic VRAM), и /system_stats может
-    // отвечать медленно. 5 s давали ложные 502 посреди работающей генерации.
+    // (fix 54) 12 s instead of 5 s: during active generation the ComfyUI event loop
+    // is blocked by long GPU operations (diffusion steps,
+    // unloading/loading models with dynamic VRAM), and /system_stats can
+    // respond slowly. 5 s caused false 502s in the middle of running generation.
     const res = await fetch(`${COMFY_URL}/system_stats`, {
       signal: AbortSignal.timeout(12_000),
     })

@@ -1,12 +1,12 @@
 'use client'
 
 /**
- * LoraSettingsPanel (правка 44) — manages LoRAs in settings.
+ * LoraSettingsPanel (edit 44) — manages LoRAs in settings.
  * Shows enabled/disabled state, strength slider, add/remove buttons.
  * The built-in turbo LoRA is shown here too: it is ON by default, user LoRAs
- * are OFF by default. In «Кадры» + audio the app skips turbo automatically.
- * (правка 104) Прогресс загрузки — в общем store: закрытие окна настроек
- * не сбрасывает индикатор и не прерывает загрузку.
+ * are OFF by default. In "Frames" + audio the app skips turbo automatically.
+ * (edit 104) Upload progress in shared store: closing the settings dialog
+ * does not reset the indicator or interrupt the upload.
  */
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
@@ -45,9 +45,9 @@ export function LoraSettingsPanel() {
   const [loading, setLoading] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // (правка 104) Состояние загрузки — в общем store (живёт вне React-дерева):
-  // Radix при закрытии диалога размонтирует панель, но загрузка и её прогресс
-  // сохраняются; повторное открытие подхватывает тот же индикатор.
+  // (edit 104) Upload state in shared store (lives outside React tree):
+  // Radix unmounts panel when dialog closes, but upload and its progress
+  // are preserved; reopening dialog recovers the indicator.
   const uploading = useModelUploadStore((s) => s.active && s.target === 'lora')
   const uploadProgress = useModelUploadStore((s) => s.progress)
 
@@ -75,8 +75,8 @@ export function LoraSettingsPanel() {
     if (!file) return
     e.target.value = ''
 
-    // (правка 104) Запрос живёт в промисе вне компонента — закрытие окна
-    // настроек его не прерывает; прогресс пишется в общий store.
+    // (edit 104) Request lives in a promise outside component — closing settings
+    // dialog does not interrupt it; progress is written to shared store.
     const { start, setProgress, done } = useModelUploadStore.getState()
     start('lora', file.name)
 
@@ -104,10 +104,10 @@ export function LoraSettingsPanel() {
         xhr.send(form)
       })
 
-      toast.success('LoRA добавлена', { description: file.name })
+      toast.success('LoRA added', { description: file.name })
       await refresh()
     } catch (err) {
-      toast.error('Ошибка загрузки LoRA', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to upload LoRA', { description: err instanceof Error ? err.message : String(err) })
     } finally {
       done()
     }
@@ -116,9 +116,9 @@ export function LoraSettingsPanel() {
   const toggleEnabled = async (name: string, enabled: boolean) => {
     // Optimistic update
     setLoras((prev) => prev.map((l) => l.name === name ? { ...l, enabled } : l))
-    // (правка 587) Ловили только сетевые сбои: не-2xx (400/500) оставлял
-    // оптимистичный флип в UI без роллбэка и без тоста — панель врала до
-    // следующего refresh. Теперь проверяем res.ok, как POST/DELETE выше.
+    // (edit 587) Previously only caught network errors: non-2xx (400/500) left
+    // optimistic flip in UI without rollback and toast — panel was desynced
+    // until next refresh. Now check res.ok, matching POST/DELETE above.
     try {
       const res = await fetch('/api/loras', {
         method: 'PUT',
@@ -130,20 +130,19 @@ export function LoraSettingsPanel() {
         try {
           const d = await res.json()
           if (d?.error) msg = d.error
-        } catch { /* без тела — код статуса */ }
+        } catch { /* empty body — status code */ }
         throw new Error(msg)
       }
     } catch (err) {
       setLoras((prev) => prev.map((l) => l.name === name ? { ...l, enabled: !enabled } : l))
-      toast.error('Не удалось обновить', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to update', { description: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  /* (правка 81) Дебаус PUT-запросов: слайдер силы и поле триггера при каждом
-     движении/символе шло отдельный PUT (десятки запросов на одно действие,
-     каждый — запись loras.json). Теперь: оптимистичное обновление состояния
-     + один запрос после 350мс тишины; незаписанные значения уходят при
-     размонтировании панели. */
+  /* (edit 81) Debounce PUT requests: strength slider and trigger inputs used to trigger
+     a separate PUT on each move/character (dozens of requests, each writing loras.json).
+     Now: optimistic state update + single request after 350ms silence; unwritten values
+     are flushed on unmount. */
   type PendingPut = { timer: ReturnType<typeof setTimeout>; payload: Record<string, unknown> }
   const pendingPuts = useRef<Map<string, PendingPut>>(new Map())
 
@@ -155,7 +154,7 @@ export function LoraSettingsPanel() {
         body: JSON.stringify(payload),
       })
     } catch {
-      // оптимистичное состояние уже применено; ошибка не критична
+      // optimistic state already applied; non-critical
     }
   }, [])
 
@@ -170,8 +169,7 @@ export function LoraSettingsPanel() {
     map.set(key, { timer, payload })
   }, [sendPut])
 
-  // Незавершённые записи — отправить при размонтировании, чтобы последнее
-  // значение слайдера/триггера не потерялось.
+  // Incomplete writes — flush on unmount so the last slider/trigger value is saved.
   useEffect(() => {
     const map = pendingPuts.current
     return () => {
@@ -194,7 +192,7 @@ export function LoraSettingsPanel() {
   }
 
   const handleDelete = async (name: string) => {
-    const msg = `Удалить LoRA "${name}"?\nФайл будет удалён из папки LoRAs.`
+    const msg = `Delete LoRA "${name}"?\nThe file will be deleted from the LoRAs folder.`
     if (!confirm(msg)) return
     try {
       const r = await fetch('/api/loras', {
@@ -206,10 +204,10 @@ export function LoraSettingsPanel() {
         const d = await r.json().catch(() => ({}))
         throw new Error(d.error || `HTTP ${r.status}`)
       }
-      toast.success('LoRA удалена')
+      toast.success('LoRA deleted')
       await refresh()
     } catch (err) {
-      toast.error('Ошибка удаления', { description: err instanceof Error ? err.message : String(err) })
+      toast.error('Failed to delete', { description: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -218,8 +216,8 @@ export function LoraSettingsPanel() {
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">LoRAs</span>
         <div className="flex items-center gap-2">
-          {/* (правка 133) Кнопка «Сбросить патчи» убрана — сброс теперь
-           * автоматический при включении/выключении LoRA (в API PUT). */}
+          {/* (edit 133) "Reset patches" button removed — reset is now
+           * automatic when enabling/disabling LoRAs (in PUT API). */}
           <Button
             variant="outline"
             size="sm"
@@ -228,7 +226,7 @@ export function LoraSettingsPanel() {
             className="h-7 gap-1.5 text-xs"
           >
             {uploading ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <PlusIcon className="w-3.5 h-3.5" />}
-            Добавить
+            Add
           </Button>
         </div>
         {/* Hidden file input */}
@@ -242,11 +240,11 @@ export function LoraSettingsPanel() {
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug">
-        Встроенная турбо-лора включена по умолчанию. В режиме «Кадры» с добавленным аудио
-        она пропускается автоматически; обычные LoRA работают всегда.
+        Built-in turbo LoRA is enabled by default. In "Frames" mode with added audio
+        it is skipped automatically; custom LoRAs always work.
       </p>
 
-      {/* Upload progress (правка 104 — состояние из общего store) */}
+      {/* Upload progress (edit 104 — state from shared store) */}
       {uploading && (
         <div className="space-y-1">
           <div className="h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
@@ -266,7 +264,7 @@ export function LoraSettingsPanel() {
         </div>
       ) : loras.length === 0 ? (
         <p className="text-xs text-muted-foreground/60 py-1">
-          Нет кастомных LoRAs. Добавьте файл .safetensors.
+          No custom LoRAs. Add a .safetensors file.
         </p>
       ) : (
         <div className="space-y-2">
@@ -293,14 +291,14 @@ export function LoraSettingsPanel() {
                         ? 'text-emerald-400 hover:bg-emerald-500/10'
                         : 'text-muted-foreground/40 hover:bg-muted'
                     }`}
-                    title={lora.enabled ? 'Отключить' : 'Включить'}
+                    title={lora.enabled ? 'Disable' : 'Enable'}
                   >
                     {lora.enabled ? <PowerIcon className="w-3.5 h-3.5" /> : <PowerOffIcon className="w-3.5 h-3.5" />}
                   </button>
                   <button
                     onClick={() => handleDelete(lora.name)}
                     className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    title="Удалить"
+                    title="Delete"
                   >
                     <Trash2Icon className="w-3.5 h-3.5" />
                   </button>
@@ -313,9 +311,9 @@ export function LoraSettingsPanel() {
                   <div className="flex items-center gap-2">
                     <input
                       type="range"
-                      /* (правка 256) Диапазон −10…+10: на civitai есть лоры,
-                         обученные с отрицательной силой (инверсия), а старые
-                         границы 0.1…2.0 не давали их использовать. */
+                      /* (edit 256) Range -10...+10: civitai has LoRAs trained
+                         with negative strength (inversion), previous bounds
+                         0.1...2.0 blocked their usage. */
                       min="-10"
                       max="10"
                       step="0.05"
@@ -327,10 +325,10 @@ export function LoraSettingsPanel() {
                       {lora.strength.toFixed(2)}
                     </span>
                   </div>
-                  {/* Trigger words (правка 46) */}
+                  {/* Trigger words (edit 46) */}
                   <input
                     type="text"
-                    placeholder="Триггерные слова (добавляются к промпту)"
+                    placeholder="Trigger words (appended to prompt)"
                     value={lora.trigger || ''}
                     onChange={(e) => updateTrigger(lora.name, e.target.value)}
                     className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"

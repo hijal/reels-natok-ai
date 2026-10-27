@@ -19,10 +19,10 @@ export async function uploadInputFile(file: File): Promise<{ path: string; stage
 }
 
 /**
- * (правка 108) Загрузка вложения чата ассистента в ИЗОЛИРОВАННОЕ хранилище
- * (data/chat-attachments/), а НЕ в ComfyUI/input/.
- * Файл существует только в чате и используется только для LLM-анализа —
- * в референсы генерации/галерею/upscale он не попадает.
+ * (fix 108) Upload assistant chat attachment to ISOLATED storage
+ * (data/chat-attachments/), NOT into ComfyUI/input/.
+ * The file exists only in the chat and is used solely for LLM analysis —
+ * it does not get into generation references/gallery/upscale.
  */
 export async function uploadChatAttachment(file: File): Promise<{ path: string }> {
   const form = new FormData()
@@ -30,7 +30,7 @@ export async function uploadChatAttachment(file: File): Promise<{ path: string }
   const res = await fetch('/api/assistant/attachment', { method: 'POST', body: form })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Загрузка вложения не удалась (${res.status}): ${text.slice(0, 200)}`)
+    throw new Error(`Chat attachment upload failed (${res.status}): ${text.slice(0, 200)}`)
   }
   const data = await res.json()
   return { path: data.name as string }

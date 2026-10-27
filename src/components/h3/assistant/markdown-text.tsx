@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * MarkdownText — маркдаун-рендер «обычного» текста ассистента (правка 88).
+ * MarkdownText — markdown renderer for "regular" assistant text (edit 88).
  *
- * Применяется ТОЛЬКО вне fence-карточки-промпта: пояснения до/после
- * ```text … ``` и ответы без промпта вообще. Содержимое fence остаётся
- * моноширинным plain-текстом (карточка с копированием в assistant-view).
+ * Applied ONLY outside the fence prompt card: explanations before/after
+ * ```text … ``` and responses without a prompt at all. Fence contents remain
+ * monospace plain text (card with copy functionality in assistant-view).
  *
- * Инлайн-теги <Picture N>/<Video N>/<Audio N> сохраняются как живые
- * превью-чипы: перед парсингом они подменяются на markdown-изображение
- * с псевдо-URL `tag:Kind-N`, которое перехватывается кастомным
- * компонентом img (urlTransform пропускаем, чтобы псевдо-протокол
- * не вырезался санитайзером react-markdown по умолчанию).
+ * Inline tags <Picture N>/<Video N>/<Audio N> are preserved as live
+ * preview chips: prior to parsing they are substituted with a markdown image
+ * using the pseudo-URL `tag:Kind-N`, which is intercepted by a custom
+ * img component (urlTransform passes this through so the pseudo-protocol
+ * is not stripped by react-markdown's default sanitizer).
  */
 import { memo } from 'react'
 import type { Components } from 'react-markdown'
@@ -27,7 +27,7 @@ export type TagPreviewFn = (
 
 const TAG_RE = /<(Picture|Video|Audio) (\d+)>/g
 
-/** Заменить инлайн-теги на markdown-изображения с псевдо-URL tag:Kind-N. */
+/** Replace inline tags with markdown images using pseudo-URL tag:Kind-N. */
 function substituteTags(text: string): string {
   return text.replace(TAG_RE, (_m, kind: string, n: string) => `![${kind} ${n}](tag:${kind}-${n})`)
 }
@@ -37,8 +37,8 @@ interface Props {
   previewFor: TagPreviewFn
   className?: string
   /**
-   * (правка 719) Клик по тегу <Picture N>/<Video N> — полноэкранный
-   * просмотр референса (как на вкладке «Генерация»).
+   * (edit 719) Click on <Picture N>/<Video N> tag — full-screen
+   * preview of the reference (similar to the "Generate" tab).
    */
   onRefClick?: (kind: 'image' | 'video', index: number) => void
 }
@@ -68,7 +68,7 @@ function MarkdownTextInner({ text, previewFor, className, onRefClick }: Props) {
             label={label}
             kind={kind}
             className={cn('rounded', cls)}
-            /* (правка 719) Клик по тегу — полноэкранный просмотр рефа. */
+            /* (edit 719) Click on tag — full-screen reference preview. */
             onClick={onRefClick ? () => onRefClick(kind, index) : undefined}
           />
         )
@@ -94,7 +94,7 @@ function MarkdownTextInner({ text, previewFor, className, onRefClick }: Props) {
       <blockquote className="my-1.5 border-l-2 border-border pl-3 text-muted-foreground">{children}</blockquote>
     ),
     hr: () => <hr className="my-2 border-border/60" />,
-    // Инлайн-код и код-блоки вне fence-карточки (маленькие цитаты в Q&A).
+    // Inline code and code blocks outside fence cards (short quotes in Q&A).
     code: ({ className: cls, children }) => {
       const isBlock = /language-/.test(cls ?? '') || String(children).includes('\n')
       if (isBlock) {
@@ -126,17 +126,17 @@ function MarkdownTextInner({ text, previewFor, className, onRefClick }: Props) {
     td: ({ children }) => <td className="border border-border/60 px-2 py-1">{children}</td>,
   }
 
-  // Пропускаем URL только по белому списку протоколов: раньше пропускалось
-  // ВСЁ (ради псевдо-протокола tag:), и модельный вывод мог подсунуть
-  // кликабельную ссылку javascript:/data: — react-markdown по умолчанию
-  // такие вырезает, но полный passthrough это отключал.
+  // Pass URLs only via protocol whitelist: previously EVERYTHING was passed
+  // (for the sake of the pseudo-protocol tag:), and model output could inject
+  // a clickable javascript:/data: link — react-markdown strips these by
+  // default, but total passthrough disabled that.
   const urlWhitelist = (url: string) => {
     const u = url.trim().toLowerCase()
     const safe = ['tag:', 'http:', 'https:', 'mailto:', '#', '/']
     const unsafe = ['javascript:', 'data:', 'vbscript:', 'file:']
     if (unsafe.some((p) => u.startsWith(p))) return ''
     if (safe.some((p) => u.startsWith(p))) return url
-    // относительный URL без схемы — безопасен
+    // relative URL without scheme — safe
     if (!/^[a-z][a-z0-9+.-]*:/i.test(url.trim())) return url
     return ''
   }

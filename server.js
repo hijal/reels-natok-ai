@@ -13,9 +13,9 @@ const dir = __dirname
 // Default to loopback: binding 0.0.0.0 triggers a Windows Firewall prompt on
 // fresh machines. Set BIND_HOST=0.0.0.0 to expose the UI on the LAN.
 const hostname = process.env.BIND_HOST || '127.0.0.1'
-// (правка 716) PORT валидируется: 'abc' → NaN, 99999 → вне диапазона.
-// Раньше порт молча превращался в невалидный, и Electron ждал 120 с, а
-// потом показывал «сервер не поднялся» без внятной причины.
+// (fix 716) PORT is validated: 'abc' -> NaN, 99999 -> out of range.
+// Previously the port would silently become invalid, causing Electron to wait 120s
+// and then show "server failed to start" without a clear reason.
 const parsedPort = parseInt(process.env.PORT || '3000', 10)
 if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
   console.error(`Invalid PORT: ${process.env.PORT}`)
@@ -24,8 +24,8 @@ if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
 const port = parsedPort
 
 // Handle uncaught exceptions gracefully (e.g. "Controller is already closed")
-// (правка 716) Логируем ПОЛНЫЙ объект ошибки: err.message у не-Error'ов
-// равен undefined, и в лог уходило «Uncaught Exception: undefined».
+// (fix 716) Log FULL error object: err.message on non-Errors
+// is undefined, which previously logged "Uncaught Exception: undefined".
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err && err.stack ? err.stack : err)
   // Don't exit — let the server keep running
@@ -46,10 +46,9 @@ async function start() {
   await app.prepare()
 
   const server = http.createServer((req, res) => {
-    // (правка 716) requestHandler — АСИНХРОННАЯ функция, её промис нужно
-    // обработать. Раньше он отбрасывался, и при reject запрос ВИСЕЛ БЕЗ
-    // ОТВЕТА (клиент ждал до своего таймаута) — в том числе проба
-    // готовности Electron'а.
+    // (fix 716) requestHandler is an ASYNC function, its promise must be
+    // handled. Previously it was dropped, so on reject the request HUNG WITHOUT
+    // RESPONSE (client waited until its timeout) — including Electron readiness probes.
     Promise.resolve(app.requestHandler(req, res)).catch((err) => {
       console.error('Request failed:', err && err.stack ? err.stack : err)
       try {
@@ -58,14 +57,14 @@ async function start() {
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
         }
         res.end(JSON.stringify({ error: 'Internal Server Error' }))
-      } catch { /* соединение уже закрыто */ }
+      } catch { /* connection already closed */ }
     })
   })
 
-  // (правка 587) Раньше 'error' сервера (EADDRINUSE и т.п.) улетал в
-  // uncaughtException-обработчик выше и ПРОГЛАТЫВАЛСЯ: процесс продолжал
-  // жить, ничего не обслуживая, — невидимый зомби под start /b, а проба
-  // готовности в start.bat могла пройти по ответам СТАРОГО сервера.
+  // (fix 587) Previously server 'error' (EADDRINUSE etc.) went to
+  // uncaughtException handler above and was SWALLOWED: process continued
+  // living without serving anything — invisible zombie under start /b, while readiness probe
+  // in start.bat could pass based on responses from OLD server.
   server.on('error', (err) => {
     console.error('Server error (fatal):', err.message)
     process.exit(1)
@@ -76,11 +75,11 @@ async function start() {
     console.log(`  ComfyUI:  http://127.0.0.1:${process.env.COMFY_PORT || 8188}`)
   })
 
-  // (правка 587) Родитель-страж: Electron передаёт свой PID в MINIMAX_PARENT_PID.
-  // Если Electron умер (краш/жёсткое убийство), его before-quit-очистка не
-  // выполнится — без стража server.js и его питон-дети (llm/stt) продолжали
-  // бы жить вхолостую. process.exit(0) запускает exit-хуки раннеров
-  // (killChildSync), убивающие питон-серверы.
+  // (fix 587) Watchdog parent: Electron passes its PID in MINIMAX_PARENT_PID.
+  // If Electron dies (crash/hard kill), its before-quit cleanup won't
+  // run — without watchdog server.js and its python child processes (llm/stt) would continue
+  // idling. process.exit(0) triggers runner exit hooks
+  // (killChildSync) which kill python servers.
   const parentPid = parseInt(process.env.MINIMAX_PARENT_PID || '', 10)
   if (parentPid > 0) {
     setInterval(() => {
@@ -94,9 +93,9 @@ async function start() {
   }
 
   // Graceful shutdown
-  // (правка 587) close() ждёт keep-alive-соединения браузера вечно —
-  // принудительно закрываем соединения и ставим таймер принудительного
-  // выхода, чтобы завершение всегда реально завершало процесс.
+  // (fix 587) close() waits for browser keep-alive connections forever —
+  // forcibly close connections and set forced exit timer
+  // so termination always actually terminates the process.
   const shutdown = (sig) => {
     console.log(`[server] ${sig} received, shutting down.`)
     server.close(() => process.exit(0))

@@ -15,14 +15,14 @@ interface SettingSliderProps {
   formatValue?: (value: number) => string
   unit?: string
   disabled?: boolean
-  /** (правка 107) Ручной ввод: допустимые границы значения. Могут быть шире
-   *  диапазона ползунка (выход за рамки), но не уже. Если не заданы —
-   *  компонент ручной ввод не показывает. */
+  /** Manual input: allowable range bounds. Can be wider
+   *  than the slider range (out-of-bounds input), but not narrower.
+   *  If omitted, component doesn't show manual input. */
   inputMin?: number
   inputMax?: number
-  /** (правка 107) Подсказка в title у поля ввода (например, «выше 30 = медленнее»). */
+  /** Tooltip hint for input title (e.g. "higher than 30 = slower"). */
   inputHint?: string
-  /** Тултип-пояснение на лейбле (взамен мелкой серой подписи под слайдером). */
+  /** Tooltip description on label (instead of small gray text under slider). */
   labelTitle?: string
 }
 
@@ -46,22 +46,22 @@ export function SettingSlider({
   const manual = inputMin !== undefined || inputMax !== undefined
   const inMin = inputMin ?? min
   const inMax = inputMax ?? max
-  // (правка 107) Значение вне диапазона ползунка — визуально помечаем
-  // (сам Radix-ползунок такие значения безопасно «прижимает» к краю).
+  // Value outside slider range — mark visually
+  // (Radix slider safely clamps such values to bounds).
   const outOfSlider = safeValue < min || safeValue > max
 
-  // (правка 107) Черновик поля ввода держим строкой: так корректно работает
-  // ввод «1.», «0,5», пустое поле — без «залипания» на NaN.
+  // Draft input is stored as string: this correctly supports
+  // "1.", "0.5", empty field — without getting stuck on NaN.
   const [draft, setDraft] = React.useState<string | null>(null)
 
   const commit = () => {
     if (draft === null) return
     const n = Number.parseFloat(draft.replace(',', '.'))
     setDraft(null)
-    if (!Number.isFinite(n)) return // некорректно — откат к текущему значению
+    if (!Number.isFinite(n)) return // invalid — revert to current value
     let v = Math.min(inMax, Math.max(inMin, n))
     if (step > 0) v = Math.round(v / step) * step
-    v = Math.round(v * 10000) / 10000 // хвост плавающей запятой (0.05*3)
+    v = Math.round(v * 10000) / 10000 // floating point tail (0.05*3)
     if (v !== safeValue) onChange(v)
   }
 
@@ -70,18 +70,18 @@ export function SettingSlider({
       <div className="flex items-center justify-between gap-2">
         <Label className="text-xs text-muted-foreground font-medium" title={labelTitle}>{label}</Label>
         {manual ? (
-          // (правка 107) Ручной ввод — ЕДИНСТВЕННОЕ место значения: дублирующую
-          // бейдж-надпись не показываем. Размер (для MP-ползунков) и так
-          // виден в подсказке ниже.
+          // Manual input is the ONLY value display: duplicate badge
+          // is not shown. Resolution (for MP sliders) is already visible
+          // in the hint below.
           <input
             type="text"
             inputMode="decimal"
-            aria-label={`${label}: ручной ввод (${inMin}–${inMax})`}
-            title={inputHint || `Допустимо ${inMin}–${inMax}`}
+            aria-label={`${label}: manual input (${inMin}–${inMax})`}
+            title={inputHint || `Allowed ${inMin}–${inMax}`}
             value={draft ?? String(safeValue)}
             onChange={(e) => setDraft(e.target.value)}
             onFocus={(e) => {
-              // Выделяем всё, чтобы ввод сразу заменил значение
+              // Select all so typing immediately replaces value
               setDraft(null)
               requestAnimationFrame(() => e.target.select())
             }}
@@ -109,7 +109,7 @@ export function SettingSlider({
               'text-xs font-mono tabular-nums',
               outOfSlider ? 'text-amber-300' : 'text-foreground/80',
             )}
-            title={outOfSlider ? 'Вне диапазона ползунка (ручной ввод)' : undefined}
+            title={outOfSlider ? 'Outside slider range (manual input)' : undefined}
           >
             {formatValue ? formatValue(safeValue) : safeValue}{unit ? ` ${unit}` : ''}
           </span>

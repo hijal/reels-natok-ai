@@ -1,38 +1,38 @@
 'use client'
 
 /**
- * (правка 65) useVoiceDictation — запись микрофона и расшифровка через
- * STT-сервис (transcribe.cpp) на CPU (tools/stt_server.py).
+ * (fix 65) useVoiceDictation — microphone recording and transcription via
+ * STT service (transcribe.cpp) on CPU (tools/stt_server.py).
  *
- * Цепочка: getUserMedia → AudioContext (16 кГц, если браузер поддерживает)
- * → ScriptProcessorNode (захват) → 16-битный PCM WAV (собирается в JS,
- * без внешних зависимостей) → POST /api/stt/transcribe → текст.
+ * Pipeline: getUserMedia → AudioContext (16 kHz, if supported by browser)
+ * → ScriptProcessorNode (capture) → 16-bit PCM WAV (assembled in JS,
+ * without external dependencies) → POST /api/stt/transcribe → text.
  *
- * (правка 85) Выбор микрофона: selectedMicId хранится на уровне модуля
- * (общая переменная для всех инстансов хука на странице). Устанавливается
- * через setSttMicDevice() из панели настроек, сохраняется в localStorage.
+ * (fix 85) Microphone selection: selectedMicId is stored at module level
+ * (shared variable for all hook instances on the page). Set
+ * via setSttMicDevice() from settings panel, saved in localStorage.
  */
 import { useCallback, useRef, useState } from 'react'
 
 export type VoiceDictationState = 'idle' | 'recording' | 'processing'
 
 export interface VoiceDictationResult {
-  /** Распознанный текст (null при ошибке или пустом результате). */
+  /** Recognized text (null on error or empty result). */
   text: string | null
-  /** Текст ошибки на русском (null при успехе). */
+  /** Error text (null on success). */
   error: string | null
 }
 
 export interface VoiceDictationApi {
   state: VoiceDictationState
-  /** Начать запись. Бросает Error с русским текстом при неудаче. */
+  /** Start recording. Throws Error on failure. */
   start: () => Promise<void>
-  /** Остановить запись и вернуть результат: текст и/или ошибку.
-   *  Ошибку возвращаем значением, а не только через `error` стейта —
-   *  замыкание в обработчике клика не видит стейт, установленный
-   *  внутри этого вызова (stale closure). */
+  /** Stop recording and return result: text and/or error.
+   *  We return error by value, not only via state `error` —
+   *  closure in click handler doesn't see state set
+   *  inside this call (stale closure). */
   stop: () => Promise<VoiceDictationResult>
-  /** Отменить запись без расшифровки. */
+  /** Cancel recording without transcribing. */
   cancel: () => void
   error: string | null
   clearError: () => void
@@ -40,10 +40,10 @@ export interface VoiceDictationApi {
 
 const TARGET_RATE = 16000
 
-/* ── (правка 85) Выбранный микрофон (общий для всех инстансов хука) ──
-   undefined = ещё не читали из localStorage
-   null      = системный микрофон по умолчанию
-   string    = конкретный deviceId                               */
+/* ── (fix 85) Selected microphone (shared across all hook instances) ──
+   undefined = not yet read from localStorage
+   null      = system default microphone
+   string    = specific deviceId                               */
 let _selectedMicId: string | null | undefined = undefined
 const LS_KEY = 'stt.micDeviceId'
 
@@ -52,7 +52,7 @@ function _readStoredMic(): string | null {
   try { return localStorage.getItem(LS_KEY) } catch { return null }
 }
 
-/** Установить deviceId микрофона (null = системный по умолчанию). */
+/** Set microphone deviceId (null = system default). */
 export function setSttMicDevice(id: string | null): void {
   _selectedMicId = id
   try {
@@ -61,7 +61,7 @@ export function setSttMicDevice(id: string | null): void {
   } catch { /* private mode / SSR */ }
 }
 
-/** Получить deviceId выбранного микрофона (null = по умолчанию). */
+/** Get selected microphone deviceId (null = default). */
 export function getSttMicDevice(): string | null {
   if (_selectedMicId === undefined) {
     _selectedMicId = _readStoredMic()
@@ -69,7 +69,7 @@ export function getSttMicDevice(): string | null {
   return _selectedMicId
 }
 
-/** Линейная ресемплинг до 16 кГц (вход — любой sampleRate). */
+/** Linear resampling to 16 kHz (input — any sampleRate). */
 function resampleLinear(input: Float32Array, fromRate: number, toRate: number): Float32Array {
   if (fromRate === toRate) return input
   const ratio = fromRate / toRate
@@ -85,7 +85,7 @@ function resampleLinear(input: Float32Array, fromRate: number, toRate: number): 
   return out
 }
 
-/** 44-байтовый WAV-заголовок + 16-бит PCM mono @16 кГц. */
+/** 44-byte WAV header + 16-bit PCM mono @16 kHz. */
 function buildWav16(samples: Float32Array): ArrayBuffer {
   const n = samples.length
   const buf = new ArrayBuffer(44 + n * 2)
@@ -127,9 +127,9 @@ export function useVoiceDictation(): VoiceDictationApi {
   const startingRef = useRef(false)
 
   const teardown = useCallback(() => {
-    try { procRef.current?.disconnect() } catch { /* уже отключён */ }
+    try { procRef.current?.disconnect() } catch { /* already disconnected */ }
     procRef.current = null
-    try { void ctxRef.current?.close() } catch { /* уже закрыт */ }
+    try { void ctxRef.current?.close() } catch { /* already closed */ }
     ctxRef.current = null
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
@@ -138,14 +138,14 @@ export function useVoiceDictation(): VoiceDictationApi {
   const start = useCallback(async () => {
     if (startingRef.current) return
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Голосовой ввод недоступен: браузер не даёт доступа к микрофону')
+      throw new Error('Voice input unavailable: browser does not grant access to microphone')
     }
     startingRef.current = true
     setError(null)
     try {
-      // (правка 85) Если выбран конкретный микрофон — указываем deviceId.
-      // Используем `ideal`, а не `exact`: если устройство отключено,
-      // браузер gracefully fallback-нёт на другой, а не упадёт с ошибкой.
+      // (fix 85) If specific microphone is selected — specify deviceId.
+      // Use `ideal`, not `exact`: if device is disconnected,
+      // browser gracefully falls back to another instead of failing with an error.
       const micId = getSttMicDevice()
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
@@ -161,7 +161,7 @@ export function useVoiceDictation(): VoiceDictationApi {
       try {
         ctx = new AudioContext({ sampleRate: TARGET_RATE })
       } catch {
-        ctx = new AudioContext() // fallback: ресемплинг сделаем сами
+        ctx = new AudioContext() // fallback: we will resample ourselves
       }
       ctxRef.current = ctx
       rateRef.current = ctx.sampleRate
@@ -172,8 +172,8 @@ export function useVoiceDictation(): VoiceDictationApi {
         const ch = e.inputBuffer.getChannelData(0)
         chunksRef.current.push(new Float32Array(ch))
       }
-      // Замкнутый затухающий контур: onaudioprocess обязан «звучать»,
-      // поэтому шлём в заземлённый gain (в динамиках ничего не слышно).
+      // Closed muted loop: onaudioprocess is required to produce sound,
+      // so we route it to muted gain (nothing is audible in speakers).
       const mute = ctx.createGain()
       mute.gain.value = 0
       source.connect(proc)
@@ -185,10 +185,10 @@ export function useVoiceDictation(): VoiceDictationApi {
       teardown()
       const name = (err as { name?: string } | null)?.name
       if (name === 'NotAllowedError' || name === 'SecurityError') {
-        throw new Error('Доступ к микрофону запрещён — разрешите микрофон в настройках браузера для этого сайта')
+        throw new Error('Microphone access denied — please allow microphone in browser settings for this site')
       }
       if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-        throw new Error('Микрофон не найден — подключите устройство ввода')
+        throw new Error('Microphone not found — connect an input device')
       }
       throw err instanceof Error ? err : new Error(String(err))
     } finally {
@@ -225,7 +225,7 @@ export function useVoiceDictation(): VoiceDictationApi {
       })
       const data: { ok?: boolean; text?: string; error?: string } = await r.json().catch(() => ({}))
       if (!r.ok || !data.ok) {
-        const err = data.error || 'Не удалось распознать речь (сервис STT недоступен)'
+        const err = data.error || 'Failed to recognize speech (STT service is unavailable)'
         setError(err)
         setState('idle')
         return { text: null, error: err }
@@ -233,14 +233,14 @@ export function useVoiceDictation(): VoiceDictationApi {
       const text = String(data.text ?? '').trim()
       setState('idle')
       if (!text) {
-        const err = 'Ничего не распознано — попробуйте говорить чётче или ближе к микрофону'
+        const err = 'Nothing recognized — try speaking more clearly or closer to the microphone'
         setError(err)
         return { text: null, error: err }
       }
       return { text, error: null }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      const e = msg || 'Не удалось распознать речь'
+      const e = msg || 'Failed to recognize speech'
       setError(e)
       setState('idle')
       return { text: null, error: e }

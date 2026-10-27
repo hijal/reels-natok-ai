@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * FpsView — вкладка «FPS»: frame interpolation (VFI) готового видео. (правка 268)
+ * FpsView — "FPS" tab: frame interpolation (VFI) of finished video.
  *
- * Два режима из пакета Fannovel16/ComfyUI-Frame-Interpolation:
- *   RIFE VFI  — быстрый, мало VRAM (параметры: model, batch, scale, dtype, fast/ensemble).
- *   FILM VFI  — для крупных движений (только model + multiplier).
+ * Two modes from Fannovel16/ComfyUI-Frame-Interpolation:
+ *   RIFE VFI  — fast, low VRAM (parameters: model, batch, scale, dtype, fast/ensemble).
+ *   FILM VFI  — for large motions (model + multiplier).
  *
- * Layout как у Tile Upscale: слева — параметры + статус, справа — галерея.
- * Источник: drag&drop из галереи или файл с диска.
+ * Layout similar to Tile Upscale: left — parameters + status, right — gallery.
+ * Source: drag & drop from gallery or file from disk.
  *
- * Целевой fps = исходный fps × multiplier. Скорость видео НЕ меняется —
- * вставляются промежуточные кадры (24→48/72/96 fps), звук сохраняется.
+ * Target fps = source fps × multiplier. Playback speed does not change —
+ * intermediate frames are inserted (24→48/72/96 fps), audio is preserved.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -31,20 +31,18 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select' // (правка 464)
+} from '@/components/ui/select'
 import { VideoGalleryGrid, H3_VIDEO_DND_MIME } from '@/components/h3/video-gallery-grid'
 import { GenerationStatus } from '@/components/h3/generation-status'
-// (правка 719) Превью с полноэкранным просмотром — как на «Генерации».
 import { RefPreviewThumb } from '@/components/h3/ref-preview-thumb'
 import { useVideoGallery } from '@/components/h3/use-video-gallery'
 import { useFpsTarget, type FpsSource, type FpsMode } from '@/lib/fps-store'
-import { useFpsJob } from '@/lib/fps-job-store' // (правка 554)
+import { useFpsJob } from '@/lib/fps-job-store'
 import { uploadInputFile } from '@/lib/upload'
 
-/** (правка 268) Два режима VFI — кнопки-карточки (паттерн MODES из upscale-view). */
 const MODES: Array<{ id: FpsMode; label: string; hint: string; icon: typeof ZapIcon }> = [
-  { id: 'rife', label: 'RIFE VFI', hint: 'Быстрый · мало VRAM', icon: ZapIcon },
-  { id: 'film', label: 'FILM VFI', hint: 'Крупные движения', icon: FilmIcon },
+  { id: 'rife', label: 'RIFE VFI', hint: 'Fast · low VRAM', icon: ZapIcon },
+  { id: 'film', label: 'FILM VFI', hint: 'Large motions', icon: FilmIcon },
 ]
 
 export function FpsView() {
@@ -52,15 +50,12 @@ export function FpsView() {
   const clearStoreTarget = useFpsTarget((s) => s.clear)
   const source = useFpsTarget((s) => s.source)
   const setSource = useFpsTarget((s) => s.setSource)
-  // (правка 587) Отзыв предыдущего blob:-URL при любой замене/удалении
-  // источника: URL.createObjectURL(file) утекал при каждом «убрать»/дропе
-  // (паттерн refine-view, правка 345). Серверные /api-URL не трогаем.
   const prevSourceUrlRef = useRef<string | null>(null)
   const setSourceSafe = useCallback(
     (next: FpsSource | null) => {
       const prev = prevSourceUrlRef.current
       if (prev && prev.startsWith('blob:') && prev !== next?.url) {
-        try { URL.revokeObjectURL(prev) } catch { /* уже отозван */ }
+        try { URL.revokeObjectURL(prev) } catch { /* already revoked */ }
       }
       prevSourceUrlRef.current = next?.url ?? null
       setSource(next)
@@ -75,14 +70,7 @@ export function FpsView() {
 
   const [dragOver, setDragOver] = useState(false)
   const [uploadingSrc, setUploadingSrc] = useState(false)
-  // (правка 276) «Дополнительные параметры» — свёрнуты по умолчанию
   const [showAdvanced, setShowAdvanced] = useState(false)
-  // (правка 554) Джоб-состояние — в модульном сторе (fps-job-store), НЕ в
-  // useState: смена вкладки размонтирует FpsView, а задача в ComfyUI
-  // продолжает идти. Раньше поллинг умирал вместе с компонентом, статус
-  // сбрасывался, кнопка снова становилась активной (второй клик = вторая
-  // задача), результат не появлялся до ручной перезагрузки. Поллинг в сторе
-  // переживает unmount; задача видна в общей очереди (QueueIndicator).
   const busy = useFpsJob((s) => s.busy)
   const phase = useFpsJob((s) => s.phase)
   const progress = useFpsJob((s) => s.progress)
@@ -95,7 +83,6 @@ export function FpsView() {
 
   const gallery = useVideoGallery()
 
-  // Цель из стора галереи
   useEffect(() => {
     if (!storeTarget) return
     const file = gallery.files.find(
@@ -103,7 +90,7 @@ export function FpsView() {
     )
     if (file) {
       setSourceSafe(file as FpsSource)
-      toast.success(`Источник: ${file.filename}`)
+      toast.success(`Source: ${file.filename}`)
     } else {
       setSourceSafe({
         url: `/api/comfy/file?filename=${encodeURIComponent(storeTarget.filename)}&subfolder=${encodeURIComponent(storeTarget.subfolder)}`,
@@ -114,7 +101,6 @@ export function FpsView() {
     clearStoreTarget()
   }, [storeTarget, gallery.files, clearStoreTarget, setSourceSafe])
 
-  // (правка 274) Клик-выбор файла: <input type='file'> + ref
   const fileInputRef = useRef<HTMLInputElement>(null)
   const VIDEO_EXTS = '.mp4,.m4v,.mov,.mkv,.avi,.webm,.m2ts,.mts,.mxf,.vob,.wmv,.flv,.mpg,.mpeg,.ogv'
 
@@ -128,26 +114,22 @@ export function FpsView() {
         subfolder: '',
         inputSource: path,
       })
-      toast.success(`Источник: ${file.name}`)
+      toast.success(`Source: ${file.name}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки видео')
+      toast.error(e instanceof Error ? e.message : 'Error uploading video')
     } finally {
       setUploadingSrc(false)
     }
   }, [setSourceSafe])
 
-  // (правка 554) Поллинг статуса/прогресса жил здесь в useEffect — и умирал
-  // вместе с компонентом при смене вкладки. Теперь он в модуле fps-job-store
-  // и переживает unmount (паттерн tile-upscale/controlnet).
-
   const start = useCallback(async () => {
     const src = sourceRef.current
     if (!src) {
-      toast.error('Сначала выберите видео-источник')
+      toast.error('First select a source video')
       return
     }
     if (uploadingSrc) {
-      toast.error('Видео ещё загружается')
+      toast.error('Video is still uploading')
       return
     }
 
@@ -157,7 +139,6 @@ export function FpsView() {
         : { sourceFilename: src.filename, sourceSubfolder: src.subfolder ?? '' }),
       mode: params.mode,
       multiplier: params.multiplier,
-      // (правка 269) Модели RIFE/FILM зафиксированы в fps-template.ts.
       rifeBatchSize: params.rifeBatchSize,
       rifeScale: params.rifeScale,
       rifeDtype: params.rifeDtype,
@@ -165,14 +146,10 @@ export function FpsView() {
       rifeEnsemble: params.rifeEnsemble,
       clearCacheAfterNFrames: params.clearCacheAfterNFrames,
     }
-    // (правка 554) Сабмит/поллинг/статусы — в fps-job-store.
     await submitJob(body)
   }, [uploadingSrc, params, submitJob])
 
   const cancel = useCallback(async () => {
-    // (правка 554) Отмена — в сторе: эпоха отмены, cancelRequestedFor,
-    // пометка элемента очереди. Старая версия просто слала /api/comfy/cancel
-    // без подтверждения — и осознанная отмена рисовалась как «Ошибка».
     await cancelJob()
   }, [cancelJob])
 
@@ -195,35 +172,35 @@ export function FpsView() {
           filename: parsed.filename ?? '',
           subfolder: parsed.subfolder ?? '',
         })
-        toast.success(`Источник: ${parsed.filename}`)
-      } catch { toast.error('Не удалось прочитать перетащенное видео') }
+        toast.success(`Source: ${parsed.filename}`)
+      } catch { toast.error('Failed to read dragged video') }
       return
     }
     const f = e.dataTransfer.files?.[0]
     if (f) void uploadLocalFile(f)
-    else toast.error('Нужно видео')
+    else toast.error('A video file is required')
   }
 
   const isRife = params.mode === 'rife'
 
   return (
     <div className="flex h-full w-full min-w-0">
-      {/* ═══ Панель параметров ═══ */}
+      {/* ═══ Parameter Panel ═══ */}
       <aside className="w-[360px] shrink-0 border-r border-border bg-[var(--surface-1)] flex flex-col">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center gap-2">
             <GaugeIcon className="w-4 h-4 text-cyan-400" />
             <h2
               className="text-sm font-semibold text-foreground"
-              title="Повышение плавности: между кадрами видео вставляются промежуточные. Скорость воспроизведения и звук не меняются."
+              title="Motion smoothing: inserts intermediate frames between video frames. Playback speed and audio remain unchanged."
             >
               FPS
             </h2>
           </div>
 
-          {/* Источник */}
+          {/* Source */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground font-medium">Источник</Label>
+            <Label className="text-xs text-muted-foreground font-medium">Source</Label>
             {source ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -234,18 +211,12 @@ export function FpsView() {
                   dragOver ? 'border-cyan-400 ring-1 ring-cyan-400/50' : 'border-border',
                 )}
               >
-                {/* (правка 463) Превью: src — САМО видео (source.url), а не
-                    srcThumb(...): URL с &width=320 отдаёт JPEG-постер, и <video>
-                    показывал чёрный квадрат. JPEG-постер уходит в poster=
-                    (мгновенная отрисовка), первый кадр — через preload="metadata"
-                    + muted (WebView2). У blob:-URL (файл с диска) постера нет.
-                    (правка 719) Клик — просмотр во весь экран. */}
                 <RefPreviewThumb
                   kind="video"
                   name={source.filename}
                   url={source.url}
                   className="w-20 h-12 rounded object-cover bg-black shrink-0"
-                  title="Открыть исходное видео во весь экран"
+                  title="Open source video in full screen"
                 >
                   <video
                     src={source.url}
@@ -258,12 +229,12 @@ export function FpsView() {
                 </RefPreviewThumb>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-foreground truncate">{source.filename}</p>
-                  {uploadingSrc && <p className="text-[10px] text-cyan-400">загрузка…</p>}
+                  {uploadingSrc && <p className="text-[10px] text-cyan-400">uploading…</p>}
                 </div>
                 {!busy && (
                   <button onClick={() => setSourceSafe(null)}
                     className="text-[10px] text-muted-foreground hover:text-foreground shrink-0">
-                    убрать
+                    remove
                   </button>
                 )}
               </div>
@@ -272,7 +243,6 @@ export function FpsView() {
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={dropHandler}
-                // (правка 274) Клик по полю — выбор файла с диска
                 onClick={() => fileInputRef.current?.click()}
                 role="button"
                 tabIndex={0}
@@ -283,10 +253,9 @@ export function FpsView() {
                 )}
               >
                 <FileVideoIcon className="w-4 h-4 shrink-0" />
-                <span>Кликните для выбора, перетащите карточку из галереи или файл с диска</span>
+                <span>Click to select, drag a card from gallery or drop a file from disk</span>
               </div>
             )}
-            {/* (правка 274) Скрытый input — клик-выбор видео с диска */}
             <input
               ref={fileInputRef}
               type="file"
@@ -300,13 +269,9 @@ export function FpsView() {
             />
           </div>
 
-          {/* Выбор режима */}
+          {/* Mode Selection */}
           <div className="space-y-2">
-            {/* (правка 464) Стили панели под эталон «Генерация»: Label
-                text-xs text-muted-foreground font-medium, сырые <select>
-                заменены на общий Select, segmented-кнопки — h-8 rounded-md
-                grid-cols-N gap-1.5 с активной bg-cyan-500/15. */}
-            <Label className="text-xs text-muted-foreground font-medium">Режим</Label>
+            <Label className="text-xs text-muted-foreground font-medium">Mode</Label>
             <div className="grid grid-cols-2 gap-2">
               {MODES.map((m) => (
                 <button
@@ -331,10 +296,10 @@ export function FpsView() {
             </div>
           </div>
 
-          {/* Множитель FPS */}
+          {/* FPS Multiplier */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground font-medium">
-              Множитель FPS
+              FPS Multiplier
               <span className="ml-1 text-[10px] text-muted-foreground">(24 → {24 * params.multiplier} fps)</span>
             </Label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -358,27 +323,22 @@ export function FpsView() {
             </div>
           </div>
 
-          {/* (правка 276) Дополнительные параметры: RIFE batch/scale/dtype/
-              fast/ensemble + Анти-OOM — свёрнуты по умолчанию (паттерн
-              из tile-upscale-view, правка 270). Основные (источник, режим,
-              множитель) остаются выше. */}
+          {/* Advanced Parameters */}
           <div className="space-y-2">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-border hover:border-cyan-500/30 transition-all text-left"
             >
-              <span className="text-xs font-medium text-muted-foreground">Дополнительные параметры</span>
+              <span className="text-xs font-medium text-muted-foreground">Advanced Parameters</span>
               <span className={cn('text-[10px] text-muted-foreground transition-transform', showAdvanced && 'rotate-180')}>▼</span>
             </button>
 
             {showAdvanced && (
               <div className="space-y-3 pl-1">
-                {/* RIFE параметры (только в режиме RIFE) */}
+                {/* RIFE parameters (only in RIFE mode) */}
                 {isRife && (
                   <>
-                    {/* (правка 269) Модель RIFE зафиксирована (rife49.pth) —
-                        скачивается в Настройках → Модели. Селект убран. */}
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Batch (VRAM)</Label>
                       <Select
@@ -397,7 +357,7 @@ export function FpsView() {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Scale (качество)</Label>
+                        <Label className="text-xs text-muted-foreground">Scale (quality)</Label>
                         <Select
                           value={String(params.rifeScale)}
                           onValueChange={(v) => patchParams({ rifeScale: parseFloat(v) })}
@@ -407,11 +367,11 @@ export function FpsView() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-[var(--surface-3)] border-border">
-                            <SelectItem value="0.25">0.25 (быстрее, меньше VRAM)</SelectItem>
-                            <SelectItem value="0.5">0.5 (сбалансировано)</SelectItem>
-                            <SelectItem value="1">1.0 (качество)</SelectItem>
-                            <SelectItem value="2">2.0 (эксперимент)</SelectItem>
-                            <SelectItem value="4">4.0 (эксперимент)</SelectItem>
+                            <SelectItem value="0.25">0.25 (faster, less VRAM)</SelectItem>
+                            <SelectItem value="0.5">0.5 (balanced)</SelectItem>
+                            <SelectItem value="1">1.0 (quality)</SelectItem>
+                            <SelectItem value="2">2.0 (experimental)</SelectItem>
+                            <SelectItem value="4">4.0 (experimental)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -426,9 +386,9 @@ export function FpsView() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-[var(--surface-3)] border-border">
-                            <SelectItem value="float16">float16 (экономия VRAM)</SelectItem>
+                            <SelectItem value="float16">float16 (save VRAM)</SelectItem>
                             <SelectItem value="bfloat16">bfloat16</SelectItem>
-                            <SelectItem value="float32">float32 (качество)</SelectItem>
+                            <SelectItem value="float32">float32 (quality)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -459,16 +419,13 @@ export function FpsView() {
                   </>
                 )}
 
-                {/* (правка 269) FILM — одна модель (film_net_fp32.pt), зафиксирована.
-                    Скачивается в Настройках → Модели. Селект убран. */}
-
-                {/* Анти-OOM (общий для обоих режимов) */}
+                {/* Anti-OOM (shared for both modes) */}
                 <div className="space-y-1">
                   <Label
                     className="text-xs text-muted-foreground"
-                    title="Как часто очищать видеопамять во время обработки. Меньше значение — меньше шанс нехватки памяти, но медленнее."
+                    title="How often to clear VRAM during processing. Smaller values reduce the risk of out-of-memory errors, but may be slower."
                   >
-                    Анти-OOM (кадров между очисткой кэша)
+                    Anti-OOM (frames between cache clears)
                   </Label>
                   <Select
                     value={String(params.clearCacheAfterNFrames)}
@@ -487,18 +444,17 @@ export function FpsView() {
             )}
           </div>
 
-          {/* Запуск */}
+          {/* Start */}
           <div className="flex gap-2 pt-1">
             <Button onClick={start} disabled={!source || uploadingSrc} className="flex-1 gap-1.5">
               <PlayIcon className="w-4 h-4" />
-              {busy ? 'Ещё в очередь' : 'Запустить FPS'}
+              {busy ? 'Queue another' : 'Run FPS'}
             </Button>
           </div>
 
         </div>
 
-        {/* Статус */}
-        {/* (правка 475) панель статуса/превью — surface-1, в цвет панели настроек */}
+        {/* Status */}
         <div className="shrink-0 border-t border-border p-3 bg-[var(--surface-1)]/90 backdrop-blur-sm">
           <GenerationStatus
             isGenerating={busy}
@@ -515,7 +471,7 @@ export function FpsView() {
         </div>
       </aside>
 
-      {/* ═══ Галерея ═══ */}
+      {/* ═══ Gallery ═══ */}
       <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-y-auto p-3">
           <VideoGalleryGrid
@@ -523,7 +479,7 @@ export function FpsView() {
             loading={gallery.loading}
             onRefresh={() => void gallery.load()}
             onDeleteFile={gallery.deleteFile}
-            emptyHint="Результаты FPS появятся здесь"
+            emptyHint="FPS results will appear here"
           />
         </div>
       </section>

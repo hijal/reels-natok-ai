@@ -1,9 +1,8 @@
 @echo off
-REM (правка 587) chcp 65001 УДАЛЁН: под кодовой страницей 65001 cmd.exe
-REM неверно отслеживает позицию чтения батника с кириллицей в UTF-8
-REM комментариях — парсер мог «споткнуться» и исказить/пропустить строку
-REM запуска ComfyUI. Кириллица здесь только в REM-строках: без 65001
-REM парсер ходит по байтам корректно.
+REM (fix 587) chcp 65001 REMOVED: under code page 65001 cmd.exe
+REM incorrectly tracks file seek positions in batch files with UTF-8
+REM characters — the parser could trip up and distort/skip the
+REM ComfyUI launch line. Without 65001, the parser navigates bytes correctly.
 setlocal EnableExtensions
 cd /d "%~dp0.."
 
@@ -16,53 +15,53 @@ set "DYNAMIC_VRAM="
 set "ASYNC_OFFLOAD="
 set "VRAM_HEADROOM="
 if exist config\config.ini (
-    REM (правка 357) /b /c:"key" — матч только строк, НАЧИНАЮЩИХСЯ с ключа:
-    REM раньше findstr ловил и комментарии вида "REM reserve_gb=99".
+    REM (fix 357) /b /c:"key" — match only lines STARTING with the key:
+    REM previously findstr also matched comments like "REM reserve_gb=99".
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"reserve_gb" config\config.ini 2^>nul') do if not defined RESERVE_VRAM set "RESERVE_VRAM=%%a"
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"dynamic_vram" config\config.ini 2^>nul') do if not defined DYNAMIC_VRAM set "DYNAMIC_VRAM=%%a"
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"async_offload" config\config.ini 2^>nul') do if not defined ASYNC_OFFLOAD set "ASYNC_OFFLOAD=%%a"
-    REM (правка 490) vram_headroom — доп. запас свободной VRAM для DynamicVRAM
+    REM (fix 490) vram_headroom — additional free VRAM reserve for DynamicVRAM
     for /f "tokens=2 delims==" %%a in ('findstr /i /b /c:"vram_headroom" config\config.ini 2^>nul') do if not defined VRAM_HEADROOM set "VRAM_HEADROOM=%%a"
 )
 if not defined RESERVE_VRAM set "RESERVE_VRAM=3"
 if not defined DYNAMIC_VRAM set "DYNAMIC_VRAM=1"
 if not defined VRAM_HEADROOM set "VRAM_HEADROOM=2"
-REM (правка) async_offload по умолчанию = 0 (выключен). comfy-aimdo 0.4.13
-REM на Windows+NVIDIA падает при загрузке больших моделей (~20 ГБ):
+REM (fix) async_offload defaults to 0 (disabled). comfy-aimdo 0.4.13
+REM on Windows+NVIDIA crashes when loading large models (~20 GB):
 REM   hostbuf_file_reader_read failed / HostBuffer.read_file_slice failed,
-REM   GetOverlappedResult error=1450/1453 (нехватка системных ресурсов).
-REM Причина — async weight offloading (2 потока) + pinned memory. Выключаем их,
-REM и модель грузится синхронно и стабильно. Включить обратно (быстрее
-REM загрузка, но на RTX 50xx может падать): async_offload=1 в config\config.ini.
+REM   GetOverlappedResult error=1450/1453 (insufficient system resources).
+REM Cause — async weight offloading (2 threads) + pinned memory. Disabling them
+REM makes the model load synchronously and reliably. To re-enable (faster
+REM loading, but may crash on RTX 50xx): async_offload=1 in config\config.ini.
 if not defined ASYNC_OFFLOAD set "ASYNC_OFFLOAD=0"
 set "RESERVE_VRAM=%RESERVE_VRAM:"=%"
 set "DYNAMIC_VRAM=%DYNAMIC_VRAM:"=%"
 set "ASYNC_OFFLOAD=%ASYNC_OFFLOAD:"=%"
 set "VRAM_HEADROOM=%VRAM_HEADROOM:"=%"
-REM (правка 357) Валидация: значение из config.ini подставляется в команды
-REM запуска — мусор (пробелы, текст, единицы "GB") ломал бы всю строку.
-REM Нечисловое значение → безопасный дефолт.
+REM (fix 357) Validation: value from config.ini is interpolated into launch
+REM commands — garbage (spaces, text, units like "GB") would break the command line.
+REM Non-numeric value → safe default.
 echo %RESERVE_VRAM%| findstr /r "^[0-9][0-9.]*$" >nul || set "RESERVE_VRAM=3"
 echo %DYNAMIC_VRAM%| findstr /r "^[01]$" >nul || set "DYNAMIC_VRAM=1"
 echo %ASYNC_OFFLOAD%| findstr /r "^[01]$" >nul || set "ASYNC_OFFLOAD=0"
 echo %VRAM_HEADROOM%| findstr /r "^[0-9][0-9.]*$" >nul || set "VRAM_HEADROOM=2"
 set "EXTRA_FLAGS="
 if not "%ASYNC_OFFLOAD%"=="1" set "EXTRA_FLAGS=--disable-async-offload --disable-pinned-memory"
-REM (правка 490) --vram-headroom: DynamicVRAM (aimdo) непрерывно держит
-REM столько ГБ реально свободными (по NVML, включая чужие приложения) —
-REM защита от всплесков активаций, перепрыгивающих --reserve-vram.
-REM 0 = флаг не передаём (поведение как раньше).
+REM (fix 490) --vram-headroom: DynamicVRAM (aimdo) continuously keeps
+REM this many GB genuinely free (via NVML, including third-party apps) —
+REM protection against activation spikes jumping over --reserve-vram.
+REM 0 = flag omitted (legacy behavior).
 set "HEADROOM_FLAG="
 if not "%VRAM_HEADROOM%"=="0" set "HEADROOM_FLAG=--vram-headroom %VRAM_HEADROOM%"
 
 REM ============================================================
 REM  [CHECK] Block auto-update if .no-auto-update flag exists
 REM ============================================================
-REM (правка 132) ComfyUI-Easy-Install может автоматически обновляться
-REM  и подтянуть новую версию, несовместимую со старой структурой.
-REM  Папка .no-auto-update — флаг: если она существует, обновления
-REM  запрещены. Это защищает от случайного обновления до несовместимой
-REM  версии.
+REM (fix 132) ComfyUI-Easy-Install may auto-update
+REM  and pull in a new version incompatible with the old structure.
+REM  The .no-auto-update folder is a flag: if it exists, updates
+REM  are blocked. This protects against unintended updates to an incompatible
+REM  version.
 if exist "%COMFY_ROOT%\.no-auto-update" (
     echo  [OK] Auto-update blocked (.no-auto-update flag present).
     echo       ComfyUI will NOT update itself.
@@ -75,11 +74,11 @@ if exist "%COMFY_ROOT%\.no-auto-update" (
 REM ============================================================
 REM  [CHECK] Verify ComfyUI version compatibility
 REM ============================================================
-REM (правка 131) ComfyUI-Easy-Install может автоматически обновляться
-REM  и подтянуть новую версию, несовместимую со старой структурой
-REM  (comfy.ldm убрали, но execution.py всё ещё импортирует).
-REM  Проверяем, что comfy.ldm существует — иначе ComfyUI упадёт
-REM  с ModuleNotFoundError.
+REM (fix 131) ComfyUI-Easy-Install may auto-update
+REM  and pull in a new version incompatible with the old structure
+REM  (comfy.ldm was removed, but execution.py still imports it).
+REM  Verify that comfy.ldm exists — otherwise ComfyUI will crash
+REM  with ModuleNotFoundError.
 if not exist "%COMFY_ROOT%\ComfyUI\comfy\ldm\models\autoencoder.py" (
     echo.
     echo  [ERROR] Incompatible ComfyUI version detected.

@@ -5,18 +5,18 @@ import { pipeline } from 'stream/promises'
 import path from 'path'
 import crypto from 'crypto'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
 
 /**
  * POST /api/upscale/import
- * Тело: { filename, subfolder? }
+ * Body: { filename, subfolder? }
  *
- * Копирует видео ИЗ ОБЩЕЙ ПАПКИ OUTPUT COMFYUI в data/upscale-input
- * прямо на сервере (стриминг, без браузера в цикле) — для сценария
- * «отправить превьюшку из галереи на апскейл». Видео может быть
- * гигабайтами — гонять его через fetch/blob в браузере нельзя.
+ * Copies video FROM COMFYUI SHARED OUTPUT FOLDER to data/upscale-input
+ * directly on the server (streaming, without browser in the loop) — for the
+ * "send preview from gallery to upscale" workflow. The video can be
+ * gigabytes — transferring it via fetch/blob in the browser is not viable.
  *
- * Ответ — тот же формат, что и /api/upscale/upload:
+ * Response — same format as /api/upscale/upload:
  * { ok, path, name, size, kind }.
  */
 export const dynamic = 'force-dynamic'
@@ -24,9 +24,9 @@ export const maxDuration = 600
 
 const MAX_BYTES = 32 * 1024 ** 3
 
-// (правка 349) Изображения разрешены, как в /api/upscale/upload — у моста
-// есть nr-image/vsr-image, иначе картинку из галереи нельзя было отправить
-// на апскейл (только через ручной upload).
+// (fix 349) Images are allowed, as in /api/upscale/upload — the bridge
+// supports nr-image/vsr-image, otherwise an image from gallery could not be sent
+// to upscale (only via manual upload).
 const IMAGE_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.avif', '.avifs', '.tiff', '.tif',
   '.heic', '.heif', '.bmp', '.gif',
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     const subfolder = typeof body?.subfolder === 'string' ? body.subfolder.trim() : ''
     if (!filename) {
       return NextResponse.json(
-        { error: 'Не передано имя файла (ожидается { filename, subfolder? })' },
+        { error: 'File name not provided (expected { filename, subfolder? })' },
         { status: 400 },
       )
     }
@@ -60,26 +60,26 @@ export async function POST(req: NextRequest) {
     const OUTPUT_DIR = getAppConfig().outputDir
     if (!OUTPUT_DIR) {
       return NextResponse.json(
-        { error: 'Папка output ComfyUI не найдена (config.ini → [comfy] comfy_dir)' },
+        { error: 'ComfyUI output folder not found (config.ini → [comfy] comfy_dir)' },
         { status: 500 },
       )
     }
 
-    // Безопасность: basename имени + санитизированный относительный путь
-    // папки (правка 495), результат обязан остаться внутри output.
+    // Security: name basename + sanitized relative folder path
+    // (fix 495), result must stay inside output.
     const outRoot = path.resolve(OUTPUT_DIR)
     const safeName = path.basename(filename)
     const safeSub = subfolder ? sanitizeFolderPath(subfolder) : ''
     const src = path.resolve(outRoot, safeSub ? path.join(safeSub, safeName) : safeName)
     if (src !== outRoot && !src.startsWith(outRoot + path.sep)) {
-      return NextResponse.json({ error: 'Некорректный путь к файлу' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
     }
 
     const ext = path.extname(safeName).toLowerCase()
     const isImage = IMAGE_EXTS.has(ext)
     if (!VIDEO_EXTS.has(ext) && !isImage) {
       return NextResponse.json(
-        { error: `Формат ${ext || '(без расширения)'} не поддерживается для апскейла` },
+        { error: `Format ${ext || '(no extension)'} is not supported for upscale` },
         { status: 400 },
       )
     }
@@ -89,15 +89,15 @@ export async function POST(req: NextRequest) {
       st = await fs.stat(src)
     } catch {
       return NextResponse.json(
-        { error: 'Файл не найден в общей папке output (возможно, он уже удалён)' },
+        { error: 'File not found in shared output folder (it may have been deleted)' },
         { status: 404 },
       )
     }
     if (!st.isFile()) {
-      return NextResponse.json({ error: 'Это не файл' }, { status: 400 })
+      return NextResponse.json({ error: 'Not a file' }, { status: 400 })
     }
     if (st.size > MAX_BYTES) {
-      return NextResponse.json({ error: `Файл больше 32 ГБ — слишком большой для обработки` }, { status: 400 })
+      return NextResponse.json({ error: `File is larger than 32 GB — too large to process` }, { status: 400 })
     }
 
     const dir = path.join(process.cwd(), 'data', 'upscale-input')
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     const name = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${sanitizeName(safeName)}`
     destPath = path.join(dir, name)
 
-    // Стриминг по диску — память не трогаем.
+    // Disk streaming — memory is not touched.
     await pipeline(createReadStream(src), createWriteStream(destPath))
 
     return NextResponse.json({
@@ -114,8 +114,8 @@ export async function POST(req: NextRequest) {
       name: safeName,
       size: st.size,
       kind: isImage ? 'image' : 'video',
-      // (правка 727) Папка исходника в галерее — результат апскейла
-      // сохранится туда же, а не в корень output.
+      // (fix 727) Source folder in gallery — upscale result
+      // will be saved there as well, not in output root.
       subfolder: safeSub,
     })
   } catch (err) {
@@ -123,6 +123,6 @@ export async function POST(req: NextRequest) {
       try { unlinkSync(destPath) } catch { /* ignore */ }
     }
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Ошибка импорта из галереи: ${msg}` }, { status: 500 })
+    return NextResponse.json({ error: `Gallery import error: ${msg}` }, { status: 500 })
   }
 }

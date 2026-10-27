@@ -98,23 +98,23 @@ export function MockSidebar({ active = 'generate' }: { active?: 'generate' | 'up
         <span className="text-[10px] font-semibold text-foreground truncate">MiniMax H3 Studio 7</span>
       </div>
       <div className="flex-1 px-1.5 py-2 space-y-1">
-        {item('Генерация', '#06B6D4', active === 'generate')}
-        {item('Продление', '#06B6D4', false)}
+        {item('Generate', '#06B6D4', active === 'generate')}
+        {item('Extend', '#06B6D4', false)}
         {item('Refine', '#10B981', false)}
         {item('ControlNet', '#FB923C', false)}
         {item('Tile Upscale', '#EC4899', false)}
         {item('FPS', '#22D3EE', false)}
         {item('Face Refine', '#FACC15', false)}
         {item('DLSS', '#F472B6', active === 'upscale')}
-        {item('Галерея', '#8B5CF6', active === 'gallery')}
-        {item('Обучение', '#10B981', active === 'learn')}
+        {item('Gallery', '#8B5CF6', active === 'gallery')}
+        {item('Learn', '#10B981', active === 'learn')}
       </div>
       <div className="px-2.5 py-2 border-t border-border space-y-1.5">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          <span className="text-[10px] text-muted-foreground">ComfyUI подключен</span>
+          <span className="text-[10px] text-muted-foreground">ComfyUI connected</span>
         </div>
-        <div className="text-[10px] text-muted-foreground">⚙ Настройки</div>
+        <div className="text-[10px] text-muted-foreground">⚙ Settings</div>
       </div>
     </div>
   )
@@ -126,9 +126,9 @@ export function MockRefDropzone() {
   return (
     <div className="border-2 border-dashed border-border rounded-lg py-4 text-center">
       <p className="text-xs text-muted-foreground">
-        Перетащите, <span className="text-cyan-400 underline">выберите</span> или вставьте по <span className="font-mono text-cyan-400">Ctrl+V</span>
+        Drag & drop, <span className="text-cyan-400 underline">browse</span> or paste with <span className="font-mono text-cyan-400">Ctrl+V</span>
       </p>
-      <p className="text-[10px] text-muted-foreground/60 mt-0.5">картинки, видео и аудио — до 15 шт. · необязательно</p>
+      <p className="text-[10px] text-muted-foreground/60 mt-0.5">images, videos and audio — up to 15 · optional</p>
     </div>
   )
 }
@@ -141,7 +141,7 @@ export function MockRefCard() {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[10px] text-foreground truncate font-mono">photo_girl.png</p>
-        <p className="text-[10px] text-muted-foreground">персонаж / объект</p>
+        <p className="text-[10px] text-muted-foreground">character / object</p>
       </div>
     </div>
   )
@@ -183,23 +183,23 @@ export function MockQueuePill({ expanded }: { expanded?: boolean }) {
           <span className="relative w-2 h-2 rounded-full bg-cyan-400" />
         </span>
         <div className="flex flex-col items-start">
-          <span className="text-[10px] font-medium text-foreground leading-tight">Видео: Генерация…</span>
+          <span className="text-[10px] font-medium text-foreground leading-tight">Video: Generating…</span>
           <span className="text-[10px] text-muted-foreground font-mono leading-tight">42%</span>
         </div>
         <span className="min-w-[18px] h-4 px-1 rounded-md bg-cyan-400 text-white text-[10px] font-bold flex items-center justify-center">2</span>
       </div>
       {expanded && (
         <div className="w-[210px] rounded-xl border bg-[var(--surface-1)]/95 border-border shadow-xl overflow-hidden">
-          <p className="px-2.5 py-1.5 border-b border-border text-[10px] font-semibold text-foreground">Очередь генераций</p>
+          <p className="px-2.5 py-1.5 border-b border-border text-[10px] font-semibold text-foreground">Generation Queue</p>
           <div className="p-1.5 space-y-1">
             <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-[var(--surface-3)]">
               <span className="w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
-              <span className="text-[10px] text-foreground truncate flex-1">Девушка идёт по рынку…</span>
+              <span className="text-[10px] text-foreground truncate flex-1">Girl walking through market…</span>
               <span className="text-[10px] text-muted-foreground">✕</span>
             </div>
             <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-[var(--surface-2)]/60">
               <span className="text-[10px] text-muted-foreground">🕐</span>
-              <span className="text-[10px] text-foreground truncate flex-1">Закат над городом…</span>
+              <span className="text-[10px] text-foreground truncate flex-1">Sunset over city…</span>
               <span className="text-[10px] text-muted-foreground">✕</span>
             </div>
           </div>
@@ -219,9 +219,9 @@ export function MockGalleryTile({ hovered, index, upscaled }: { hovered?: boolea
         <span className="absolute top-1 left-1 inline-flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[10px] font-semibold text-fuchsia-300 border border-fuchsia-400/40">✦ DLSS 5</span>
       )}
       {hovered && (
-        /* (правка 719) В реальной галерее при наведении появляется НЕ панель
-           иконок, а одна кнопка «⋮» в правом верхнем углу — по ней открывается
-           выпадающее меню действий. */
+        /* (fix 719) In the real gallery on hover, instead of an icon panel,
+           a single "⋮" button appears in the top right — opening an action
+           dropdown menu. */
         <button
           type="button"
           className="absolute top-1 right-1 z-10 w-5 h-5 rounded bg-black/60 border border-border/60 text-[11px] text-white/80 flex items-center justify-center"
@@ -231,7 +231,7 @@ export function MockGalleryTile({ hovered, index, upscaled }: { hovered?: boolea
       )}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1 flex items-center justify-between">
         <span className="text-[10px] text-white/70 font-mono">{String(index).padStart(3, '0')}</span>
-        <span className="text-[10px] text-cyan-300/80">1 мин 12 сек</span>
+        <span className="text-[10px] text-cyan-300/80">1 min 12 sec</span>
       </div>
     </div>
   )
@@ -285,10 +285,10 @@ export function MockMetaDialog() {
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           {cell('Seed', '1234567')}
-          {cell('Разрешение', '960×544')}
-          {cell('Шаги (pass1+2)', '2 + 3')}
-          {cell('Время генерации', '1 мин 12 сек')}
-          {cell('Дата', '12.05.2026')}
+          {cell('Resolution', '960×544')}
+          {cell('Steps (pass1+2)', '2 + 3')}
+          {cell('Generation time', '1 min 12 sec')}
+          {cell('Date', '12.05.2026')}
         </div>
       </div>
     </div>
@@ -303,7 +303,7 @@ export function MockStats() {
       <div className="space-y-1">
         <div className="flex justify-between text-[10px] text-muted-foreground">
           <span>VRAM</span>
-          <span className="font-mono text-cyan-300">8.1 / 12 ГБ</span>
+          <span className="font-mono text-cyan-300">8.1 / 12 GB</span>
         </div>
         <MockBar pct={68} />
       </div>
@@ -311,22 +311,22 @@ export function MockStats() {
         <span>GPU</span><span className="font-mono">96% · 65°C</span>
       </div>
       <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>RAM</span><span className="font-mono">14.2 / 32 ГБ</span>
+        <span>RAM</span><span className="font-mono">14.2 / 32 GB</span>
       </div>
     </div>
   )
 }
 
-/* ──────────────────── First-run: warning banner + model downloads (правка 56) ──────────────────── */
+/* ──────────────────── First-run: warning banner + model downloads (fix 56) ──────────────────── */
 
 export function MockWarningBanner() {
   return (
     <div className="w-full max-w-[360px] flex items-center gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
       <span className="w-4 h-4 rounded-md bg-amber-500/25 text-amber-300 text-[10px] font-bold flex items-center justify-center shrink-0">!</span>
       <p className="text-[10px] text-amber-100/90 leading-snug flex-1">
-        Не скачаны модели (Gemma 4 12B Q4_K_M, …). Генерация будет работать некорректно.
+        Models not downloaded (Gemma 4 12B Q4_K_M, …). Generation will not work properly.
       </p>
-      <span className="px-2.5 py-1 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-200 text-[10px] font-medium whitespace-nowrap shrink-0">Скачать в настройках</span>
+      <span className="px-2.5 py-1 rounded-md border border-amber-500/40 bg-amber-500/15 text-amber-200 text-[10px] font-medium whitespace-nowrap shrink-0">Download in Settings</span>
     </div>
   )
 }
@@ -357,23 +357,23 @@ export function MockModelRow({ name, size, state }: { name: string; size: string
 export function MockModelsList() {
   return (
     <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2.5">
-      <p className="text-[10px] font-semibold text-foreground">Minimax H3 (генерация)</p>
+      <p className="text-[10px] font-semibold text-foreground">Minimax H3 (generation)</p>
       <div className="space-y-1">
-        <MockModelRow name="Diffusion Model (VSA int8)" size="21 ГБ" state="ready" />
-        <MockModelRow name="Text Encoder (Qwen3VL NVFP4)" size="15.7 ГБ" state="download" />
-        <MockModelRow name="Video VAE · Audio VAE · Turbo LoRA …" size="9 ГБ" state="missing" />
+        <MockModelRow name="Diffusion Model (VSA int8)" size="21 GB" state="ready" />
+        <MockModelRow name="Text Encoder (Qwen3VL NVFP4)" size="15.7 GB" state="download" />
+        <MockModelRow name="Video VAE · Audio VAE · Turbo LoRA …" size="9 GB" state="missing" />
       </div>
-      <p className="text-[10px] font-semibold text-foreground pt-0.5">LLM ассистент</p>
+      <p className="text-[10px] font-semibold text-foreground pt-0.5">LLM Assistant</p>
       <div className="space-y-1">
-        <MockModelRow name="Gemma 4 12B (Q4_K_M)" size="7.1 ГБ" state="missing" />
-        <MockModelRow name="Qwen3.5 9B (Q4_K_M) — альтернатива" size="5.7 ГБ" state="missing" />
-        <MockModelRow name="Vision Projector (mmproj)" size="~175 МБ" state="missing" />
+        <MockModelRow name="Gemma 4 12B (Q4_K_M)" size="7.1 GB" state="missing" />
+        <MockModelRow name="Qwen3.5 9B (Q4_K_M) — alternative" size="5.7 GB" state="missing" />
+        <MockModelRow name="Vision Projector (mmproj)" size="~175 MB" state="missing" />
       </div>
     </div>
   )
 }
 
-/* ──────────────────── Settings replicas (правка 56) ──────────────────── */
+/* ──────────────────── Settings replicas (fix 56) ──────────────────── */
 
 function SettingsRow({ label, sub, right }: { label: string; sub?: string; right?: ReactNode }) {
   return (
@@ -407,30 +407,30 @@ function MockButton({ children }: { children: ReactNode }) {
 export function MockSettingsGeneral() {
   return (
     <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
-      <p className="text-[10px] font-semibold text-foreground mb-1">Общие</p>
-      <SettingsRow label="Перенос моделей из старой версии" sub="выбрать папку со старой сборкой" right={<MockButton>Выбрать папку</MockButton>} />
-      <SettingsRow label="Основная модель" sub="FastVideo VSA DataFree 1300-step 4-step int8" right={<MockButton>Базовая</MockButton>} />
-      <SettingsRow label="Кастомные LoRA" sub="включить/выключить, сила, триггер-слова" right={<MockButton>＋ Добавить</MockButton>} />
+      <p className="text-[10px] font-semibold text-foreground mb-1">General</p>
+      <SettingsRow label="Migrate models from older version" sub="choose folder with previous build" right={<MockButton>Select folder</MockButton>} />
+      <SettingsRow label="Base Model" sub="FastVideo VSA DataFree 1300-step 4-step int8" right={<MockButton>Default</MockButton>} />
+      <SettingsRow label="Custom LoRAs" sub="toggle on/off, strength, trigger words" right={<MockButton>＋ Add</MockButton>} />
     </div>
   )
 }
 
-/** (правка 114) «Внешний вид» — отдельная вкладка настроек (правка 111): тема (серая/чёрная) + звук. */
+/** (fix 114) "Appearance" — separate settings tab (fix 111): theme (gray/black) + sound. */
 export function MockSettingsAppearance() {
   return (
     <div className="w-[260px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
-      <p className="text-[10px] font-semibold text-foreground mb-1">Внешний вид</p>
+      <p className="text-[10px] font-semibold text-foreground mb-1">Appearance</p>
       <div className="py-1.5 border-b border-border/50">
-        <p className="text-[10px] text-foreground/90 mb-1.5">Тема оформления</p>
+        <p className="text-[10px] text-foreground/90 mb-1.5">Color Theme</p>
         <div className="flex gap-1.5">
-          <span className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-center border border-cyan-500/50 bg-cyan-500/15 text-cyan-300">Серая</span>
-          <span className="flex-1 px-2 py-1 rounded-md text-[10px] text-center border border-border text-muted-foreground">Чёрная</span>
+          <span className="flex-1 px-2 py-1 rounded-md text-[10px] font-medium text-center border border-cyan-500/50 bg-cyan-500/15 text-cyan-300">Gray</span>
+          <span className="flex-1 px-2 py-1 rounded-md text-[10px] text-center border border-border text-muted-foreground">Dark</span>
         </div>
       </div>
       <div className="flex items-center justify-between gap-3 py-1.5">
         <div className="min-w-0">
-          <p className="text-[10px] text-foreground/90">Звук при завершении</p>
-          <p className="text-[10px] text-muted-foreground/80">короткий сигнал</p>
+          <p className="text-[10px] text-foreground/90">Sound on finish</p>
+          <p className="text-[10px] text-muted-foreground/80">short chime</p>
         </div>
         <TogglePill on />
       </div>
@@ -442,103 +442,103 @@ export function MockSettingsLlm() {
   return (
     <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
       <p className="text-[10px] font-semibold text-foreground mb-1">LLM</p>
-      <SettingsRow label="Устройство" sub="авто — GPU/CPU" right={<MockButton>Авто</MockButton>} />
-      <SettingsRow label="Контекст" sub="8K — 100K токенов" right={<MockButton>25K</MockButton>} />
-      <SettingsRow label="Видение видео" sub="по умолчанию включено" right={<TogglePill on />} />
-      {/* (правка 114) KV-кэш (правка 109) — раньше этой строки в mock не было */}
+      <SettingsRow label="Device" sub="auto — GPU/CPU" right={<MockButton>Auto</MockButton>} />
+      <SettingsRow label="Context" sub="8K — 100K tokens" right={<MockButton>25K</MockButton>} />
+      <SettingsRow label="Video Vision" sub="enabled by default" right={<TogglePill on />} />
+      {/* (fix 114) KV cache (fix 109) — previously this row was missing in mock */}
       <SettingsRow
-        label="Квантизация KV-кэша"
-        sub="экономия памяти чата"
+        label="KV Cache Quantization"
+        sub="chat memory optimization"
         right={
           <span className="flex items-center gap-1">
-            {/* (правка 119) дефолт — q4_0 */}
-            <span className="px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Выкл</span>
+            {/* (fix 119) default — q4_0 */}
+            <span className="px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Off</span>
             <span className="px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Q8</span>
             <span className="px-1.5 py-0.5 rounded text-[10px] border border-border text-muted-foreground">Q5</span>
             <span className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-cyan-500/50 bg-cyan-500/15 text-cyan-300">Q4</span>
           </span>
         }
       />
-      <SettingsRow label="Модель ассистента" sub="Bonsai 2 27B (по умолчанию) / Gemma / Qwen" right={<MockButton>Bonsai 2 27B</MockButton>} />
+      <SettingsRow label="Assistant Model" sub="Bonsai 2 27B (default) / Gemma / Qwen" right={<MockButton>Bonsai 2 27B</MockButton>} />
     </div>
   )
 }
 
 export function MockSettingsDanger() {
   const danger = (label: string, sub: string) => (
-    <SettingsRow label={label} sub={sub} right={<span className="px-2 py-1 rounded-md border border-red-500/40 bg-red-500/10 text-red-300 text-[10px] font-medium whitespace-nowrap">Действие</span>} />
+    <SettingsRow label={label} sub={sub} right={<span className="px-2 py-1 rounded-md border border-red-500/40 bg-red-500/10 text-red-300 text-[10px] font-medium whitespace-nowrap">Action</span>} />
   )
   return (
     <div className="w-[300px] rounded-lg border border-red-500/30 bg-[var(--surface-1)] p-2.5 space-y-1">
-      <p className="text-[10px] font-semibold text-red-300 mb-1">Сброс · опасная зона</p>
-      {danger('Сброс настроек', 'все параметры — к значениям по умолчанию')}
-      {danger('Очистить кэш', 'папка input ComfyUI (референсы и временные файлы)')}
-      {danger('Удалить контент', 'папка output, чаты ассистента и история промптов')}
-      {/* (правка 486) четвёртая кнопка появилась позже — заводской сброс */}
-      {danger('Заводской сброс (всё)', 'настройки + кэш + контент одним действием')}
+      <p className="text-[10px] font-semibold text-red-300 mb-1">Reset · Danger Zone</p>
+      {danger('Reset Settings', 'reset all parameters to defaults')}
+      {danger('Clear Cache', 'ComfyUI input folder (references and temporary files)')}
+      {danger('Delete Content', 'output folder, assistant chats and prompt history')}
+      {/* (fix 486) fourth button added later — factory reset */}
+      {danger('Factory Reset (All)', 'settings + cache + content in one action')}
     </div>
   )
 }
 
-/** (правка 114) Вкладка «Голос» — голосовой ввод (правки 65/72/74). */
+/** (fix 114) "Voice" tab — voice input (fixes 65/72/74). */
 export function MockSettingsVoice() {
   return (
     <div className="w-[260px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
-      <p className="text-[10px] font-semibold text-foreground mb-1">Голос</p>
-      <SettingsRow label="Голосовой ввод" sub="диктовка: промпт, редактор, чат" right={<TogglePill on />} />
-      <SettingsRow label="Модель распознавания" sub="whisper · CPU, не трогает VRAM" right={<MockButton>small</MockButton>} />
-      <SettingsRow label="Язык речи" sub="русский / английский / авто" right={<MockButton>русский</MockButton>} />
+      <p className="text-[10px] font-semibold text-foreground mb-1">Voice</p>
+      <SettingsRow label="Voice Input" sub="dictation: prompt, editor, chat" right={<TogglePill on />} />
+      <SettingsRow label="Recognition Model" sub="whisper · CPU, does not use VRAM" right={<MockButton>small</MockButton>} />
+      <SettingsRow label="Speech Language" sub="Russian / English / Auto" right={<MockButton>English</MockButton>} />
       <div className="flex items-center gap-1.5 py-1.5">
         <span className="w-4 h-4 rounded-full bg-red-500/70 border border-red-400/50 flex items-center justify-center shrink-0" />
-        <span className="text-[10px] text-muted-foreground flex-1">живой тест: запись → распознанный текст</span>
-        <MockButton>Тест</MockButton>
+        <span className="text-[10px] text-muted-foreground flex-1">live test: recording → transcribed text</span>
+        <MockButton>Test</MockButton>
       </div>
     </div>
   )
 }
 
-/** (правка 114) Вкладка «Оптимизация» — VRAM ComfyUI + режимы генерации. */
+/** (fix 114) "Optimization" tab — ComfyUI VRAM + generation modes. */
 export function MockSettingsOpt() {
   return (
     <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
-      <p className="text-[10px] font-semibold text-foreground mb-1">Оптимизация</p>
+      <p className="text-[10px] font-semibold text-foreground mb-1">Optimization</p>
       <div className="space-y-1 py-1.5 border-b border-border/50">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-foreground/90">Резерв VRAM</span>
-          <span className="text-[10px] font-mono text-foreground/80">3 ГБ</span>
+          <span className="text-[10px] text-foreground/90">VRAM Reserve</span>
+          <span className="text-[10px] font-mono text-foreground/80">3 GB</span>
         </div>
         <MockSlider value={25} max={100} />
-        <p className="text-[10px] text-muted-foreground/70">1–16 ГБ · применяется после перезапуска ComfyUI</p>
+        <p className="text-[10px] text-muted-foreground/70">1–16 GB · applies after ComfyUI restart</p>
       </div>
-      <SettingsRow label="Dynamic VRAM" sub="динамическое управление VRAM" right={<TogglePill on />} />
-      <SettingsRow label="Low VRAM Attention" sub="экономия памяти генерации" right={<TogglePill on />} />
-      <SettingsRow label="Chunk FeedForward" sub="длинная секвенция — чанками" right={<TogglePill on />} />
-      <p className="text-[10px] text-muted-foreground/70 pt-1">Low VRAM / Chunk FF — сразу на новые генерации, без перезапуска</p>
+      <SettingsRow label="Dynamic VRAM" sub="dynamic VRAM management" right={<TogglePill on />} />
+      <SettingsRow label="Low VRAM Attention" sub="save generation memory" right={<TogglePill on />} />
+      <SettingsRow label="Chunk FeedForward" sub="long sequence in chunks" right={<TogglePill on />} />
+      <p className="text-[10px] text-muted-foreground/70 pt-1">Low VRAM / Chunk FF — applies immediately to new generations, no restart needed</p>
     </div>
   )
 }
 
-/** (правка 114) Список LoRAs: встроенная турбо (ON по умолчанию) +
- *  пользовательские файлы (OFF по умолчанию). */
+/** (fix 114) LoRAs list: built-in turbo (ON by default) +
+ *  user files (OFF by default). */
 export function MockLoraList() {
   return (
     <div className="w-[320px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-semibold text-foreground">LoRAs</p>
-        <MockButton>＋ Добавить</MockButton>
+        <MockButton>＋ Add</MockButton>
       </div>
-      {/* Встроенная турбо-лора — в списке и включена по умолчанию. */}
+      {/* Built-in turbo LoRA — in list and enabled by default. */}
       <div className="rounded-md border border-border bg-[var(--surface-2)]/70 p-2 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[10px] font-medium text-foreground font-mono truncate">minimax_h3_ref2v_turbo_4step...safetensors</p>
-            <p className="text-[10px] text-muted-foreground">1.8 ГБ · включена</p>
+            <p className="text-[10px] text-muted-foreground">1.8 GB · enabled</p>
           </div>
           <span className="text-cyan-400 text-xs shrink-0">⏻</span>
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground">Сила</span>
+            <span className="text-[10px] text-muted-foreground">Strength</span>
             <MockSlider value={50} max={100} />
             <span className="text-[10px] font-mono text-muted-foreground">1.00</span>
           </div>
@@ -548,36 +548,36 @@ export function MockLoraList() {
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[10px] font-medium text-foreground font-mono truncate">my_style_v2.safetensors</p>
-            <p className="text-[10px] text-muted-foreground">96 МБ · выключена</p>
+            <p className="text-[10px] text-muted-foreground">96 MB · disabled</p>
           </div>
           <span className="text-muted-foreground/40 text-xs shrink-0">⏻</span>
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground">Сила</span>
+            <span className="text-[10px] text-muted-foreground">Strength</span>
             <MockSlider value={50} max={100} />
             <span className="text-[10px] font-mono text-muted-foreground">1.00</span>
           </div>
         </div>
       </div>
-      {/* Кастомная — включена, со триггерами */}
+      {/* Custom — enabled, with triggers */}
       <div className="rounded-md border border-border bg-[var(--surface-2)]/70 p-2 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[10px] font-medium text-foreground font-mono truncate">anime_style.safetensors</p>
-            <p className="text-[10px] text-muted-foreground">214 МБ</p>
+            <p className="text-[10px] text-muted-foreground">214 MB</p>
           </div>
           <span className="text-emerald-400 text-xs shrink-0">⏻</span>
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground">Сила</span>
+            <span className="text-[10px] text-muted-foreground">Strength</span>
             <MockSlider value={60} max={100} />
             <span className="text-[10px] font-mono text-muted-foreground">0.60</span>
           </div>
           <div>
             <div className="h-5 rounded border border-border bg-[var(--surface-3)] px-1.5 flex items-center text-[10px] text-muted-foreground font-mono">anime style, vivid</div>
-            <p className="text-[10px] text-muted-foreground/70">триггерные слова — добавляются к промпту</p>
+            <p className="text-[10px] text-muted-foreground/70">trigger words — appended to prompt</p>
           </div>
         </div>
       </div>
@@ -585,7 +585,7 @@ export function MockLoraList() {
   )
 }
 
-/** (правка 114) Вкладка «Upscale» (правки 74/77/78): Neural Rendering + RTX VSR. */
+/** (fix 114) "Upscale" tab (fixes 74/77/78): Neural Rendering + RTX VSR. */
 export function MockUpscalePanel() {
   return (
     <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-2">
@@ -594,25 +594,25 @@ export function MockUpscalePanel() {
         <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 text-[10px] border border-violet-400/30 font-medium">NVIDIA RTX</span>
       </div>
       <div className="border-2 border-dashed border-border rounded-lg py-2 text-center">
-        <p className="text-[10px] text-muted-foreground">загрузите видео (MP4 / MOV / MKV…)</p>
+        <p className="text-[10px] text-muted-foreground">upload a video (MP4 / MOV / MKV…)</p>
       </div>
       <div className="flex gap-1">
         <span className="flex-1 px-1.5 py-1 rounded-md text-[10px] border border-cyan-500/50 bg-cyan-500/15 text-cyan-300 font-medium text-center">Neural Rendering (DLSS 5)</span>
         <span className="flex-1 px-1.5 py-1 rounded-md text-[10px] border border-border text-muted-foreground text-center">RTX VSR 1×–4×</span>
       </div>
       <div className="space-y-1">
-        <MockLabel>Пресет · шум / тон / структура</MockLabel>
+        <MockLabel>Preset · noise / tone / structure</MockLabel>
         <MockSelect value="Balanced" />
       </div>
       <div className="flex justify-end">
-        <span className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-[10px] font-semibold">Запустить обработку (DLSS 5)</span>
+        <span className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-[10px] font-semibold">Start processing (DLSS 5)</span>
       </div>
-      <p className="text-[10px] text-muted-foreground/70">результат — в общей «Галерее» с меткой «Upscale» или «DLSS 5»</p>
+      <p className="text-[10px] text-muted-foreground/70">result appears in "Gallery" labeled "Upscale" or "DLSS 5"</p>
     </div>
   )
 }
 
-/** (правка 114) Окно приветствия при запуске (правки 112–113). */
+/** (fix 114) Welcome dialog on first launch (fixes 112–113). */
 export function MockWelcomeDialog() {
   return (
     <div className="w-[300px] rounded-xl border border-border bg-[var(--surface-2)] overflow-hidden shadow-xl">
@@ -620,16 +620,16 @@ export function MockWelcomeDialog() {
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
         <span className="w-6 h-6 rounded-lg gradient-creative flex items-center justify-center text-[10px] text-white shrink-0">✦</span>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold text-foreground">Добро пожаловать в MiniMax H3 Studio 7</p>
-          <p className="text-[10px] text-muted-foreground">Генерация видео со звуком — на вашей видеокарте</p>
+          <p className="text-[10px] font-semibold text-foreground">Welcome to MiniMax H3 Studio 7</p>
+          <p className="text-[10px] text-muted-foreground">Video generation with audio — powered by your GPU</p>
         </div>
         <span className="text-[10px] text-muted-foreground shrink-0">✕</span>
       </div>
       <div className="px-3 py-2.5 space-y-1.5">
         {[
-          ['1', 'Скачайте модели', 'Настройки → «Общие» → «Скачать все»'],
-          ['2', 'Сгенерируйте первое видео', '«Генерация» → промпт → «Сгенерировать видео»'],
-          ['3', 'Смотрите результат', 'Галерея · сделать чётче — «Upscale»'],
+          ['1', 'Download Models', 'Settings → "General" → "Download All"'],
+          ['2', 'Generate First Video', '"Generate" → prompt → "Generate Video"'],
+          ['3', 'View Results', 'Gallery · enhance quality — "Upscale"'],
         ].map(([n, t, s]) => (
           <div key={n} className="flex items-center gap-2 rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1.5">
             <span className="w-4 h-4 rounded gradient-creative text-white text-[10px] font-bold flex items-center justify-center shrink-0">{n}</span>
@@ -640,12 +640,12 @@ export function MockWelcomeDialog() {
           </div>
         ))}
         <div className="rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-2 py-1.5 flex items-center justify-between">
-          <span className="text-[10px] text-cyan-100/90">Подробный тур — «Обучение»</span>
-          <span className="text-[10px] text-cyan-200 font-medium">Открыть →</span>
+          <span className="text-[10px] text-cyan-100/90">Detailed Tour — "Learn"</span>
+          <span className="text-[10px] text-cyan-200 font-medium">Open →</span>
         </div>
         <div className="flex items-center gap-1.5 pt-1">
           <span className="w-3 h-3 rounded-sm border border-border bg-[var(--surface-3)] flex items-center justify-center text-[10px] text-cyan-300 shrink-0">✓</span>
-          <span className="text-[10px] text-muted-foreground">Больше не показывать это окно</span>
+          <span className="text-[10px] text-muted-foreground">Do not show this window again</span>
         </div>
       </div>
     </div>
@@ -655,19 +655,19 @@ export function MockWelcomeDialog() {
 export function MockSettingsComfyLinks() {
   return (
     <div className="w-[300px] rounded-lg border border-border bg-[var(--surface-1)] p-2.5 space-y-1">
-      {/* (правка 486) Отдельной вкладки «ComfyUI» больше нет: статус-подключение
-          и кнопка «Перепроверить» живут на вкладке «Общие», а датчики
-          VRAM/GPU/RAM — полосками в сайдбаре. */}
-      <p className="text-[10px] font-semibold text-foreground mb-1">Общие — статус ComfyUI</p>
+      {/* (fix 486) Dedicated "ComfyUI" tab removed: connection status
+          and "Recheck" button now live on the "General" tab, while
+          VRAM/GPU/RAM meters are sidebar bars. */}
+      <p className="text-[10px] font-semibold text-foreground mb-1">General — ComfyUI status</p>
       <div className="flex items-center gap-1.5 py-1">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-        <span className="text-[10px] text-muted-foreground">Подключен · порт 8188</span>
-        <span className="ml-auto"><MockButton>Перепроверить</MockButton></span>
+        <span className="text-[10px] text-muted-foreground">Connected · port 8188</span>
+        <span className="ml-auto"><MockButton>Recheck</MockButton></span>
       </div>
-      <p className="text-[10px] text-muted-foreground/70 pb-1 border-b border-border/50">Датчики VRAM / GPU / RAM — полосками в сайдбаре</p>
-      <p className="text-[10px] font-semibold text-foreground pt-1 mb-1">Ссылки</p>
+      <p className="text-[10px] text-muted-foreground/70 pb-1 border-b border-border/50">VRAM / GPU / RAM meters — sidebar bars</p>
+      <p className="text-[10px] font-semibold text-foreground pt-1 mb-1">Links</p>
       <SettingsRow label="Diffusion Model (VSA int8)" sub="huggingface.co/…/minimax_h3_vsa_int8…" right={<span className="text-[10px] text-cyan-300">⧉</span>} />
-      <p className="text-[10px] text-muted-foreground/70 pt-1">При недоступности huggingface.co используйте зеркало hf-mirror.com</p>
+      <p className="text-[10px] text-muted-foreground/70 pt-1">If huggingface.co is unavailable, use the hf-mirror.com mirror</p>
     </div>
   )
 }

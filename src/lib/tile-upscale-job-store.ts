@@ -1,20 +1,20 @@
 'use client'
 
 /**
- * (правка 319) TileUpscaleJobStore — состояние джоба tile-upscale ВНЕ React.
+ * (fix 319) TileUpscaleJobStore — tile-upscale job state OUTSIDE React.
  *
- * Раньше promptId/phase/progress жили в useState TileUpscaleView, а поллинг
- * /api/comfy/status — в useEffect: переключение вкладки (unmount) убивало
- * интервал → прогресс «замораживался», результат не попадал в галерею, а
- * staggered-reload галереи отменялся cleanup'ом.
+ * Previously promptId/phase/progress lived in TileUpscaleView useState, and polling
+ * /api/comfy/status — in useEffect: tab switching (unmount) killed
+ * interval → progress "froze", result did not reach gallery, and
+ * staggered-reload of gallery was canceled by cleanup.
  *
- * Теперь (упрощённый паттерн из upscale-service.ts):
- *  • promptId/phase/progress/error живут в zustand-сторе;
- *  • ОДИН модульный цикл опроса — переживает unmount вкладки;
- *  • по завершении — useGalleryRefresh.bump(): staggered-перезагрузки уже
- *    встроены в useVideoGallery по bump, локальные таймеры не нужны;
- *  • активный promptId персистится (localStorage) → после перезагрузки
- *    страницы onRehydrateStorage перезапускает поллинг (re-attach).
+ * Now (simplified pattern from upscale-service.ts):
+ *  • promptId/phase/progress/error live in zustand store;
+ *  • ONE module-level polling loop — survives tab unmount;
+ *  • on completion — useGalleryRefresh.bump(): staggered reloads are already
+ *    built into useVideoGallery on bump, local timers are not needed;
+ *  • active promptId is persisted (localStorage) → after page reload
+ *    onRehydrateStorage restarts polling (re-attach).
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -49,26 +49,26 @@ interface TileUpscaleJobState {
 
 const ACTIVE: ReadonlySet<TileUpscalePhase> = new Set(['submitting', 'running'])
 
-/* (правка 330) Эпоха отмены (по образцу fix H2 в use-video-gen.ts): cancel()
- * во время 'submitting' (POST /api/comfy/tile-upscale ещё в полёте, promptId
- * нет) раньше был no-op — когда POST возвращался, джоб-сирота запускался
- * в ComfyUI без отслеживания. Теперь submit() замечает смену эпохи после
- * await POST и сразу отменяет вернувшийся prompt_id. */
+/* (fix 330) Cancellation epoch (patterned after fix H2 in use-video-gen.ts): cancel()
+ * during 'submitting' (POST /api/comfy/tile-upscale still in flight, no promptId)
+ * previously was a no-op — when POST returned, orphan job started
+ * in ComfyUI untracked. Now submit() notices epoch change after
+ * await POST and immediately cancels the returned prompt_id. */
 let cancelEpoch = 0
 
-/** promptId, для которого пользователь запросил отмену. ComfyUI докладывает
- *  прерванную задачу в history как 'error' (execution_interrupted), а не
- *  'cancelled' — без пометки поллер рисовал собственную отмену красным
- *  баннером «Ошибка». Поллер переводит такой терминальный статус в чистый
+/** promptId for which user requested cancellation. ComfyUI reports
+ *  interrupted task in history as 'error' (execution_interrupted), not
+ *  'cancelled' — without this tag poller displayed its own cancellation with red
+ *  "Error" banner. Poller translates such terminal status into clean
  *  idle. */
 let cancelRequestedFor: string | null = null
 
-/** queue-item, владеющий состоянием вкладки; защищает от запоздавшего
- *  ответа отменённого POST, когда следующая задача уже стартовала. */
+/** queue-item owning the tab state; protects against delayed
+ *  response of canceled POST when the next task has already started. */
 let activeQid: string | null = null
 
-/** Отмена из общей очереди: прерванный ComfyUI-промпт не должен рисоваться
- *  красным баннером ошибки. */
+/** Cancel from shared queue: interrupted ComfyUI prompt must not be displayed
+ *  with red error banner. */
 export function markTileUpscaleCancelRequested(promptId: string) {
   cancelRequestedFor = promptId
 }
@@ -89,15 +89,15 @@ export const useTileUpscaleJob = create<TileUpscaleJobState>()(
           : 'Tile Upscale'
         const qid = useGenQueue.getState().enqueue('tile-upscale', label)
 
-        // Единый FIFO: можно поставить несколько задач. Состояние вкладки
-        // меняем только когда задача реально получила ход.
+        // Single FIFO: multiple tasks can be queued. Tab state
+        // is changed only when the task actually receives its turn.
         const granted = await acquireComfyTurn(qid)
         if (!granted || !isComfyTurnActive(qid)) return
 
-        // Эпоху отмены фиксируем только на старте своей задачи, а не в
-        // момент постановки: Cancel текущего джоба не должен отменять все
-        // задачи, которые ещё стоят в очереди.
-        const myEpoch = cancelEpoch // (правка 330)
+        // Fix cancellation epoch only at task start, not when
+        // queued: Cancel of current job must not cancel all
+        // tasks still waiting in queue.
+        const myEpoch = cancelEpoch // (fix 330)
         cancelRequestedFor = null
         activeQid = qid
         set({ phase: 'submitting', busy: true, error: null, progress: 0, startedAt: Date.now() })
@@ -110,16 +110,16 @@ export const useTileUpscaleJob = create<TileUpscaleJobState>()(
           })
           const data = await res.json()
           if (!res.ok) {
-            useGenQueue.getState().setStatus(qid, 'error', data.error || `Ошибка ${res.status}`)
-            throw new Error(data.error || `Ошибка ${res.status}`)
+            useGenQueue.getState().setStatus(qid, 'error', data.error || `Error ${res.status}`)
+            throw new Error(data.error || `Error ${res.status}`)
           }
           if (!data.prompt_id) {
-            const msg = 'ComfyUI не вернул prompt_id'
+            const msg = 'ComfyUI did not return prompt_id'
             useGenQueue.getState().setStatus(qid, 'error', msg)
             throw new Error(msg)
           }
-          // (правка 330) Отмена пришла, пока POST был в полёте: задача уже в
-          // ComfyUI — отменяем её на сервере и НЕ запускаем поллинг.
+          // (fix 330) Cancellation arrived while POST was in flight: task is already in
+          // ComfyUI — cancel it on server and DO NOT start polling.
           if (cancelEpoch !== myEpoch || !isComfyTurnActive(qid)) {
             if (data.prompt_id) {
               await fetch('/api/comfy/cancel', {
@@ -138,7 +138,7 @@ export const useTileUpscaleJob = create<TileUpscaleJobState>()(
           set({ promptId: data.prompt_id ?? null, phase: 'running' })
           useGenQueue.getState().setPromptId(qid, data.prompt_id)
           useGenQueue.getState().setStatus(qid, 'running')
-          toast.success('Tile Upscale запущен')
+          toast.success('Tile Upscale started')
           ensurePolling()
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
@@ -152,24 +152,24 @@ export const useTileUpscaleJob = create<TileUpscaleJobState>()(
       },
 
       cancel: async () => {
-        // (правка 330) Ломаем эпоху ДО проверки promptId: если POST ещё в
-        // полёте ('submitting'), продолжение submit() увидит смену и отменит
-        // принятую задачу само.
+        // (fix 330) Invalidate epoch BEFORE checking promptId: if POST is still in
+        // flight ('submitting'), subsequent submit() will notice the change and cancel
+        // accepted task itself.
         cancelEpoch++
         const { promptId, phase } = get()
         if (!promptId) {
           if (phase === 'submitting') {
             set({ phase: 'idle', busy: false, progress: 0, startedAt: null })
-            toast.info('Отменено')
+            toast.info('Cancelled')
           }
           return
         }
-        // (правка 491) После ПОДТВЕРЖДЁННОЙ сервером отмены сразу чистый idle
-        // и стоп поллинга. Раньше UI ждал, пока поллер наткнётся на финальный
-        // статус: отменённая из ОЧЕРЕДИ задача не попадает в history → статус
-        // 'unknown' → 20 секунд «Генерация идёт…» → красный баннер «Задача не
-        // найдена в ComfyUI (сервер был перезапущен)». cancelRequestedFor при
-        // этом срабатывал только на статус 'error' (прерванный running).
+        // (fix 491) After server-CONFIRMED cancellation, immediately clean idle
+        // and stop polling. Previously UI waited for poller to hit terminal
+        // status: task canceled from QUEUE does not enter history → 'unknown'
+        // status → 20 seconds "Generating..." → red banner "Task not
+        // found in ComfyUI (server was restarted)". cancelRequestedFor in this case
+        // only triggered on 'error' status (interrupted running).
         let cancelled = false
         try {
           cancelRequestedFor = promptId
@@ -190,17 +190,17 @@ export const useTileUpscaleJob = create<TileUpscaleJobState>()(
             stopPolling()
             set({ phase: 'idle', progress: 0, busy: false, promptId: null, startedAt: null })
           }
-          toast.info('Отменено')
+          toast.info('Cancelled')
         } else {
-          // Сервер не подтвердил (ComfyUI недоступен?) — оставляем состояние,
-          // чтобы пользователь мог повторить отмену.
+          // Server did not confirm (ComfyUI unavailable?) — keep state,
+          // so user can retry cancellation.
           cancelRequestedFor = null
-          toast.error('Отмена не подтверждена сервером — проверьте, что ComfyUI запущен')
+          toast.error('Cancellation not confirmed by server — check that ComfyUI is running')
         }
       },
 
       reset: () => {
-        cancelEpoch++ // (правка 330) сброс тоже инвалидирует летящий POST
+        cancelEpoch++ // (fix 330) reset also invalidates in-flight POST
         cancelRequestedFor = null
         activeQid = null
         stopPolling()
@@ -209,28 +209,28 @@ export const useTileUpscaleJob = create<TileUpscaleJobState>()(
     }),
     {
       name: 'tile-upscale-job',
-      // Персистим ТОЛЬКО активный джоб — после перезагрузки страницы
-      // onRehydrateStorage re-attach'ит поллинг. Прогресс/ошибки не храним.
+      // Persist ONLY active job — after page reload
+      // onRehydrateStorage re-attaches polling. Progress/errors are not stored.
       partialize: (s) =>
         ACTIVE.has(s.phase) ? { promptId: s.promptId, startedAt: s.startedAt, phase: s.phase } : {},
       onRehydrateStorage: () => (state) => {
         if (state?.promptId && ACTIVE.has(state.phase)) {
           state.busy = true
           ensurePolling()
-          void pollOnce() // свежий тик сразу, не ждём интервала
+          void pollOnce() // fresh tick immediately, don't wait for interval
         }
       },
     },
   ),
 )
 
-/* ─── Модульный поллинг /api/comfy/status (живёт вне React) ─── */
+/* ─── Modular polling /api/comfy/status (lives outside React) ─── */
 
 const POLL_MS = 2000
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let pollInFlight = false
-/** Счётчик подряд идущих 'unknown' — prompt мог умереть вместе с
- *  перезапуском ComfyUI (persisted 'running' после перезагрузки). */
+/** Counter of consecutive 'unknown's — prompt could have died along with
+ *  ComfyUI restart (persisted 'running' after reload). */
 let unknownStreak = 0
 
 function ensurePolling() {
@@ -259,25 +259,25 @@ async function pollOnce() {
       signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) {
-      // (правка 491) Не-OK ответ (502 — ComfyUI лежит/перезапускается) раньше
-      // просто пропускал тик: unknownStreak не рос, и при мёртвом ComfyUI
-      // «Генерация идёт…» висела БЕСКОНЕЧНО. Считаем такие тики как 'unknown'.
+      // (fix 491) Non-OK response (502 — ComfyUI is down/restarting) previously
+      // simply skipped the tick: unknownStreak did not increase, and with dead ComfyUI
+      // "Generating..." hung INDEFINITELY. Count such ticks as 'unknown'.
       unknownStreak++
       if (unknownStreak >= 10) {
         useTileUpscaleJob.setState({
           phase: 'error',
-          error: 'ComfyUI не отвечает (сервер остановлен или перезапущен) — отслеживание остановлено',
+          error: 'ComfyUI is not responding (server stopped or restarted) — tracking stopped',
           busy: false,
         })
         const qi = useGenQueue.getState().items.find((i) => i.promptId === promptId)
-        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'ComfyUI не отвечает — отслеживание остановлено')
+        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'ComfyUI is not responding — tracking stopped')
         stopPolling()
       }
       return
     }
     const data = await res.json()
     const cur = useTileUpscaleJob.getState()
-    if (cur.promptId !== promptId) return // уже другой джоб
+    if (cur.promptId !== promptId) return // already another job
     if (data.status === 'done') {
       useTileUpscaleJob.setState({ phase: 'done', progress: 100, busy: false })
       const qi = useGenQueue.getState().items.find((i) => i.promptId === promptId)
@@ -285,17 +285,17 @@ async function pollOnce() {
         useGenQueue.getState().setStatus(qi.id, 'done')
         useGenQueue.getState().setProgress(qi.id, 100, 100)
       }
-      // Staggered-перезагрузки галереи — внутри useVideoGallery по bump.
+      // Staggered gallery reloads — inside useVideoGallery on bump.
       useGalleryRefresh.getState().bump()
       stopPolling()
-      // promptId оставляем ещё немного для карточки статуса, потом чистим
+      // Keep promptId briefly for status card, then clear
       setTimeout(() => {
         const c = useTileUpscaleJob.getState()
         if (c.promptId === promptId && c.phase === 'done') useTileUpscaleJob.setState({ promptId: null })
       }, 7000)
     } else if (data.status === 'cancelled') {
-      // Отмена — НЕ ошибка: чистый возврат в исходное состояние без красного
-      // баннера (раньше сворачивалось в phase 'error' с текстом «Отменено»).
+      // Cancellation is NOT an error: clean return to initial state without red
+      // banner (previously folded into phase 'error' with text "Cancelled").
       cancelRequestedFor = null
       useTileUpscaleJob.setState({ phase: 'idle', progress: 0, busy: false, promptId: null, startedAt: null })
       const qi = useGenQueue.getState().items.find((i) => i.promptId === promptId)
@@ -304,26 +304,26 @@ async function pollOnce() {
     } else if (data.status === 'error') {
       const qi = useGenQueue.getState().items.find((i) => i.promptId === promptId)
       if (cancelRequestedFor === promptId) {
-        // ComfyUI докладывает прерывание по /interrupt как error
-        // (execution_interrupted) — для задачи, отменённой пользователем,
-        // это ожидаемый финал, а не ошибка: чистый idle.
+        // ComfyUI reports interruption via /interrupt as error
+        // (execution_interrupted) — for task canceled by user,
+        // this is expected outcome, not an error: clean idle.
         cancelRequestedFor = null
         useTileUpscaleJob.setState({ phase: 'idle', progress: 0, busy: false, promptId: null, startedAt: null })
         if (qi) useGenQueue.getState().setStatus(qi.id, 'cancelled')
       } else {
         useTileUpscaleJob.setState({
           phase: 'error',
-          error: data.error || data.detail || 'Ошибка генерации',
+          error: data.error || data.detail || 'Generation error',
           busy: false,
         })
-        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', data.error || data.detail || 'Ошибка генерации')
+        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', data.error || data.detail || 'Generation error')
       }
       stopPolling()
     } else if (data.status === 'unknown') {
       const qi = useGenQueue.getState().items.find((i) => i.promptId === promptId)
-      // (правка 491) Собственная отмена из очереди: удалённая pending-задача
-      // не попадает в history → 'unknown'. Это ожидаемый финал, а не сбой —
-      // чистый idle (раньше: 20с ожидания → красный баннер).
+      // (fix 491) Own cancellation from queue: removed pending task
+      // does not enter history → 'unknown'. This is expected outcome, not a failure —
+      // clean idle (previously: 20s wait → red banner).
       if (cancelRequestedFor === promptId) {
         cancelRequestedFor = null
         useTileUpscaleJob.setState({ phase: 'idle', progress: 0, busy: false, promptId: null, startedAt: null })
@@ -331,23 +331,23 @@ async function pollOnce() {
         stopPolling()
         return
       }
-      // ~10 тиков × 2с = 20с неизвестности — честно роняем (задача умерла
-      // вместе с перезапуском ComfyUI, иначе busy висел бы вечно).
+      // ~10 ticks × 2s = 20s of unknown — honestly drop (task died
+      // with ComfyUI restart, otherwise busy would hang forever).
       unknownStreak++
       if (unknownStreak >= 10) {
         useTileUpscaleJob.setState({
           phase: 'error',
-          error: 'Задача не найдена в ComfyUI (сервер был перезапущен) — отслеживание остановлено',
+          error: 'Task not found in ComfyUI (server was restarted) — tracking stopped',
           busy: false,
         })
-        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'Задача не найдена в ComfyUI — отслеживание остановлено')
+        if (qi) useGenQueue.getState().setStatus(qi.id, 'error', 'Task not found in ComfyUI — tracking stopped')
         stopPolling()
       }
     } else {
       unknownStreak = 0
-      // (правка 479) Прогресс из трекера (/api/comfy/progress) — монотонный
-      // 0→100 по счётчику KJ-событий, а не замороженный progress.value/max
-      // из ComfyUI status (MMH3UltimateUpscale не шлёт стандартные progress).
+      // (fix 479) Progress from tracker (/api/comfy/progress) — monotonic
+      // 0→100 based on KJ-event counter, rather than frozen progress.value/max
+      // from ComfyUI status (MMH3UltimateUpscale does not send standard progress).
       try {
         const progRes = await fetch(`/api/comfy/progress?prompt_id=${encodeURIComponent(promptId)}`)
         if (progRes.ok) {
@@ -358,10 +358,10 @@ async function pollOnce() {
             if (qi) useGenQueue.getState().setProgress(qi.id, progData.progress.percent, 100)
           }
         }
-      } catch { /* non-critical — следующий тик попробует снова */ }
+      } catch { /* non-critical — next tick will retry */ }
     }
   } catch {
-    /* transient — следующий тик попробует снова */
+    /* transient — next tick will retry */
   } finally {
     pollInFlight = false
   }

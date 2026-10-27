@@ -15,12 +15,12 @@ export interface VideoReferenceParam {
   imageIntent?: 'identity' | 'scene' | 'style' | 'composition'
   /** Videos: include the reference's own audio track. */
   includeAudio?: boolean
-  /** (правка 493) Videos: сжать до 480p перед подачей в conditioning. */
+  /** (fix 493) Videos: compress to 480p before feeding into conditioning. */
   compress?: boolean
-  /** (правка 302) Audio: обрезка, секунды. trimEnd null/0/undefined = до конца. */
+  /** (fix 302) Audio: trim, seconds. trimEnd null/0/undefined = until the end. */
   trimStart?: number
   trimEnd?: number | null
-  /** (правка 694) Audio: громкость 0–1 (default 0.5) — виртуальная (нода AudioGain). */
+  /** (fix 694) Audio: volume 0–1 (default 0.5) — virtual (AudioGain node). */
   audioVolume?: number
 }
 
@@ -30,42 +30,42 @@ export interface VideoReferenceParam {
 export interface VideoGenerateParams {
   /** Model type (kept for UI compatibility; ComfyUI uses the workflow template). */
   modelType: string
-  /** (правка 146) Режим генерации: 'ref' (default) | 't2v' | 'flf' | 'extend' (правка 161). */
+  /** (fix 146) Generation mode: 'ref' (default) | 't2v' | 'flf' | 'extend' (fix 161). */
   mode?: 'ref' | 't2v' | 'flf' | 'extend'
-  /** Пайплайн: 'draft' — один проход на low-res канве (черновик для отбора,
-   *  апгрейд вкладкой Refine); 'full' (default) — два прохода, как раньше. */
+  /** Pipeline: 'draft' — single pass on low-res canvas (draft for selection,
+   *  upgrade via Refine tab); 'full' (default) — two passes, as before. */
   pipeline?: 'draft' | 'full'
-  /** Шаги единственного прохода в пайплайне 'draft' (default 4, min 2). */
+  /** Single pass steps in 'draft' pipeline (default 4, min 2). */
   draftSteps?: number
-  /** (правка 719) extend: шаги клипа продления. undefined = «авто» —
-   *  шаги первого прохода исходника (из его меты), без меты — firstSamplerSteps. */
+  /** (fix 719) extend: extension clip steps. undefined = "auto" —
+   *  first pass steps of source (from its metadata), without metadata — firstSamplerSteps. */
   extendClipSteps?: number
-  /** (правка 161) extend: клипы для продления. */
+  /** (fix 161) extend: clips for extension. */
   extendClips?: Array<{ prompt: string; duration: number; seed: number }>
-  /** (правка 161) extend: картинки-рефы для продления (до 9). */
+  /** (fix 161) extend: image refs for extension (up to 9). */
   extendRefs?: string[]
-  /** (правка 164) extend: имя исходного видео в ComfyUI input/ (для LoadVideo → ref_video_1). */
+  /** (fix 164) extend: source video filename in ComfyUI input/ (for LoadVideo → ref_video_1). */
   extendSourceVideo?: string
-  /** (правка 385) extend: имя файла-ОРИГИНАЛА в output/ (копия в input/ имеет
-   *  случайное имя) — вместе с extendSourceSubfolder адрес сайдкара исходника:
-   *  роут по нему резолвит латент исходника (lossless-сид продления). */
+  /** (fix 385) extend: ORIGINAL filename in output/ (copy in input/ has
+   *  random name) — together with extendSourceSubfolder gives the sidecar address of the source:
+   *  route resolves source latent against it (lossless seed of extension). */
   extendSourceName?: string
-  /** (правка 385) extend: подпапка output, из которой взят источник-галерея. */
+  /** (fix 385) extend: output subfolder from which the gallery source was taken. */
   extendSourceSubfolder?: string
-  /** (правка 190) extend: число overlap-кадров между клипами (24 fps).
-   *  Default 48 (2 sec). Эти кадры из конца предыдущего клипа
-   *  подаются как latent-контекст для бесшовного продолжения. */
+  /** (fix 190) extend: number of overlap frames between clips (24 fps).
+   *  Default 48 (2 sec). These frames from the end of the previous clip
+   *  are fed as latent context for seamless continuation. */
   extendOverlapFrames?: number
-  /** (правка 423) extend: двухпроходный режим (low-res pass 1 → апскейл →
-   *  pass 2 рефайн до размера исходника). Default false = один проход. */
+  /** (fix 423) extend: two-pass mode (low-res pass 1 → upscale →
+   *  pass 2 refine to source size). Default false = single pass. */
   extendTwoPass?: boolean
-  /** (правка 146) flf: ComfyUI input/ filename первого кадра. */
+  /** (fix 146) flf: ComfyUI input/ filename of first frame. */
   firstFrame?: string
-  /** (правка 146) flf: ComfyUI input/ filename последнего кадра. */
+  /** (fix 146) flf: ComfyUI input/ filename of last frame. */
   lastFrame?: string
-  /** (правка 152) flf: ширина первого кадра в пикселях (для aspect ratio). */
+  /** (fix 152) flf: first frame width in pixels (for aspect ratio). */
   firstFrameWidth?: number
-  /** (правка 152) flf: высота первого кадра в пикселях. */
+  /** (fix 152) flf: first frame height in pixels. */
   firstFrameHeight?: number
   /** Positive prompt (supports <Picture 1>/<Picture 2> tags for refs). */
   prompt: string
@@ -73,7 +73,7 @@ export interface VideoGenerateParams {
   seed?: number
   /** Sampling steps (default 20; turbo: 4). */
   steps?: number
-  /** Resolution string — ТОЧНЫЙ номинал (правка 124), e.g. "1280x720", "1920x1080". */
+  /** Resolution string — EXACT nominal (fix 124), e.g. "1280x720", "1920x1080". */
   resolution?: string
   /** Total output frames (H3: 17n+5, min 124). */
   videoLength?: number
@@ -85,7 +85,7 @@ export interface VideoGenerateParams {
   turboLoraName?: string
   /** Non-turbo LoRA filename. */
   loraName?: string
-  /** (правка 91) Подпапка вывода — папка проекта галереи ('' = общая). */
+  /** (fix 91) Output subfolder — gallery project folder ('' = common). */
   outputSubfolder?: string
 
   /* ── FL2VA: first/last frame ── */
@@ -96,59 +96,59 @@ export interface VideoGenerateParams {
   /* ── ref2va: reference manifest ── */
   references?: VideoReferenceParam[]
   referenceDetail?: 'match' | 'max'
-  /** ref + аудио-реф: подать аудио как Audio Guide (а не только ref_audio)
-   *  и сохранить оригинальную дорожку в результате. */
+  /** ref + audio ref: feed audio as Audio Guide (not just ref_audio)
+   *  and keep original track in the result. */
   audioGuide?: boolean
-  /** Серверная замена итоговой дорожки оригиналом (ставится вместе с audioGuide). */
+  /** Server-side replacement of the final track with original (set together with audioGuide). */
   keepOriginalAudio?: boolean
 
   /* ── Two-pass latent upscaler ── */
-  /** (правка 124) Точные номинальные (финальные) размеры видео — приоритет
-   *  над finalResolution: gen = ceil32(nominal), кроп → ровно номинал. */
+  /** (fix 124) Exact nominal (final) video dimensions — priority
+   *  over finalResolution: gen = ceil32(nominal), crop → exactly nominal. */
   targetDimensions?: { width: number; height: number }
   /** Target resolution in MP for the latent upscaler (default 0.7 ≈ 720p;
-   *  (правка 124) используется в режиме свободного разрешения). */
+   *  (fix 124) used in free resolution mode). */
   finalResolution?: number
   /** Low-res pass 1 resolution in MP (default 0.2). */
   lowResMP?: number
   /** Pass 1 effective sampling steps (SplitSigmas split point, default 6, max 30). */
   firstSamplerSteps?: number
   /**
-   * ВСЕГО шагов в расписании BasicScheduler для pass 1.
-   * undefined = firstSteps — «6 из 6» по умолчанию.
+   * TOTAL steps in BasicScheduler schedule for pass 1.
+   * undefined = firstSteps — "6 of 6" by default.
    */
   firstSamplerTotalSteps?: number
   /** Pass 2 sigma variant: '3step' | '4step' | '5step' | '6step' | '7step'. */
   sigmaVariant?: string
-  /** (правка 69) Pass 2 sampler (default 'euler'). */
+  /** (fix 69) Pass 2 sampler (default 'euler'). */
   pass2Sampler?: string
-  /** (правка 70) Pass 1 sampler (default 'euler'). */
+  /** (fix 70) Pass 1 sampler (default 'euler'). */
   pass1Sampler?: string
-  /** (правка 70) Pass 1 scheduler (default 'simple'). */
+  /** (fix 70) Pass 1 scheduler (default 'simple'). */
   pass1Scheduler?: string
-  /** (правка 168) Разреженное внимание (Sol-Attn) — ускоряет длинные последовательности. Default true. */
+  /** (fix 168) Sparse Attention (Sol-Attn) — accelerates long sequences. Default true. */
   sparseAttention?: boolean
-  /** (правка 466) Sol-Attn: порог tau (default 1.3). */
+  /** (fix 466) Sol-Attn: tau threshold (default 1.3). */
   sparseTau?: number
-  /** (правка 466) Sol-Attn: start_percent (default 0.2). */
+  /** (fix 466) Sol-Attn: start_percent (default 0.2). */
   sparseStartPercent?: number
-  /** (правка 466) Sol-Attn: end_percent (default 1.0). */
+  /** (fix 466) Sol-Attn: end_percent (default 1.0). */
   sparseEndPercent?: number
-  /** (правка 466) Sol-Attn: min_tokens (default 12288). */
+  /** (fix 466) Sol-Attn: min_tokens (default 12288). */
   sparseMinTokens?: number
-  /** (правка 466) Sol-Attn: extra_tokens (default 256). */
+  /** (fix 466) Sol-Attn: extra_tokens (default 256). */
   sparseExtraTokens?: number
-  /** (правка 301) Veda Sparse Attention — обученный предиктор. Default false. */
+  /** (fix 301) Veda Sparse Attention — trained predictor. Default false. */
   vedaAttention?: boolean
-  /** (правка 401) Veda: спарсити генерации, 'N%' (default '90%'). */
+  /** (fix 401) Veda: generation sparsity, 'N%' (default '90%'). */
   vedaGeneratedSparsity?: string
-  /** (правка 401) Veda: спарсити референсов, 'N%' (default '90%'; 0% = полное внимание). */
+  /** (fix 401) Veda: reference sparsity, 'N%' (default '90%'; 0% = full attention). */
   vedaReferenceSparsity?: string
-  /** (правка 401) Veda: блоки DiT с полным вниманием («0, 1, 47-49»; '' = все sparse). */
+  /** (fix 401) Veda: DiT blocks with full attention ("0, 1, 47-49"; '' = all sparse). */
   vedaFullAttentionLayers?: string
-  /** (правка 401) Veda: шаги сэмплера с полным вниманием («0, 1»; '' = нет). */
+  /** (fix 401) Veda: sampler steps with full attention ("0, 1"; '' = none). */
   vedaFullAttentionSteps?: string
-  /** (правка 401) Veda: подробный лог (default false). */
+  /** (fix 401) Veda: verbose log (default false). */
   vedaVerbose?: boolean
   /** Enable MiniMaxLowVRAMAttention (head-chunked attention, saves VRAM). */
   lowVramAttention?: boolean

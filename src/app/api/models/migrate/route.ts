@@ -1,20 +1,20 @@
 /**
  * POST /api/models/migrate
- * (правка 47 + правка 64)
+ * (fix 47 + fix 64)
  *
- * Перенос данных со старой версии программы:
- *   - МОДЕЛИ: рекурсивный поиск папки "models" (до 3 уровней) внутри выбранной
- *     папки → все файлы перемещаются в текущую папку моделей ComfyUI;
- *   - КОНТЕНТ (правка 64): папка "output" (сгенерированные видео + .meta.json)
- *     → перемещается в текущий каталог выходов. Кэш превью (.thumbs/) и
- *     устаревший pending-стейт (.pending-meta.json) не переносимся;
- *   - ЧАТЫ (правка 74): файл "assistant-chats.json" (поиск до 3 уровней)
- *     → сливается в текущий data/assistant-chats.json (существующие чаты
- *     имеют приоритет, новые добавляются). После успешного слияния исходный
- *     файл удаляется (перенос, а не копия).
+ * Data migration from an older version of the program:
+ *   - MODELS: recursive search for "models" folder (up to 3 levels) within the selected
+ *     folder → all files are moved to the current ComfyUI models folder;
+ *   - CONTENT (fix 64): "output" folder (generated videos + .meta.json)
+ *     → moved to current output directory. Preview cache (.thumbs/) and
+ *     stale pending state (.pending-meta.json) are not migrated;
+ *   - CHATS (fix 74): "assistant-chats.json" file (search up to 3 levels)
+ *     → merged into current data/assistant-chats.json (existing chats
+ *     take precedence, new ones are added). After successful merge, source
+ *     file is deleted (move, not copy).
  *
  * Body: { sourceDir: string, items?: { models?, content?, chats?: boolean } }
- * Все категории включены по умолчанию → совместимо со старым телом { sourceDir }.
+ * All categories are enabled by default → backwards-compatible with { sourceDir }.
  */
 import { NextResponse } from 'next/server'
 import { existsSync, statSync, readdirSync, renameSync, copyFileSync, unlinkSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
@@ -27,7 +27,7 @@ interface CategoryResult {
   enabled: boolean
   found: boolean
   dir: string | null
-  /** (правка 74) Путь к исходному ФАЙЛУ (для категории «чаты»). */
+  /** (fix 74) Source FILE path (for "chats" category). */
   file?: string | null
   moved: number
   skipped: number
@@ -86,10 +86,10 @@ function findDirByName(startDir: string, name: string, maxDepth = 3): string | n
 }
 
 /**
- * (правка 283) Найти ВСЕ папки с названием `name` (до maxDepth уровней).
- * Возвращает массив путей (от ближайших к дальним). Используется для
- * моделей: может быть несколько папок models (корневая с бонсай +
- * ComfyUI/models с основными моделями) — нужно объединить обе.
+ * (fix 283) Find ALL directories named `name` (up to maxDepth levels).
+ * Returns array of paths (from closest to farthest). Used for
+ * models: there may be multiple models folders (root with bonsai +
+ * ComfyUI/models with main models) — both need to be merged.
  */
 function findAllDirByName(startDir: string, name: string, maxDepth = 3): string[] {
   const results: string[] = []
@@ -125,9 +125,9 @@ function findAllDirByName(startDir: string, name: string, maxDepth = 3): string[
 }
 
 /**
- * (правка 64) Найти папку сгенерированного контента старой установки:
- * приоритет — <...>/ComfyUI/output (стандартная раскладка
- * ComfyUI-Easy-Install/ComfyUI/output), затем любая папка "output" (до 3 уровней).
+ * (fix 64) Find generated content directory of an old installation:
+ * priority — <...>/ComfyUI/output (standard layout
+ * ComfyUI-Easy-Install/ComfyUI/output), then any "output" folder (up to 3 levels).
  */
 function findContentDir(startDir: string): string | null {
   const comfyDir = findDirByName(startDir, 'comfyui', 3)
@@ -136,7 +136,7 @@ function findContentDir(startDir: string): string | null {
     try {
       if (existsSync(out) && statSync(out).isDirectory()) return out
     } catch {
-      /* не читаемая — идём к fallback */
+      /* unreadable — proceed to fallback */
     }
   }
   return findDirByName(startDir, 'output', 3)
@@ -173,15 +173,15 @@ function collectFiles(dir: string, baseDir: string = dir): string[] {
 
 /**
  * Move a file, handling cross-drive moves (copy + unlink).
- * (правка 279) Кросс-том: если unlinkSync упадёт (файл занят), бросаем
- * ошибку — файл скопирован, но не удалён. Вызывающий код запишет в errors.
+ * (fix 279) Cross-volume: if unlinkSync fails (file busy), throw
+ * error — file is copied, but not deleted. Caller records in errors.
  */
 function moveFile(src: string, dest: string): void {
-  // (правка 587) Букву диска берём регэкспом с обоих путей; если у какого-то
-  // пути буквы НЕТ (UNC \\server\share или мусор) — считаем кросс-томом:
-  // старая проверка split('\\')[0] для UNC давала '' с обеих сторон, ветка
-  // копирования пропускалась, renameSync падал с EXDEV и каждый файл
-  // улетал в errors, хотя copy+delete сработал бы.
+  // (fix 587) Extract drive letter via regex from both paths; if any
+  // path has NO drive letter (UNC \\server\share or garbage) — treat as cross-volume:
+  // old split('\\')[0] check for UNC yielded '' on both sides, copy branch
+  // was skipped, renameSync failed with EXDEV and each file
+  // ended up in errors, even though copy+delete would have succeeded.
   const driveOf = (p: string) => (/^([a-zA-Z]):/.exec(p)?.[1] || '').toLowerCase()
   const srcDrive = driveOf(src)
   const destDrive = driveOf(dest)
@@ -193,7 +193,7 @@ function moveFile(src: string, dest: string): void {
     try {
       unlinkSync(src)
     } catch (err) {
-      throw new Error(`Кросс-том: файл скопирован, но не удалён (занят другим процессом?): ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Cross-volume: file copied, but not deleted (locked by another process?): ${err instanceof Error ? err.message : String(err)}`)
     }
   } else {
     // Same drive: rename (atomic on NTFS)
@@ -202,15 +202,15 @@ function moveFile(src: string, dest: string): void {
   }
 }
 
-/** (правка 64) Что НЕ переносить из старого output. */
+/** (fix 64) Items to exclude from old output. */
 function isExcludedContent(rel: string): boolean {
   const norm = rel.split('\\').join('/')
   return norm.startsWith('.thumbs/') || norm === '.pending-meta.json'
 }
 
 /**
- * (правка 64) Общий перенос одной категории: файлы из foundDir → targetRoot
- * с сохранением структуры. Существующие на месте файлы пропускаются.
+ * (fix 64) Generic migration of a single category: files from foundDir → targetRoot
+ * preserving structure. Existing destination files are skipped.
  */
 function runMigrate(
   targetRoot: string,
@@ -247,7 +247,7 @@ function runMigrate(
       moveFile(srcFile, destFile)
       moved++
     } catch (err) {
-      errors.push(`Ошибка при переносе ${relPath}: ${err instanceof Error ? err.message : String(err)}`)
+      errors.push(`Error migrating ${relPath}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -255,8 +255,8 @@ function runMigrate(
 }
 
 /**
- * (правка 283) Перенос из НЕСКОЛЬКИХ папок (модели: корневая + ComfyUI/models).
- * Файлы из всех папок объединяются и переносятся в targetRoot.
+ * (fix 283) Migration from MULTIPLE folders (models: root + ComfyUI/models).
+ * Files from all folders are merged and migrated to targetRoot.
  */
 function runMigrateMulti(
   targetRoot: string,
@@ -284,7 +284,7 @@ function runMigrateMulti(
         moveFile(srcFile, destFile)
         totalMoved++
       } catch (err) {
-        errors.push(`Ошибка при переносе ${relPath} (из ${foundDir}): ${err instanceof Error ? err.message : String(err)}`)
+        errors.push(`Error migrating ${relPath} (from ${foundDir}): ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
@@ -296,8 +296,7 @@ function runMigrateMulti(
   return { enabled: true, found: true, dir: foundDirs[0] ?? null, moved: totalMoved, skipped: totalSkipped, errors }
 }
 
-/* ─── (правка 74) Чаты ассистента: перенос из файла старой версии ─── */
-
+/* ─── (fix 74) Assistant chats: migration from older version file ─── */
 interface ChatLike {
   id: string
   title?: string
@@ -317,8 +316,8 @@ function currentChatsFile(): string {
 }
 
 /**
- * (правка 74) Найти файл чатов ассистента в старой установке:
- * "assistant-chats.json" (без учёта регистра, до 3 уровней глубины).
+ * (fix 74) Find assistant chats file in old installation:
+ * "assistant-chats.json" (case-insensitive, up to 3 levels deep).
  */
 function findChatsFile(startDir: string, maxDepth = 3): string | null {
   if (!existsSync(startDir)) return null
@@ -356,22 +355,22 @@ function findChatsFile(startDir: string, maxDepth = 3): string | null {
 }
 
 /**
- * (правка 74) Слить файл чатов старой версии в текущий data/assistant-chats.json:
- * существующие чаты (по id) имеют приоритет, новые добавляются. После успешного
- * слияния исходный файл удаляется (перенос, а не копия).
+ * (fix 74) Merge old version chats file into current data/assistant-chats.json:
+ * existing chats (by id) take precedence, new ones are added. After successful
+ * merge the source file is deleted (move, not copy).
  */
 function migrateChats(srcFile: string): CategoryResult {
   const dest = currentChatsFile()
-  // (правка 338) Жёсткий гвард: источник = текущий файл чатов. POST уже
-  // отклоняет такие sourceDir, но findChatsFile ищет рекурсивно (3 уровня) —
-  // при sourceDir-предке проекта (например, сама папка новой версии) мог
-  // найтись ИМЕННО текущий data/assistant-chats.json, и unlinkSync ниже
-  // удалил бы живые чаты после «слияния файла самого в себя».
+  // (fix 338) Strict guard: source = current chats file. POST already
+  // rejects such sourceDir, but findChatsFile searches recursively (3 levels) —
+  // if sourceDir is an ancestor of the project (e.g. current project folder itself),
+  // the CURRENT data/assistant-chats.json could be found, and unlinkSync below
+  // would delete active chats after "merging file into itself".
   if (resolve(srcFile).toLowerCase() === resolve(dest).toLowerCase()) {
     return {
       enabled: true, found: false, dir: null, file: srcFile,
       moved: 0, skipped: 0,
-      errors: ['Источник совпадает с текущим файлом чатов — перенос пропущен.'],
+      errors: ['Source is identical to current chats file — migration skipped.'],
     }
   }
   try {
@@ -392,12 +391,12 @@ function migrateChats(srcFile: string): CategoryResult {
       return {
         enabled: true, found: true, dir: null, file: srcFile,
         moved: 0, skipped: 0,
-        errors: ['Файл не содержит списка чатов.'],
+        errors: ['File does not contain a chats list.'],
       }
     }
     const validSrc = srcChats.filter(isValidChat)
 
-    // Текущие чаты (если есть)
+    // Current chats (if any)
     let curChats: ChatLike[] = []
     let curActive: string | null = null
     if (existsSync(dest)) {
@@ -406,7 +405,7 @@ function migrateChats(srcFile: string): CategoryResult {
         if (cur && Array.isArray(cur.chats)) curChats = cur.chats.filter(isValidChat)
         if (cur && typeof cur.activeChatId === 'string') curActive = cur.activeChatId
       } catch {
-        /* повреждённый файл — начинаем заново (старые чаты останутся в кэше браузера) */
+        /* corrupted file — start anew (old chats will remain in browser cache) */
       }
     }
 
@@ -420,9 +419,9 @@ function migrateChats(srcFile: string): CategoryResult {
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true })
     writeFileSync(dest, JSON.stringify({ chats: merged, activeChatId }, null, 2), 'utf-8')
 
-    // Перенос = move: удаляем исходный файл после успешной записи
-    // (правка 279) Если unlinkSync упадёт (файл занят), пишем в errors —
-    // данные перенесены, но исходный файл остался (копия, а не перенос).
+    // Migration = move: delete source file after successful write
+    // (fix 279) If unlinkSync fails (file busy), record in errors —
+    // data is migrated, but source file remains (copy, not move).
     try {
       unlinkSync(srcFile)
     } catch (err) {
@@ -430,7 +429,7 @@ function migrateChats(srcFile: string): CategoryResult {
         enabled: true, found: true, dir: null, file: srcFile,
         moved: added.length,
         skipped: validSrc.length - added.length,
-        errors: [`Чаты перенесены, но исходный файл не удалён (занят другим процессом?): ${err instanceof Error ? err.message : String(err)}`],
+        errors: [`Chats migrated, but source file could not be deleted (locked by another process?): ${err instanceof Error ? err.message : String(err)}`],
       }
     }
 
@@ -444,7 +443,7 @@ function migrateChats(srcFile: string): CategoryResult {
     return {
       enabled: true, found: true, dir: null, file: srcFile,
       moved: 0, skipped: 0,
-      errors: [`Ошибка чтения/переноса чатов: ${err instanceof Error ? err.message : String(err)}`],
+      errors: [`Error reading/migrating chats: ${err instanceof Error ? err.message : String(err)}`],
     }
   }
 }
@@ -459,32 +458,32 @@ export async function POST(request: Request) {
 
     if (!sourceDir) {
       return NextResponse.json(
-        { error: 'Укажите путь к папке старой версии программы.' },
+        { error: 'Specify path to older version folder.' },
         { status: 400 }
       )
     }
 
-    // (правка 135) Проверяем, что это именно папка, а не файл.
-    // Раньше если user указал файл — existsSync вернул true, и код
-    // пытался искать в нём подпапки → странное поведение.
+    // (fix 135) Ensure it is a directory, not a file.
+    // Previously if user specified a file — existsSync returned true, and code
+    // attempted to search subfolders inside it → unexpected behavior.
     if (!existsSync(sourceDir)) {
       return NextResponse.json(
-        { error: `Папка не найдена: ${sourceDir}` },
+        { error: `Folder not found: ${sourceDir}` },
         { status: 400 }
       )
     }
     if (!statSync(sourceDir).isDirectory()) {
       return NextResponse.json(
-        { error: `Указан файл, а не папка: ${sourceDir}` },
+        { error: `Specified path is a file, not a directory: ${sourceDir}` },
         { status: 400 }
       )
     }
 
-    // (правка 135) Защита от переноса папки в саму себя.
-    // Если sourceDir совпадает с любым из target'ов — ошибка.
-    // (правка 279) Добавлена проверка файла чатов — если sourceDir содержит
-    // текущий data/assistant-chats.json, migrateChats удалит его после
-    // слияния → потеря данных.
+    // (fix 135) Guard against migrating folder into itself.
+    // If sourceDir matches any target — error.
+    // (fix 279) Added check for chats file — if sourceDir contains
+    // current data/assistant-chats.json, migrateChats will delete it after
+    // merge → data loss.
     const cfg = getAppConfig()
     const modelsTarget = join(cfg.comfyRoot, 'ComfyUI', 'models')
     const contentTarget = cfg.outputDir
@@ -494,74 +493,74 @@ export async function POST(request: Request) {
     for (const t of targets) {
       if (srcLower === t || srcLower.startsWith(t + '/')) {
         return NextResponse.json(
-          { error: `Невозможно перенести папку в саму себя: ${sourceDir}` },
+          { error: `Cannot migrate folder into itself: ${sourceDir}` },
           { status: 400 }
         )
       }
     }
-    // (правка 279) Защита от удаления текущего файла чатов
+    // (fix 279) Protection against deleting current chats file
     const chatsLower = chatsTarget.toLowerCase().replace(/\\/g, '/')
     if (srcLower === dirname(chatsLower) || srcLower.startsWith(dirname(chatsLower) + '/')) {
       return NextResponse.json(
-        { error: `Невозможно перенести папку, содержащую текущий файл чатов: ${sourceDir}` },
+        { error: `Cannot migrate folder containing current chats file: ${sourceDir}` },
         { status: 400 }
       )
     }
-    // (правка 338) И наоборот: sourceDir — ПРЕДОК текущего data/ (пользователь
-    // указал папку самой новой версии или её родителя). Рекурсивный
-    // findChatsFile нашёл бы внутри живой assistant-chats.json, и migrateChats
-    // удалил бы его после слияния «самого в себя» → потеря всех чатов.
+    // (fix 338) And vice-versa: sourceDir is an ANCESTOR of current data/ (user
+    // specified current version folder or its parent). Recursive
+    // findChatsFile would find live assistant-chats.json inside, and migrateChats
+    // would delete it after merging "into itself" → loss of all chats.
     if (chatsLower === srcLower + '/assistant-chats.json' || chatsLower.startsWith(srcLower + '/')) {
       return NextResponse.json(
-        { error: `Невозможно перенести данные из папки текущей версии программы: ${sourceDir}` },
+        { error: `Cannot migrate data from current version program folder: ${sourceDir}` },
         { status: 400 }
       )
     }
-    // (релиз) sourceDir — ПРЕДОК живой папки моделей.
+    // (release) sourceDir is an ANCESTOR of live models folder.
     //
-    // findAllDirByName(sourceDir, 'models', 3) ищет ЛЮБУЮ папку с именем
-    // 'models' на 3 уровня вниз. Если пользователь указал корень проекта
-    // (или его родителя), туда попадает НАСТОЯЩАЯ папка моделей текущей
-    // версии — и перенос начинает работать с живыми файлами вместо копии
-    // старой версии. Проверка «sourceDir == target или внутри него» это не
-    // ловит: запрещён только сам target и его подпапки, а не предки.
+    // findAllDirByName(sourceDir, 'models', 3) looks for ANY folder named
+    // 'models' 3 levels down. If user specified project root
+    // (or its parent), the REAL models folder of the current
+    // version would be matched — and migration would start operating on live files
+    // instead of a copy of the old version. Check "sourceDir == target or inside it" does not
+    // catch this: only target itself and its subfolders are prohibited, not ancestors.
     //
-    // Последствие — живые модели уезжают из ComfyUI\models, и студия
-    // остаётся без весов. Поэтому предка живой папки моделей отклоняем
-    // явно и с внятным текстом.
+    // Consequence — live models move out of ComfyUI\models, leaving studio
+    // without weights. Therefore, an ancestor of live models folder is rejected
+    // explicitly with a clear message.
     if (modelsTarget.toLowerCase().replace(/\\/g, '/').startsWith(srcLower + '/')) {
       return NextResponse.json(
         {
           error:
-            `Указана папка, внутри которой лежит текущая папка моделей (${modelsTarget}). ` +
-            `Перенос оттуда увёл бы живые модели из программы. Укажите папку со СТАРОЙ версией.`,
+            `Specified folder contains the current models folder (${modelsTarget}). ` +
+            `Migrating from there would remove active models from the program. Specify the folder containing the OLD version.`,
         },
         { status: 400 }
       )
     }
 
-    // Категории включены по умолчанию — старый клиент,
-    // шлющий только { sourceDir }, переносит и модели, и контент, и чаты.
+    // Categories enabled by default — legacy client
+    // sending only { sourceDir } migrates models, content, and chats.
     const wantModels = body.items?.models !== false
     const wantContent = body.items?.content !== false
     const wantChats = body.items?.chats !== false
 
-    // (правка 283) Модели: может быть несколько папок models (корневая +
-    // ComfyUI/models). Ищем все и объединяем их содержимое.
+    // (fix 283) Models: multiple models folders may exist (root +
+    // ComfyUI/models). Find all and combine their contents.
     const modelsDirs = findAllDirByName(sourceDir, 'models', 3)
     const models: CategoryResult = wantModels
       ? modelsDirs.length > 0
         ? runMigrateMulti(modelsTarget, modelsDirs,
-            'Папки "models" найдены, но не содержат файлов.')
-        : { enabled: true, found: false, dir: null, moved: 0, skipped: 0, errors: ['Папка "models" (модели) не найдена в указанной директории (поиск на 3 уровня глубины).'] }
+            'Folders "models" found, but contain no files.')
+        : { enabled: true, found: false, dir: null, moved: 0, skipped: 0, errors: ['Folder "models" (models) not found in specified directory (search up to 3 levels deep).'] }
       : DISABLED
 
     const content: CategoryResult = wantContent
       ? runMigrate(
           contentTarget,
           findContentDir(sourceDir),
-          'Папка "output" (сгенерированные видео) не найдена в указанной директории (поиск на 3 уровня глубины).',
-          'Папка "output" найдена, но не содержит файлов.',
+          'Folder "output" (generated videos) not found in specified directory (search up to 3 levels deep).',
+          'Folder "output" found, but contains no files.',
           isExcludedContent,
         )
       : DISABLED
@@ -576,7 +575,7 @@ export async function POST(request: Request) {
             dir: null,
             moved: 0,
             skipped: 0,
-            errors: ['Файл "assistant-chats.json" (чаты ассистента) не найден в указанной директории (поиск на 3 уровня глубины).'],
+            errors: ['File "assistant-chats.json" (assistant chats) not found in specified directory (search up to 3 levels deep).'],
           }
       : DISABLED
 
@@ -584,7 +583,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result)
   } catch (err) {
     return NextResponse.json(
-      { error: `Внутренняя ошибка: ${err instanceof Error ? err.message : String(err)}` },
+      { error: `Internal error: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
     )
   }

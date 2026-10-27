@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    // (правка 356) ok:false явно — при недоступном /queue клиент не должен
-    // считать отмену успешной.
+    // (fix 356) ok:false explicitly — when /queue is unavailable the client should not
+    // consider the cancellation successful.
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 }

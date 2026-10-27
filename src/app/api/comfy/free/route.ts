@@ -22,6 +22,6 @@ export async function POST() {
     return NextResponse.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Не удалось связаться с ComfyUI: ${msg}` }, { status: 502 })
+    return NextResponse.json({ error: `Failed to connect to ComfyUI: ${msg}` }, { status: 502 })
   }
 }

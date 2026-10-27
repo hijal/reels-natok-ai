@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server'
 import { ensureUpscale } from '@/lib/upscale-runner'
 
 /**
- * (правка 74) POST /api/upscale/start
- * Запустить встроенный DLSS 5 Visual Enhancer (upscale/bridge.py) и дождаться,
- * пока он ответит на порту. Может занять до ~3 минут при первом старте.
+ * (fix 74) POST /api/upscale/start
+ * Start the built-in DLSS 5 Visual Enhancer (upscale/bridge.py) and wait until
+ * it responds on the port. May take up to ~3 minutes on first start.
  *
- * (правка 77) `?auto=1` — автозапуск из фоновой проверки состояния (не
- * нажатие кнопки). В этом случае уважаем явную остановку пользователем
- * (manualStop); явный «Запустить» (без параметра) — force=true.
+ * (fix 77) `?auto=1` — autostart from background status check (not a
+ * button click). In this case we respect explicit manual stop by the user
+ * (manualStop); explicit "Start" (without parameter) — force=true.
  */
 export const dynamic = 'force-dynamic'
 export const maxDuration = 240
@@ -19,11 +19,11 @@ export async function POST(req: Request) {
     try {
       auto = new URL(req.url).searchParams.get('auto') === '1'
     } catch {
-      /* редирект/странный url — считаем явным стартом */
+      /* redirect/strange url — treat as explicit start */
     }
     const res = await ensureUpscale({ force: !auto })
     return NextResponse.json(
-      res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Upscale-сервис не запустился' },
+      res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Upscale service failed to start' },
       { status: res.ok ? 200 : 500 },
     )
   } catch (err) {

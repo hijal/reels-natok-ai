@@ -10,8 +10,8 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useGenProgress } from '@/lib/gen-progress-store' // (правка 696)
-// (правка 719) Превью с полноэкранным просмотром — как на «Генерации».
+import { useGenProgress } from '@/lib/gen-progress-store' // (edit 696)
+// (edit 719) Preview with full-screen viewer — matching "Generate".
 import { RefPreviewThumb } from '@/components/h3/ref-preview-thumb'
 
 interface GenerationStatusProps {
@@ -27,43 +27,43 @@ interface GenerationStatusProps {
   /** Current prompt_id for the live preview. */
   promptId?: string | null
   /**
-   * (правка 255) Как называть стадии в подписи превью/статуса:
-   * 'passes' — «Pass 1/2 · черновик/детализация» (генерация, default);
-   * 'clips'  — «Клип 1/3» (продление: стадия = клип цепочки);
-   * 'clips2' — «Клип 1/2 · проход 1/2» (правка 430: двухпроходный extend —
-   *   стадий в трекере clips×2 (pass 1 + pass 2 на клип), показываем пару);
-   * 'chunks' — «Кусок 1/4» (рефайн частями);
-   * 'single' — без нумерации проходов (рефайн целиком, драфт);
-   * 'tile' — «Tile Upscale» (правка 478: у вкладки Tile Upscale метка была
-   *   'Refine', потому что она делила вид 'single' с рефайном целиком).
+   * (edit 255) How to label stages in preview/status caption:
+   * 'passes' — "Pass 1/2 · draft/detail" (generation, default);
+   * 'clips'  — "Clip 1/3" (extend: stage = chain clip);
+   * 'clips2' — "Clip 1/2 · pass 1/2" (edit 430: two-pass extend —
+   *   stages in tracker clips*2 (pass 1 + pass 2 per clip), show pair);
+   * 'chunks' — "Chunk 1/4" (chunked refine);
+   * 'single' — without pass numbering (full refine, draft);
+   * 'tile' — "Tile Upscale" (edit 478: Tile Upscale tab had label
+   *   'Refine' because it shared 'single' with full refine).
    */
   stageKind?: 'passes' | 'clips' | 'clips2' | 'chunks' | 'single' | 'tile' | 'controlnet'
 }
 
-/** Подпись текущей стадии с учётом вида вкладки (правка 255, 478). */
+/** Caption for current stage considering tab view (edits 255, 478). */
 function stageLabel(
   kind: 'passes' | 'clips' | 'clips2' | 'chunks' | 'single' | 'tile' | 'controlnet',
   stage: number,
   totalStages: number,
 ): string {
-  // (правка 478+479) метка вкладки Tile Upscale: «Тайл X/Y»
-  if (kind === 'tile') return totalStages > 0 ? `Тайл ${stage}/${totalStages}` : 'Tile Upscale'
-  // (правка 497) вкладка ControlNet — один проход, без нумерации
+  // (edit 478+479) Tile Upscale tab label: "Tile X/Y"
+  if (kind === 'tile') return totalStages > 0 ? `Tile ${stage}/${totalStages}` : 'Tile Upscale'
+  // (edit 497) ControlNet tab — single pass, without numbering
   if (kind === 'controlnet') return 'ControlNet'
-  if (kind === 'clips') return `Клип ${stage}/${totalStages}`
-  // (правка 430) Стадии двухпроходного extend идут парами [p1_i, p2_i]:
-  // нечётная = pass 1 (черновик), чётная = pass 2 (детализация) того же клипа.
+  if (kind === 'clips') return `Clip ${stage}/${totalStages}`
+  // (edit 430) Two-pass extend stages come in pairs [p1_i, p2_i]:
+  // odd = pass 1 (draft), even = pass 2 (detail) for that clip.
   if (kind === 'clips2') {
     const clip = Math.ceil(stage / 2)
     const totalClips = Math.ceil(totalStages / 2)
     const pass = ((stage - 1) % 2) + 1
-    return `Клип ${clip}/${totalClips} · проход ${pass}/2${pass === 1 ? ' · черновик' : ' · детализация'}`
+    return `Clip ${clip}/${totalClips} · pass ${pass}/2${pass === 1 ? ' · draft' : ' · detail'}`
   }
-  if (kind === 'chunks') return `Кусок ${stage}/${totalStages}`
+  if (kind === 'chunks') return `Chunk ${stage}/${totalStages}`
   if (kind === 'single') return 'Refine'
-  // passes: единственный проход (драфт) не нумеруем как «1/1»
-  if (totalStages <= 1) return 'Проход'
-  return `Pass ${stage}/${totalStages}${stage === 1 ? ' · черновик' : ' · детализация'}`
+  // passes: single pass (draft) is not numbered as "1/1"
+  if (totalStages <= 1) return 'Pass'
+  return `Pass ${stage}/${totalStages}${stage === 1 ? ' · draft' : ' · detail'}`
 }
 
 function formatElapsed(ms: number): string {
@@ -71,9 +71,9 @@ function formatElapsed(ms: number): string {
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60
-  if (h > 0) return `${h}ч ${m}м ${s}с`
-  if (m > 0) return `${m}м ${s}с`
-  return `${s}с`
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
 }
 
 function ElapsedTimer({ startedAt }: { startedAt: number }) {
@@ -95,10 +95,10 @@ function GenPreview({
   promptId: string | null
   active: boolean
   stageKind: 'passes' | 'clips' | 'clips2' | 'chunks' | 'single' | 'tile' | 'controlnet'
-  /** (правка 696) true во время активной генерации — используем frozen kind. */
+  /** (edit 696) true during active generation — use frozen kind. */
   isGenerating: boolean
 }) {
-  // (правка 696) Frozen stageKind из стора — до всех early-returns (hook order).
+  // (edit 696) Frozen stageKind from store — before all early-returns (hook order).
   const frozenKind = useGenProgress((s) => s.video.frozenStageKind)
   const [previewData, setPreviewData] = useState<{
     url: string
@@ -112,7 +112,7 @@ function GenPreview({
       totalStages: number
       step: number
       total: number
-      /** (правка 487) tile-upscale: модель ещё готовится, сэмплинг не начался. */
+      /** (edit 487) tile-upscale: model is still preparing, sampling has not started. */
       preparing?: boolean
     } | null
   } | null>(null)
@@ -168,14 +168,14 @@ function GenPreview({
     const stageOnly = previewData?.stage
     return (
       <div className="rounded-lg border border-dashed border-border bg-[var(--surface-1)]/50 h-28 flex flex-col items-center justify-center gap-1">
-        <span className="text-[10px] text-muted-foreground/50 creative-pulse">Ожидание preview…</span>
+        <span className="text-[10px] text-muted-foreground/50 creative-pulse">Waiting for preview…</span>
         {stageOnly && (
           <span className="text-[10px] text-cyan-300 font-medium">
-            {/* (правка 487) фаза подготовки модели — без ложных «Тайл 1/N»;
-                правка 696 — frozen kind во время генерации */}
+            {/* (edit 487) model preparation phase — no false "Tile 1/N";
+                edit 696 — frozen kind during generation */}
             {stageOnly.preparing
-              ? 'Подготовка модели…'
-              : <>{stageLabel(isGenerating ? (frozenKind ?? stageKind) : stageKind, stageOnly.stage, stageOnly.totalStages)}{stageOnly.total > 0 ? ` · шаг ${stageOnly.step}/${stageOnly.total}` : ''}</>}
+              ? 'Preparing model…'
+              : <>{stageLabel(isGenerating ? (frozenKind ?? stageKind) : stageKind, stageOnly.stage, stageOnly.totalStages)}{stageOnly.total > 0 ? ` · step ${stageOnly.step}/${stageOnly.total}` : ''}</>}
           </span>
         )}
       </div>
@@ -185,9 +185,9 @@ function GenPreview({
   const isVideo = previewData.mime === 'video/mp4'
   const isAnimatedWebp = previewData.mime === 'image/webp'
 
-  // (правка 696) Во время активной генерации используем зафиксированный на
-  // момент старта stageKind — переключение «Драфт/Полное» не меняет шаблон
-  // подписи. Вне генерации — текущий stageKind (актуальные настройки).
+  // (edit 696) During active generation use stageKind captured at launch
+  // — toggling "Draft/Full" does not alter caption template. Outside generation —
+  // current stageKind (actual settings).
   const activeKind = isGenerating ? (frozenKind ?? stageKind) : stageKind
 
   // Stage label across the WHOLE generation (not just the pass the preview
@@ -197,24 +197,23 @@ function GenPreview({
   // preview image's own counters.
   const stage = previewData.stage
   const passLabel = stage
-    // (правка 487) фаза подготовки модели — без ложных «Тайл 1/N»
-    ? (stage.preparing ? 'Подготовка модели…' : stageLabel(activeKind, stage.stage, stage.totalStages))
-    : 'Превью'
+    // (edit 487) model preparation phase — no false "Tile 1/N"
+    ? (stage.preparing ? 'Preparing model…' : stageLabel(activeKind, stage.stage, stage.totalStages))
+    : 'Preview'
   const step = stage && stage.total > 0 ? stage.step : previewData.step
   const total = stage && stage.total > 0 ? stage.total : previewData.total
-  const stepLabel = !stage?.preparing && total > 0 ? ` · шаг ${step}/${total}` : ''
+  const stepLabel = !stage?.preparing && total > 0 ? ` · step ${step}/${total}` : ''
 
   return (
-    // (правка 447) Рамка превью — нейтральная border-border, без голубого cyan-обвода.
+    // (edit 447) Preview border — neutral border-border, without cyan outline.
     <div className="relative rounded-lg overflow-hidden border border-border bg-black/40">
-      {/* (правка 719) Клик по превью — полноэкранный просмотр (как на вкладке
-          «Генерация»). */}
+      {/* (edit 719) Click on preview — full-screen viewer (matching "Generate" tab). */}
       <RefPreviewThumb
         kind={isVideo ? 'video' : 'image'}
-        name="Превью генерации"
+        name="Generation preview"
         url={previewData.url}
         className="block w-full"
-        title="Открыть превью во весь экран"
+        title="Open preview full screen"
       >
         {isVideo ? (
           <video
@@ -276,12 +275,12 @@ export function GenerationStatus({
                     : 'text-muted-foreground',
           )}
         >
-          {phase === 'idle' && 'Готов к генерации'}
-          {phase === 'submitting' && 'Отправка…'}
-          {phase === 'queued' && 'В очереди…'}
-          {phase === 'running' && (progressPercent > 0 ? `Генерация… ${progressPercent}%` : 'Генерация идёт…')}
-          {phase === 'done' && 'Готово ✓'}
-          {phase === 'error' && 'Ошибка'}
+          {phase === 'idle' && 'Ready to generate'}
+          {phase === 'submitting' && 'Submitting…'}
+          {phase === 'queued' && 'Queued…'}
+          {phase === 'running' && (progressPercent > 0 ? `Generating… ${progressPercent}%` : 'Generating…')}
+          {phase === 'done' && 'Done ✓'}
+          {phase === 'error' && 'Error'}
         </span>
         <div className="flex items-center gap-2 min-w-0">
           {startedAt && isGenerating && <ElapsedTimer startedAt={startedAt} />}
@@ -334,7 +333,7 @@ export function GenerationStatus({
           onClick={onInterrupt}
           className="w-full text-xs text-red-400/70 hover:text-red-400 py-1 transition-colors"
         >
-          Остановить
+          Stop
         </button>
       )}
 
@@ -345,7 +344,7 @@ export function GenerationStatus({
           animate={{ opacity: 1, y: 0 }}
           className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg"
         >
-          <span className="text-sm text-red-400 font-medium shrink-0">Ошибка</span>
+          <span className="text-sm text-red-400 font-medium shrink-0">Error</span>
           <div className="space-y-1 min-w-0">
             <p className="text-xs text-red-300/70 break-words">{error}</p>
             <Button
@@ -354,7 +353,7 @@ export function GenerationStatus({
               onClick={onReset}
               className="h-auto p-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/20"
             >
-              Попробовать снова
+              Try again
             </Button>
           </div>
         </motion.div>

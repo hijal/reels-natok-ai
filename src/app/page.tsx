@@ -8,20 +8,20 @@ import { ExtendView } from '@/components/h3/extend-view'
 import { RefineView } from '@/components/h3/refine-view'
 import { UpscaleView } from '@/components/h3/upscale-view'
 import { TileUpscaleView } from '@/components/h3/tile-upscale-view'
-import { ControlNetView } from '@/components/h3/controlnet-view' // (правка 497)
+import { ControlNetView } from '@/components/h3/controlnet-view' // (fix 497)
 import { FpsView } from '@/components/h3/fps-view'
 import { FaceRefineView } from '@/components/h3/face-refine-view'
 import { GalleryView } from '@/components/h3/gallery-view'
 import { LearnView } from '@/components/h3/learn/learn-view'
 import { QueueIndicator } from '@/components/queue-indicator'
 import { SettingsDialog } from '@/components/h3/settings-dialog'
-// (правка 112) Всплывающее окно с краткой инструкцией при первом запуске
+// (fix 112) Popup window with quick guide on first launch
 import { WelcomeDialog } from '@/components/h3/welcome-dialog'
 import { ModelsWarningBanner } from '@/components/h3/models-warning-banner'
 import { initAssistantChatsSync } from '@/lib/assistant-chats-sync'
-// (правка 718) Сверка «идёт ли генерация» с живым ComfyUI при старте:
-// персистентный стор восстанавливает фазу «running» из localStorage, и без
-// сверки карточка «Генерация идёт» висела бы после каждого запуска.
+// (fix 718) Reconcile "whether generation is running" with live ComfyUI on startup:
+// persistent store restores the "running" phase from localStorage, and without
+// reconciliation the "Generation in progress" card would hang after every launch.
 import {
   reconcileGenerationOnStartup,
   cleanupLostPendingQueueItems,
@@ -29,8 +29,8 @@ import {
 } from '@/lib/gen-startup-reconcile'
 import { initComfyTurn } from '@/lib/comfy-turn'
 import { sweepOrphanRefineItems } from '@/lib/refine-queue'
-// (правка 442) Ассистент — не вкладка, а правая панель на «Генерации» и
-// «Продлении»; событие «открыть ассистента» разворачивает панель через стор.
+// (fix 442) Assistant is not a tab, but a right panel on "Generate" and
+// "Extend"; the "open assistant" event expands the panel via the store.
 import { useAssistantPanel } from '@/lib/assistant-panel-store'
 
 const TAB_CONTENT = {
@@ -39,7 +39,7 @@ const TAB_CONTENT = {
   refine: RefineView,
   upscale: UpscaleView,
   'tile-upscale': TileUpscaleView,
-  controlnet: ControlNetView, // (правка 497)
+  controlnet: ControlNetView, // (fix 497)
   fps: FpsView,
   'face-refine': FaceRefineView,
   gallery: GalleryView,
@@ -50,15 +50,15 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('generate')
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // (правка 112) Приветственное окно при первом запуске.
-  // (правка 113) Флаг «не показывать» пишется ТОЛЬКО если пользователь
-  // поставил галочку; иначе окно появляется при каждом запуске.
-  // Инициализируется в useEffect — SSR не читает localStorage.
+  // (fix 112) Welcome dialog on first launch.
+  // (fix 113) "Don't show again" flag is written ONLY if the user
+  // checked the box; otherwise the dialog appears on each launch.
+  // Initialized in useEffect — SSR does not read localStorage.
   const [welcomeOpen, setWelcomeOpen] = useState(false)
   useEffect(() => {
     try {
       if (!localStorage.getItem('h3_welcome_seen_v1')) setWelcomeOpen(true)
-    } catch { /* приватный режим и т.п. — просто не показываем */ }
+    } catch { /* private browsing mode etc. — simply do not show */ }
   }, [])
   const closeWelcome = (dontShowAgain: boolean) => {
     if (dontShowAgain) {
@@ -69,32 +69,32 @@ export default function Home() {
     setWelcomeOpen(false)
   }
 
-  // (правка 116) «Показать окно приветствия» из Настройки → Общие:
-  // компонент шлёт событие h3:show-welcome (флаг уже сброшен им),
-  // мы просто открываем окно поверх.
+  // (fix 116) "Show welcome dialog" from Settings → General:
+  // component dispatches h3:show-welcome event (flag already reset by it),
+  // we simply open the dialog on top.
   useEffect(() => {
     const showWelcome = () => setWelcomeOpen(true)
     window.addEventListener('h3:show-welcome', showWelcome)
     return () => window.removeEventListener('h3:show-welcome', showWelcome)
   }, [])
 
-  // Cross-component navigation (e.g. MetaDialog's "→ В редактор" button,
-  // or the prompt editor's "Улучшить промпт" → assistant panel)
+  // Cross-component navigation (e.g. MetaDialog's "→ To editor" button,
+  // or the prompt editor's "Improve prompt" → assistant panel)
   useEffect(() => {
     const gotoGenerate = () => setActiveTab('generate')
     const gotoExtend = () => setActiveTab('extend')
     const gotoRefine = () => setActiveTab('refine')
     const gotoUpscale = () => setActiveTab('upscale')
     const gotoTileUpscale = () => setActiveTab('tile-upscale')
-    const gotoControlNet = () => setActiveTab('controlnet') // (правка 497)
+    const gotoControlNet = () => setActiveTab('controlnet') // (fix 497)
     const gotoFps = () => setActiveTab('fps')
     const gotoFaceRefine = () => setActiveTab('face-refine')
-    // (правка 442) «Открыть ассистента»: вкладки «Ассистент» больше нет —
-    // переключаемся на вкладку нужного режима (generate/extend) и разворачиваем
-    // правую панель. Стор модульный: панель примонтируется уже развёрнутой.
+    // (fix 442) "Open assistant": "Assistant" tab no longer exists —
+    // switch to the needed mode tab (generate/extend) and expand
+    // the right panel. The store is modular: panel mounts already expanded.
     const openAssistantPanel = (e: Event) => {
       const mode = (e as CustomEvent<{ mode?: 'generate' | 'extend' | 'controlnet' }>).detail?.mode
-      // (правка 502) 'controlnet' → вкладка «ControlNet».
+      // (fix 502) 'controlnet' → "ControlNet" tab.
       setActiveTab(mode === 'extend' ? 'extend' : mode === 'controlnet' ? 'controlnet' : 'generate')
       useAssistantPanel.getState().setCollapsed(false)
     }
@@ -103,7 +103,7 @@ export default function Home() {
     window.addEventListener('h3:goto-refine', gotoRefine)
     window.addEventListener('h3:goto-upscale', gotoUpscale)
     window.addEventListener('h3:goto-tile-upscale', gotoTileUpscale)
-    window.addEventListener('h3:goto-controlnet', gotoControlNet) // (правка 497)
+    window.addEventListener('h3:goto-controlnet', gotoControlNet) // (fix 497)
     window.addEventListener('h3:goto-fps', gotoFps)
     window.addEventListener('h3:goto-face-refine', gotoFaceRefine)
     window.addEventListener('h3:open-assistant-panel', openAssistantPanel)
@@ -113,30 +113,30 @@ export default function Home() {
       window.removeEventListener('h3:goto-refine', gotoRefine)
       window.removeEventListener('h3:goto-upscale', gotoUpscale)
       window.removeEventListener('h3:goto-tile-upscale', gotoTileUpscale)
-      window.removeEventListener('h3:goto-controlnet', gotoControlNet) // (правка 497)
+      window.removeEventListener('h3:goto-controlnet', gotoControlNet) // (fix 497)
       window.removeEventListener('h3:goto-fps', gotoFps)
       window.removeEventListener('h3:goto-face-refine', gotoFaceRefine)
       window.removeEventListener('h3:open-assistant-panel', openAssistantPanel)
     }
   }, [])
 
-  // (правка 73) Синхронизация чатов ассистента с файлом проекта
-  // (data/assistant-chats.json) — переносимое хранилище.
+  // (fix 73) Synchronize assistant chats with project file
+  // (data/assistant-chats.json) — portable storage.
   useEffect(() => {
     initAssistantChatsSync()
   }, [])
 
-  // (правка 718) Сверка активных генераций при старте приложения.
-  // ComfyUI поднимается ~30-60 с, поэтому сверка сама ждёт его ответа
-  // (до 5 минут) и снимает «зависшее» состояние из localStorage. Пока
-  // ComfyUI не отвечает, состояние НЕ трогаем — мы не знаем, что идёт.
+  // (fix 718) Reconcile active generations upon application startup.
+  // ComfyUI takes ~30-60s to start up, so reconciliation waits for its response
+  // (up to 5 minutes) and clears "stuck" state from localStorage. While
+  // ComfyUI does not respond, state is UNTOUCHED — we don't know what is running.
   useEffect(() => {
-    // Сначала убираем «потерянные» элементы очереди (их payload не пережил
-    // reload), затем восстанавливаем ход у реально живой задачи ComfyUI.
+    // First remove "lost" queue elements (their payload didn't survive
+    // reload), then restore progress for a truly live ComfyUI task.
     cleanupLostPendingQueueItems()
-    // Refine после reload не имеет живого раннера; без этого его prompt_id
-    // никто не финализирует (глобальный поллер намеренно не делает stitch),
-    // и шлюз держал бы ход до watchdog.
+    // Refine after reload lacks a live runner; without this its prompt_id
+    // would never be finalized (global poller intentionally avoids stitching),
+    // and the gateway would hold the turn until watchdog timeout.
     sweepOrphanRefineItems()
     initComfyTurn()
     void reconcileGenerationOnStartup()
@@ -174,15 +174,15 @@ export default function Home() {
         </AnimatePresence>
         </div>
 
-        {/* Queue indicator — bottom-right floating; (правка 442) сдвигается
-            левее панели ассистента на вкладках «Генерация»/«Продление» */}
+        {/* Queue indicator — bottom-right floating; (fix 442) shifted
+            to the left of the assistant panel on "Generate"/"Extend" tabs */}
         <QueueIndicator activeTab={activeTab} />
       </main>
 
       {/* Settings dialog (connection, GPU memory) — opened from the sidebar */}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
-      {/* (правка 112) Приветствие при первом запуске — поверх всего */}
+      {/* (fix 112) Welcome on first launch — on top of everything */}
       <AnimatePresence>
         {welcomeOpen && (
           <WelcomeDialog

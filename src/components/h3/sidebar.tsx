@@ -10,7 +10,7 @@ import {
   GaugeIcon,
   Grid3x3Icon,
   SettingsIcon,
-  TerminalIcon, // (правка 567) кнопка «Консоль»
+  TerminalIcon, // (fix 567) "Console" button
   ChevronLeftIcon,
   ChevronRightIcon,
   SparklesIcon,
@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SystemStatsBar } from '@/components/h3/system-stats-bar'
-import { ConsoleDialog } from '@/components/h3/console-dialog' // (правка 567)
+import { ConsoleDialog } from '@/components/h3/console-dialog' // (fix 567)
 import {
   Tooltip,
   TooltipContent,
@@ -28,8 +28,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-// (правка 442) Вкладки «Ассистент» больше нет: ассистент — правая панель
-// на вкладках «Генерация» и «Продление».
+// (fix 442) "Assistant" tab is gone: assistant is the right-hand panel
+// on "Generate" and "Extend" tabs.
 export type TabType = 'generate' | 'extend' | 'refine' | 'upscale' | 'tile-upscale' | 'controlnet' | 'fps' | 'face-refine' | 'gallery' | 'learn'
 
 interface SidebarProps {
@@ -40,16 +40,16 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { id: 'generate' as TabType, label: 'Генерация', icon: ClapperboardIcon, color: '#06B6D4' },
-  { id: 'extend' as TabType, label: 'Продление', icon: FilmIcon, color: '#06B6D4' },
+  { id: 'generate' as TabType, label: 'Generate', icon: ClapperboardIcon, color: '#06B6D4' },
+  { id: 'extend' as TabType, label: 'Extend', icon: FilmIcon, color: '#06B6D4' },
   { id: 'refine' as TabType, label: 'Refine', icon: Wand2Icon, color: '#10B981' },
   { id: 'controlnet' as TabType, label: 'ControlNet', icon: WaypointsIcon, color: '#FB923C' },
   { id: 'tile-upscale' as TabType, label: 'Tile Upscale', icon: Grid3x3Icon, color: '#EC4899' },
   { id: 'fps' as TabType, label: 'FPS', icon: GaugeIcon, color: '#22D3EE' },
   { id: 'face-refine' as TabType, label: 'Face Refine', icon: ScanFaceIcon, color: '#FACC15' },
   { id: 'upscale' as TabType, label: 'DLSS', icon: SparklesIcon, color: '#F472B6' },
-  { id: 'gallery' as TabType, label: 'Галерея', icon: FolderOpenIcon, color: '#8B5CF6' },
-  { id: 'learn' as TabType, label: 'Обучение', icon: GraduationCapIcon, color: '#10B981' },
+  { id: 'gallery' as TabType, label: 'Gallery', icon: FolderOpenIcon, color: '#8B5CF6' },
+  { id: 'learn' as TabType, label: 'Learn', icon: GraduationCapIcon, color: '#10B981' },
 ]
 
 /* ────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ const navItems = [
 
 function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
   const [state, setState] = useState<'checking' | 'up' | 'down'>('checking')
-  /** (правка 54) счётчик СОБСТВЕННЫХ сбоев — для grace-периода. */
+  /** (fix 54) OWN failure counter — for grace period. */
   const failCount = useRef(0)
 
   useEffect(() => {
@@ -67,9 +67,9 @@ function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
     const check = async () => {
       let ok = false
       try {
-        // (правка 54) 10 s вместо 4 s: во время генерации event-loop ComfyUI
-        // занят долгими GPU-шагами и может отвечать медленно — раньше это
-        // давало ложный «ComfyUI недоступен» посреди работающей генерации.
+        // (fix 54) 10s instead of 4s: during generation ComfyUI event loop
+        // is busy with long GPU steps and may respond slowly — previously
+        // this triggered a false "ComfyUI unreachable" during running generation.
         const res = await fetch('/api/comfy/health', { signal: AbortSignal.timeout(10_000) })
         ok = res.ok
       } catch {
@@ -81,8 +81,8 @@ function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
         setState('up')
       } else {
         failCount.current += 1
-        // (правка 54) Одно сбойное чтение (ComfyUI просто занят) не красит
-        // индикатор — «недоступен» только при 2+ сбоях подряд.
+        // (fix 54) A single failed reading (ComfyUI simply busy) does not mark
+        // indicator — "unreachable" only after 2+ consecutive failures.
         if (failCount.current >= 2) setState('down')
       }
     }
@@ -120,7 +120,7 @@ function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
           <div className="flex items-center justify-center py-1.5">{dot}</div>
         </TooltipTrigger>
         <TooltipContent side="right" className="bg-[var(--surface-3)] border-border text-foreground">
-          {state === 'up' ? 'ComfyUI подключен' : state === 'down' ? 'ComfyUI недоступен' : 'Проверка…'}
+          {state === 'up' ? 'ComfyUI connected' : state === 'down' ? 'ComfyUI unreachable' : 'Checking…'}
         </TooltipContent>
       </Tooltip>
     )
@@ -129,7 +129,7 @@ function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground">
       {dot}
-      <span>{state === 'up' ? 'ComfyUI подключен' : state === 'down' ? 'ComfyUI недоступен' : 'Проверка…'}</span>
+      <span>{state === 'up' ? 'ComfyUI connected' : state === 'down' ? 'ComfyUI unreachable' : 'Checking…'}</span>
     </div>
   )
 }
@@ -140,7 +140,7 @@ function ComfyHealthDot({ collapsed }: { collapsed: boolean }) {
 
 export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
-  // (правка 567) панель «Консоль» — весь вывод приложения внутри UI
+  // (fix 567) "Console" panel — full application output inside the UI
   const [consoleOpen, setConsoleOpen] = useState(false)
 
   return (
@@ -239,8 +239,8 @@ export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: Sideba
         {/* Bottom section */}
         <div className="px-2 py-2 border-t border-border space-y-0.5">
           <ComfyHealthDot collapsed={collapsed} />
-          {/* (правка 567) «Консоль» — между индикатором ComfyUI и настройками:
-              весь вывод реальной консоли внутри UI + копирование/сохранение. */}
+          {/* (fix 567) "Console" — between ComfyUI indicator and settings:
+              full output of real console inside UI + copy/save. */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -251,12 +251,12 @@ export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: Sideba
                 )}
               >
                 <TerminalIcon className="w-[18px] h-[18px] shrink-0" />
-                {!collapsed && <span className="text-sm font-medium">Консоль</span>}
+                {!collapsed && <span className="text-sm font-medium">Console</span>}
               </button>
             </TooltipTrigger>
             {collapsed && (
               <TooltipContent side="right" className="bg-[var(--surface-3)] border-border text-foreground">
-                Консоль
+                Console
               </TooltipContent>
             )}
           </Tooltip>
@@ -270,12 +270,12 @@ export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: Sideba
                 )}
               >
                 <SettingsIcon className="w-[18px] h-[18px] shrink-0" />
-                {!collapsed && <span className="text-sm font-medium">Настройки</span>}
+                {!collapsed && <span className="text-sm font-medium">Settings</span>}
               </button>
             </TooltipTrigger>
             {collapsed && (
               <TooltipContent side="right" className="bg-[var(--surface-3)] border-border text-foreground">
-                Настройки
+                Settings
               </TooltipContent>
             )}
           </Tooltip>
@@ -293,7 +293,7 @@ export function StudioSidebar({ activeTab, onTabChange, onOpenSettings }: Sideba
           )}
         </button>
 
-        {/* (правка 567) Панель «Консоль» */}
+        {/* (fix 567) "Console" panel */}
         <ConsoleDialog open={consoleOpen} onOpenChange={setConsoleOpen} />
       </motion.aside>
     </TooltipProvider>

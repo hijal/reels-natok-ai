@@ -1,11 +1,11 @@
 'use client'
 
 /**
- * LearnRecipes — подвкладка «Сценарии» в «Обучении» (правка 485).
+ * LearnRecipes — "Workflows" subtab under "Learn" (fix 485).
  *
- * Готовые сценарии работы со студией простым языком для новичков:
- * как комбинировать генерацию, рефайн и тайловый апскейл в зависимости
- * от железа и задачи. Без интерактива — просто карточки-инструкции.
+ * Ready-to-use workflows for the studio in clear language for beginners:
+ * how to combine generation, refine, and tile upscale depending
+ * on hardware and task. Static guide cards.
  */
 import {
   ZapIcon,
@@ -27,42 +27,42 @@ interface Recipe {
 const RECIPES: Recipe[] = [
   {
     icon: <ZapIcon className="w-4.5 h-4.5 text-white" />,
-    title: 'Сценарий 1. «Всё и сразу»',
-    subtitle: 'Один запуск — готовое видео в большом разрешении',
-    when: 'Если видеокарта мощная (много видеопамяти) и вы уверены в промпте. Самый быстрый путь, но если промпт неудачный — время потрачено зря.',
+    title: 'Workflow 1. "All at Once"',
+    subtitle: 'A single run — finished high-resolution video',
+    when: 'If you have a powerful GPU (lots of VRAM) and feel confident in your prompt. The fastest path, but if the prompt misses the mark, generation time is wasted.',
     steps: [
-      'Откройте вкладку «Генерация».',
-      'Напишите промпт (или попросите ассистента справа).',
-      'Выберите большое разрешение (например, 1080p) и нужную длину.',
-      'Запустите и дождитесь результата — он появится в «Галерее».',
+      'Open the "Generate" tab.',
+      'Write your prompt (or ask the assistant on the right).',
+      'Select a high resolution (e.g., 1080p) and the desired length.',
+      'Launch and wait for the result — it will appear in the "Gallery".',
     ],
-    note: 'Не угадали с результатом? Ничего страшного — попробуйте сценарий 3: сначала драфты, потом улучшение лучшего. Хотите подкрутить баланс «качество ↔ время»? В «Дополнительные параметры» → Pass 1 есть «Шаги сэмплера» и «Всего шагов (pass 1)», а под ними — живая сводка, сколько шагов уходит на черновик.',
+    note: 'Did not get the expected result? No worries — try Workflow 3: drafts first, then enhance the best one. Want to tune the "quality vs. speed" balance? In "Advanced Parameters" → Pass 1 check "Sampler Steps" and "Total Steps (pass 1)", with a live summary below showing how many steps go into the draft.',
   },
   {
     icon: <LayersIcon className="w-4.5 h-4.5 text-white" />,
-    title: 'Сценарий 2. «По ступенькам вверх»',
-    subtitle: 'Маленькое разрешение → Refine частями → Tile Upscale',
-    when: 'Если железо среднее, а разрешение хочется большое. Каждый шаг добавляет чёткости понемногу, не перегружая видеокарту.',
+    title: 'Workflow 2. "Step-by-Step Enhancement"',
+    subtitle: 'Low resolution → Refine in parts → Tile Upscale',
+    when: 'If you have mid-range hardware and want high resolution. Each step progressively adds clarity without overloading the GPU.',
     steps: [
-      'Сгенерируйте длинное видео в небольшом разрешении (например, 480p или 720p) — так быстрее и легче для видеокарты.',
-      'В «Галерее» нажмите на видео кнопку «Refine», выберите режим «Частями» и разрешение побольше (например, 1080p). Видео обработается кусками и склеится само.',
-      'Нужно ещё больше? Нажмите «Tile Upscale» на результате рефайна — он аккуратно поднимет картинку до 1440p или 4K.',
+      'Generate a video in a lower resolution (e.g., 480p or 720p) — faster and easier on the GPU.',
+      'In the "Gallery", click "Refine" on the video, select "Chunked" mode and a higher resolution (e.g., 1080p). The video will process in chunks and auto-stitch.',
+      'Need even more detail? Click "Tile Upscale" on the refined result — it will cleanly upscale the video up to 1440p or 4K.',
     ],
-    note: 'Refine улучшает детали и «рисует» недостающую чёткость. Tile Upscale бережно увеличивает готовое видео кусочками-тайлами.',
+    note: 'Refine synthesizes details and enhances clarity. Tile Upscale gently upscales the finished video tile by tile.',
   },
   {
     icon: <SearchIcon className="w-4.5 h-4.5 text-white" />,
-    title: 'Сценарий 3. «Сначала драфты»',
-    subtitle: 'Много быстрых черновиков → выбрать лучший → улучшить',
-    when: 'Если вы ищете идею и не хотите тратить часы на неудачные варианты. Драфт — это быстрый черновик пониженного качества.',
+    title: 'Workflow 3. "Drafts First"',
+    subtitle: 'Generate fast drafts → pick the best → enhance',
+    when: 'If you are exploring ideas and do not want to spend hours on unwanted iterations. A draft is a fast, lower-quality preview.',
     steps: [
-      'На вкладке «Генерация» включите пайплайн «Драфт» (быстрый режим).',
-      'Сделайте несколько генераций с разными промптами или сидами — каждая займёт заметно меньше времени, чем полная.',
-      'В «Галерее» посмотрите варианты и выберите лучший.',
-      'Лучший драфт отправьте в «Refine» — он станет полноценным качественным видео.',
-      'При желании добавьте «Tile Upscale» для ещё большего разрешения.',
+      'On the "Generate" tab, enable the "Draft" pipeline (fast mode).',
+      'Run several generations with different prompts or seeds — each takes significantly less time than a full render.',
+      'In the "Gallery", review the options and select the best one.',
+      'Send the best draft to "Refine" — it will become a full-quality video.',
+      'Optionally apply "Tile Upscale" for even higher resolution.',
     ],
-    note: 'Это самый экономный сценарий по времени: быстрые пробы вместо долгих генераций «вслепую».',
+    note: 'This is the most time-efficient workflow: fast experimentation instead of lengthy blind generation runs.',
   },
 ]
 
@@ -70,9 +70,9 @@ export function LearnRecipes() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Три проверенных способа работы со студией. Выберите под своё железо и задачу —
-        а можно и миксовать: любой ролик из «Галереи» в любой момент можно отправить
-        в Refine, Tile Upscale, FPS или Продление в любом порядке.
+        Three proven studio workflows. Pick one for your hardware and goals —
+        or combine them: any clip from the "Gallery" can be sent at any time
+        to Refine, Tile Upscale, FPS, or Extend in any sequence.
       </p>
 
       {RECIPES.map((r) => (
@@ -91,7 +91,7 @@ export function LearnRecipes() {
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground/90">Когда использовать: </span>
+            <span className="font-medium text-foreground/90">When to use: </span>
             {r.when}
           </p>
 
@@ -117,9 +117,9 @@ export function LearnRecipes() {
       <div className="flex gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
         <CheckCircle2Icon className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
         <p className="text-xs text-emerald-200/80 leading-relaxed">
-          <span className="font-medium text-emerald-300">Главное правило: </span>
-          ничего сломать нельзя. Каждый результат сохраняется в «Галерею», исходники
-          не затираются — экспериментируйте спокойно и комбинируйте шаги как удобно.
+          <span className="font-medium text-emerald-300">Golden rule: </span>
+          you cannot break anything. Every result is saved to the "Gallery", source files
+          are never overwritten — experiment freely and combine steps however works best for you.
         </p>
       </div>
     </div>

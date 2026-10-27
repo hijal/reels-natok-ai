@@ -26,30 +26,30 @@ export function useVideoGallery(opts?: {
   phase?: string
 }) {
   const [files, setFiles] = useState<VideoGalleryFile[]>([])
-  /** (правка 91) Папки проектов (подпапки output; общая '' не входит). */
+  /** (fix 91) Project folders (subfolders of output; default '' is not included). */
   const [folders, setFolders] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
-  // Монотонный id загрузки: применяем состояние только самого свежего
-  // запроса — иначе параллельные load() (опрос + ручное обновление) могут
-  // завершиться в обратном порядке и устаревший список перетрёт свежий.
+  // Monotonic load id: only apply state from the latest request —
+  // otherwise parallel load() calls (polling + manual refresh) could
+  // resolve out of order and an older list would overwrite the newer one.
   const loadSeq = useRef(0)
-  // (правка 309) Fast-track: окно «горячих» файлов. Пока Date.now() <
-  // hotUntilRef, обычный load() тоже шлёт include_hot=1 — иначе список без
-  // hot-файлов (HOT_SKIP на сервере) выкинул бы только что показанное видео
-  // из галереи на 4 секунды (мерцание).
+  // (fix 309) Fast-track: "hot" files window. While Date.now() <
+  // hotUntilRef, regular load() also sends include_hot=1 — otherwise
+  // list without hot files (HOT_SKIP on server) would drop the newly shown video
+  // from the gallery for 4 seconds (flicker).
   const hotUntilRef = useRef(0)
-  // Известные ключи файлов (subfolder/filename) — fast-track ищет НОВЫЕ.
+  // Known file keys (subfolder/filename) — fast-track looks for NEW ones.
   const knownKeysRef = useRef<Set<string>>(new Set())
-  // Guard против параллельных fast-track-циклов + cleanup при размонтировании.
+  // Guard against parallel fast-track cycles + cleanup on unmount.
   const fastTrackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fastTrackGenRef = useRef(0)
   // Prefer an explicitly passed phase; otherwise read the global store so
   // GalleryView (and any consumer) auto-refreshes without wiring a prop.
   const storePhase = useGenProgress((s) => s.video.phase)
   const phase = opts?.phase ?? storePhase
-  // (правка 134) Сигнал внешнего обновления — заводской сброс / удаление
-  // контента. При bump() галерея сразу перечитывает список файлов, не
-  // дожидаясь переключения вкладок.
+  // (fix 134) External refresh signal — factory reset / content deletion.
+  // On bump(), gallery immediately re-reads file list without waiting
+  // for tab switch.
   const refreshVersion = useGalleryRefresh((s) => s.version)
 
   /**
@@ -57,8 +57,8 @@ export function useVideoGallery(opts?: {
    * @param background When true, skip the visible "loading" state so the grid
    *   keeps showing the current files (no skeleton flicker) — used for the
    *   periodic/refresh loads, not the very first load.
-   * @param hot (правка 309) Явно запросить include_hot=1 у сервера. Также
-   *   включается автоматически, пока активно hot-окно (hotUntilRef).
+   * @param hot (fix 309) Explicitly request include_hot=1 from the server. Also
+   *   enabled automatically while hot window is active (hotUntilRef).
    */
   const load = useCallback(async (background = false, hot = false) => {
     const seq = ++loadSeq.current
@@ -66,7 +66,7 @@ export function useVideoGallery(opts?: {
     try {
       const wantHot = hot || Date.now() < hotUntilRef.current
       const res = await fetch('/api/comfy/files?type=all' + (wantHot ? '&include_hot=1' : '') + '&_t=' + Date.now(), { cache: 'no-store' })
-      if (seq !== loadSeq.current) return // уже есть более свежая загрузка
+      if (seq !== loadSeq.current) return // newer load already exists
       if (!res.ok) {
         console.warn('[Gallery] Failed to load files:', res.status)
         return
@@ -74,9 +74,9 @@ export function useVideoGallery(opts?: {
       const data = await res.json()
       if (seq !== loadSeq.current) return
       setFolders(Array.isArray(data.folders) ? data.folders : [])
-      // (правка 308) Промежуточные клипы продления (extclip_*) и куски
-      // рефайна (refinepart_*) не показываем в галерее — только итоговый
-      // склеенный файл. Они временные файлы, после сшивки не нужны.
+      // (fix 308) Intermediate extend clips (extclip_*) and refine parts
+      // (refinepart_*) are not shown in gallery — only final stitched
+      // video. They are temporary files, not needed after stitching.
       const videoFiles = (data.files ?? []).filter(
         (f: { type?: string; name?: string; filename?: string }) =>
           (f.type?.startsWith('video') || f.name?.match(/\.(mp4|webm|mov)$/i)) &&
@@ -90,7 +90,7 @@ export function useVideoGallery(opts?: {
           subfolder: f.subfolder || '',
           mtime: f.mtime,
           generationTime: typeof f.generationTime === 'number' ? f.generationTime : null,
-          // (правка 310) pipeline из .meta.json — красный бейдж «Draft».
+          // (fix 310) pipeline from .meta.json — "Draft" badge.
           pipeline: f.pipeline === 'draft' || f.pipeline === 'full' ? f.pipeline : null,
         }),
       )
@@ -99,25 +99,25 @@ export function useVideoGallery(opts?: {
         if (
           prev.length === next.length &&
           prev.every((p, i) => p.filename === next[i].filename && p.subfolder === next[i].subfolder && p.mtime === next[i].mtime && p.pipeline === next[i].pipeline &&
-            // (правка 348) generationTime участвует в сравнении: сайдкар
-            // пишется ПОСЛЕ появления файла, и без этого бейдж времени
-            // генерации не появлялся до смены списка по другой причине.
+            // (fix 348) generationTime participates in comparison: sidecar
+            // is written AFTER file appearance, and without this the generation
+            // time badge did not appear until list changed for another reason.
             p.generationTime === next[i].generationTime)
         ) {
           return prev
         }
         return next
       })
-      // (правка 309) Обновляем известные ключи при каждом применённом списке.
+      // (fix 309) Update known keys on every applied list.
       knownKeysRef.current = new Set(next.map((f) => `${f.subfolder}/${f.filename}`))
     } catch (err) {
       console.error('[Gallery] Error loading files:', err)
     } finally {
-      // (фикс M5) loading снимает ПОСЛЕДНИЙ живой запрос — независимо от
-      // background. Раньше фоновая загрузка (watcher активной генерации)
-      // обгоняла стартовую: стартовая отбрасывалась по seq (не трогала
-      // loading), фоновая — background и не должна была → skeleton висел
-      // ВЕЧНО («не отображаются видео» после запуска с активной генерацией).
+      // (fix M5) loading clears on the LAST live request — regardless of
+      // background. Previously background load (active generation watcher)
+      // outran initial: initial was dropped by seq (didn't touch
+      // loading), background was background and shouldn't → skeleton stayed
+      // FOREVER ("videos not displaying" after launch with active generation).
       if (seq === loadSeq.current) setLoading(false)
     }
   }, [])
@@ -126,13 +126,12 @@ export function useVideoGallery(opts?: {
     load()
   }, [load])
 
-  // (правка 309) Fast-track: после завершения генерации опрашиваем список с
-  // include_hot=1 каждые ~700 мс (потолок ~15 с). Новый файл показываем, как
-  // только его размер перестал меняться между двумя опросами — значит VHS/
-  // FFmpeg закончил муксинг и файл безопасно отдавать браузеру (URL с _t=mtime
-  // уже финальный). Сам список fast-track НЕ применяет — только вызывает
-  // load(true), чтобы не обходить защиту loadSeq. Staggered-таймеры ниже
-  // остаются страховкой.
+  // (fix 309) Fast-track: after generation completes, poll list with
+  // include_hot=1 every ~700ms (~15s cap). Show new file as soon as its
+  // size stops changing between two polls — meaning VHS/FFmpeg finished
+  // muxing and file is safe to serve to browser (URL with _t=mtime is final).
+  // fast-track itself does NOT apply the list — only calls load(true) to avoid
+  // bypassing loadSeq protection. Staggered timers below remain as safeguard.
   const fastTrack = useCallback(() => {
     const gen = ++fastTrackGenRef.current
     if (fastTrackTimerRef.current) clearTimeout(fastTrackTimerRef.current)
@@ -140,7 +139,7 @@ export function useVideoGallery(opts?: {
     const pendingSizes = new Map<string, number>()
     const tick = async () => {
       if (gen !== fastTrackGenRef.current) return
-      if (Date.now() - startedAt > 15000) return // жёсткий потолок
+      if (Date.now() - startedAt > 15000) return // hard cap
       try {
         const res = await fetch('/api/comfy/files?type=all&include_hot=1&_t=' + Date.now(), { cache: 'no-store' })
         if (!res.ok) throw new Error(String(res.status))
@@ -156,8 +155,8 @@ export function useVideoGallery(opts?: {
           const key = `${f.subfolder || ''}/${f.filename || f.name || ''}`
           if (!knownKeysRef.current.has(key)) newOnes.push({ key, size: typeof f.size === 'number' ? f.size : 0 })
         }
-        // Новых файлов нет — файл мог ещё не создаться, продолжаем опрос.
-        // Все новые уже видны дважды и размер не изменился → муксинг завершён.
+        // No new files — file might not be created yet, keep polling.
+        // All new ones already seen twice and size unchanged -> muxing complete.
         const stable = newOnes.length > 0 && newOnes.every((f) => pendingSizes.get(f.key) === f.size)
         for (const f of newOnes) pendingSizes.set(f.key, f.size)
         if (stable) {
@@ -166,7 +165,7 @@ export function useVideoGallery(opts?: {
           void load(true)
           return
         }
-      } catch { /* transient — следующий тик */ }
+      } catch { /* transient — next tick */ }
       fastTrackTimerRef.current = setTimeout(() => void tick(), 700)
     }
     fastTrackTimerRef.current = setTimeout(() => void tick(), 700)
@@ -183,23 +182,23 @@ export function useVideoGallery(opts?: {
   // a few staggered silent reloads guarantee the newest video shows up.
   useEffect(() => {
     if (phase === 'done') {
-      // 20s — запас на авто-конкатенацию (extend-режим: FFmpeg xfade)
+      // 20s — margin for auto-concatenation (extend mode: FFmpeg xfade)
       const timers = [1000, 3000, 6000, 12000, 20000].map((delay) => setTimeout(() => load(true), delay))
-      fastTrack() // (правка 309) быстрый показ, как только муксинг завершён
+      fastTrack() // (fix 309) fast display as soon as muxing finishes
       return () => timers.forEach(clearTimeout)
     }
   }, [phase, load, fastTrack])
 
-  // (правка 134/259) Внешний сигнал обновления (заводской сброс / удаление
-  // контента / ЗАВЕРШЕНИЕ джоба любой вкладкой — генерация, склейка extend,
-  // рефайн, апскейл): перечитываем список файлов в фоне серией отложенных
-  // загрузок — свежий файл мог ещё не закрыться (VHS-муксинг/ffmpeg), а
-  // files-роут пропускает «горячие» файлы младше 4 секунд.
+  // (fix 134/259) External refresh signal (factory reset / content deletion /
+  // job COMPLETION by any tab — generation, extend stitch, refine, upscale):
+  // re-read file list in background with staggered loads — fresh file might
+  // not be closed yet (VHS muxing/ffmpeg), and files route skips "hot" files
+  // younger than 4 seconds.
   useEffect(() => {
     if (refreshVersion === 0) return
     const delays = [300, 1500, 4000, 8000]
     const timers = delays.map((d) => setTimeout(() => void load(true), d))
-    fastTrack() // (правка 309) bump приходит и от extend-склейки/рефайна/апскейла
+    fastTrack() // (fix 309) bump also arrives from extend stitch / refine / upscale
     return () => timers.forEach(clearTimeout)
   }, [refreshVersion, load, fastTrack])
 
@@ -211,11 +210,11 @@ export function useVideoGallery(opts?: {
   const active = ACTIVE_PHASES.has(phase)
   useEffect(() => {
     if (!active) return
-    // (фикс M5) Счётчик подряд идущих 'unknown': карточка может следить за
-    // задачей, умершей вместе с перезапуском ComfyUI (persisted 'running'
-    // остался после перезагрузки страницы). Если за prompt_id не осталось
-    // активного элемента очереди — очередь его не подхватит, и карточка
-    // вечно крутила бы «Генерация…». ~8 тиков × 2.5с = 20с — честно роняем.
+    // (fix M5) Counter of consecutive 'unknown' responses: card might track
+    // a task that died with ComfyUI restart (persisted 'running' remained
+    // after page reload). If no active queue item remains for prompt_id —
+    // queue won't pick it up, and card would spin "Generating…" forever.
+    // ~8 ticks × 2.5s = 20s — honestly mark as failed.
     let unknownStreak = 0
     const tick = async () => {
       await load(true)
@@ -229,9 +228,9 @@ export function useVideoGallery(opts?: {
           useGenProgress.getState().setVideoPhase('done')
           useGenProgress.getState().setVideoProgress(100, 100)
         } else if (s.status === 'error') {
-          // ComfyUI отвечает «error» на ПРЕРВАННЫЙ промпт: если задача
-          // отменена осознанно (кнопка/очередь) — не показываем красную
-          // «Ошибку», оставляем чистое состояние отмены.
+          // ComfyUI returns "error" for CANCELLED prompt: if task
+          // was intentionally cancelled (button/queue) — don't show red
+          // "Error", keep clean cancelled state.
           const qItem = useGenQueue.getState().items.find((i) => i.promptId === promptId)
           if (qItem?.status === 'cancelled') return
           useGenProgress.getState().setVideoPhase('error')
@@ -241,21 +240,21 @@ export function useVideoGallery(opts?: {
           if (unknownStreak >= 8) {
             const qItem = useGenQueue.getState().items.find((i) => i.promptId === promptId)
             const qActive = qItem && ['submitting', 'queued', 'running'].includes(qItem.status)
-            // Элемент очереди активен → им занимается его собственный поллер
-            // (он честно покажет ошибку после своих 20 'unknown'). Действуем
-            // только когда карточка осталась одна, без элемента очереди.
+            // Queue item is active -> handled by its own poller
+            // (which will report error after its 20 'unknown's). Only act
+            // when card is left alone without a queue item.
             if (!qActive) {
-              const isNotFound = s.detail?.includes('не найдена') || s.detail?.includes('отклонена')
+              const isNotFound = s.detail?.includes('\u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430') || s.detail?.includes('\u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0430') || s.detail?.includes('not found') || s.detail?.includes('rejected')
               useGenProgress.getState().setVideoError(isNotFound
-                ? 'Задача не найдена в ComfyUI (сервер был перезапущен) — отслеживание остановлено'
-                : 'ComfyUI не отвечает — отслеживание остановлено')
+                ? 'Task not found in ComfyUI (server was restarted) — tracking stopped'
+                : 'ComfyUI not responding — tracking stopped')
               useGenProgress.getState().setVideoPhase('error')
             }
           }
         } else {
           unknownStreak = 0
         }
-        // 'running'/'queued' — генерация жива, просто ждём следующего тика
+        // 'running'/'queued' — generation alive, just wait for next tick
       } catch {
         // transient network blip — retry on the next tick
       }
@@ -273,17 +272,17 @@ export function useVideoGallery(opts?: {
         body: JSON.stringify({ filename, subfolder }),
       })
       if (res.ok) {
-        toast.success('Видео удалено')
-        // (правка 587) Дисквалифицируем загрузки, стартовавшие ДО удаления:
-        // их ответ ещё содержит удалённый файл, и без этого «воскресший»
-        // элемент оставался бы в сетке до следующего тика опроса.
+        toast.success('Video deleted')
+        // (fix 587) Disqualify loads started BEFORE deletion:
+        // their response still contains deleted file, and without this
+        // the "resurrected" item remained in grid until next poll tick.
         loadSeq.current += 1
         setFiles((prev) => prev.filter((f) => !(f.filename === filename && f.subfolder === subfolder)))
       } else {
-        toast.error('Не удалось удалить файл')
+        toast.error('Failed to delete file')
       }
     } catch {
-      toast.error('Ошибка удаления')
+      toast.error('Deletion error')
     }
   }, [])
 

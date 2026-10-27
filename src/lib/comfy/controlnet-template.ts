@@ -2,105 +2,105 @@ import { vhsEncodeInputs, type VideoFormatSettings } from '../video-format'
 import { buildMiniMaxH3Workflow, selectResolution, type MiniMaxH3Params } from './minimax-h3-template'
 
 /**
- * ControlNet вкладка — препроцессинг (depth/canny) + стандартный
- * References-воркфлоу (MiniMaxH3ReferenceToVideo).
+ * ControlNet tab — preprocessing (depth/canny) + standard
+ * References workflow (MiniMaxH3ReferenceToVideo).
  *
- * Архитектура:
- *   Режим генерации (один workflow):
+ * Architecture:
+ *   Generation mode (single workflow):
  *     cn_src (VHS_LoadVideo) → cn_pre (DepthAnythingV2 | Canny) →
  *     cn_prescale (ImageScale) → cn_preout (VHS_VideoCombine)
  *     → cn_fname (VHS_SelectFilename) → cn_refload (VHS_LoadVideoPath)
- *     → MiniMaxH3ReferenceToVideo (стандартная генерация)
+ *     → MiniMaxH3ReferenceToVideo (standard generation)
  *
- *   Режим «Карта» (preprocessOnly):
+ *   "Map" mode (preprocessOnly):
  *     cn_src → cn_pre → cn_prescale → cn_out (VHS_VideoCombine)
- *     — только сохраняет depth/canny-видео, без генерации.
+ *     — only saves depth/canny video, without generation.
  *
- * Стандартная генерация полностью идентична вкладке «Генерация → Референсы»:
- * те же модели (diffusion, CLIP, VAE, turbo LoRA, upscaler), те же сэмплеры,
- * тот же pipeline (draft/full), те же опции (sparse attention, Veda, LoRAs).
- * Контрольное видео подаётся как обычное видео-референс (ref_video_0)
- * через VHS_LoadVideoPath — как и пользовательские видео-рефы.
+ * Standard generation is completely identical to the "Generation → References" tab:
+ * same models (diffusion, CLIP, VAE, turbo LoRA, upscaler), same samplers,
+ * same pipeline (draft/full), same options (sparse attention, Veda, LoRAs).
+ * The control video is fed as a regular video reference (ref_video_0)
+ * via VHS_LoadVideoPath — just like user video refs.
  *
- * ВНИМАНИЕ: ComfyUI строит DAG — cn_refload зависит от cn_preout (через
- * VHS_FILENAMES), значит препроцессинг выполняется ПЕРЕД генерацией.
+ * NOTE: ComfyUI builds a DAG — cn_refload depends on cn_preout (via
+ * VHS_FILENAMES), which means preprocessing executes BEFORE generation.
  */
 
-export type ControlNetType = 'depth' | 'canny' | 'direct' | 'pose' // (правка 512) pose — DWPreprocessor
+export type ControlNetType = 'depth' | 'canny' | 'direct' | 'pose' // (fix 512) pose — DWPreprocessor
 
 export interface ControlNetGenParams {
-  /** Имя файла контрольного видео в ComfyUI input/. */
+  /** Filename of the control video in ComfyUI input/. */
   sourceVideo: string
-  /** Ширина контрольного видео (ffprobe). */
+  /** Control video width (ffprobe). */
   sourceWidth: number
-  /** Высота контрольного видео (ffprobe). */
+  /** Control video height (ffprobe). */
   sourceHeight: number
-  /** Кадров в контрольном видео (ffprobe). */
+  /** Number of frames in control video (ffprobe). */
   sourceFrames: number
-  /** Тип контроля: depth | canny | direct (прямой, без карт) | pose (правка 512). */
+  /** Control type: depth | canny | direct (direct, without maps) | pose (fix 512). */
   controlType: ControlNetType
-  /** Длительность генерации в секундах. */
+  /** Generation duration in seconds. */
   duration?: number
-  /** Короткая сторона генерации, px. */
+  /** Target short side of generation, px. */
   targetShortSide?: number
-  /** Промпт. */
+  /** Prompt. */
   prompt?: string
   /** Seed (-1 = random). */
   seed?: number
-  /** Картинки-референсы (имена файлов в input/). */
+  /** Image references (filenames in input/). */
   refImages?: string[]
-  /** Рефы: режим размера (match | max). */
+  /** Refs: size mode (match | max). */
   refImageSize?: 'match' | 'max'
-  /** Пайплайн: draft | full. */
+  /** Pipeline: draft | full. */
   pipeline?: 'draft' | 'full'
-  /** Low-res MP (для full pipeline, Pass 1). */
+  /** Low-res MP (for full pipeline, Pass 1). */
   lowResMP?: number
-  /** Pass 1 эффективные шаги (SplitSigmas split point, default 6, max 30). */
+  /** Pass 1 effective steps (SplitSigmas split point, default 6, max 30). */
   firstSamplerSteps?: number
   /**
-   * Всего шагов в расписании BasicScheduler для pass 1.
-   * undefined = firstSamplerSteps — «6 из 6» по умолчанию.
+   * Total steps in BasicScheduler schedule for pass 1.
+   * undefined = firstSamplerSteps — "6 of 6" by default.
    */
   firstSamplerTotalSteps?: number
   /** Custom LoRAs. */
   customLoras?: Array<{ name: string; strength: number }>
   /** Diffusion model. */
   diffusionModel?: string
-  /** Подпапка вывода. */
+  /** Output subfolder. */
   outputSubfolder?: string
   /**
-   * (правка 716) Уникальный префикс временной карты референса (cn_preout).
-   * Раньше префикс был фиксированным («Minimax_Studio_cnref» + счётчик
-   * ComfyUI), и cleanup удалял ВСЕ такие карты — в том числе карты другой,
-   * параллельно идущей ControlNet-задачи (контрольные карты параллельных
-   * задач разрешены), из-за чего та падала внутри VHS_LoadVideoPath.
+   * (fix 716) Unique prefix for temporary reference map (cn_preout).
+   * Previously the prefix was fixed ("Minimax_Studio_cnref" + ComfyUI counter),
+   * and cleanup removed ALL such maps — including maps of another concurrently
+   * running ControlNet task (control maps of concurrent tasks are allowed),
+   * which caused that task to fail inside VHS_LoadVideoPath.
    */
   cnRefPrefix?: string
-  /** Формат видео. */
+  /** Video format. */
   videoFormat?: VideoFormatSettings
-  /** Спарсити-внимание. */
+  /** Sparse attention. */
   sparseAttention?: boolean
-  /** (правка 466) Sol-Attn: порог разреженности. */
+  /** (fix 466) Sol-Attn: sparsity threshold. */
   sparseTau?: number
-  /** (правка 466) Sol-Attn: start_percent. */
+  /** (fix 466) Sol-Attn: start_percent. */
   sparseStartPercent?: number
-  /** (правка 466) Sol-Attn: end_percent. */
+  /** (fix 466) Sol-Attn: end_percent. */
   sparseEndPercent?: number
-  /** (правка 466) Sol-Attn: min_tokens. */
+  /** (fix 466) Sol-Attn: min_tokens. */
   sparseMinTokens?: number
-  /** (правка 466) Sol-Attn: extra_tokens. */
+  /** (fix 466) Sol-Attn: extra_tokens. */
   sparseExtraTokens?: number
   /** Veda attention. */
   vedaAttention?: boolean
-  /** (правка 399) Veda: спарсити генерации, 'N%'. */
+  /** (fix 399) Veda: generation sparsity, 'N%'. */
   vedaGeneratedSparsity?: string
-  /** (правка 399) Veda: спарсити референсов, 'N%'. */
+  /** (fix 399) Veda: reference sparsity, 'N%'. */
   vedaReferenceSparsity?: string
-  /** (правка 399) Veda: 0-based блоки DiT с полным вниманием. */
+  /** (fix 399) Veda: 0-based DiT blocks with full attention. */
   vedaFullAttentionLayers?: string
-  /** (правка 399) Veda: 0-based шаги сэмплера с полным вниманием. */
+  /** (fix 399) Veda: 0-based sampler steps with full attention. */
   vedaFullAttentionSteps?: string
-  /** (правка 399) Veda: подробный лог. */
+  /** (fix 399) Veda: verbose log. */
   vedaVerbose?: boolean
   /** Low VRAM attention. */
   lowVramAttention?: boolean
@@ -120,20 +120,20 @@ export interface ControlNetGenParams {
   pass2Sampler?: string
   /** Draft steps. */
   draftSteps?: number
-  /** @deprecated Турбо-лора идёт через customLoras; шаблон это поле не читает. */
+  /** @deprecated Turbo LoRA goes through customLoras; template does not read this field. */
   turboLoraStrength?: number
-  /** @deprecated Турбо-лора идёт через customLoras; шаблон это поле не читает. */
+  /** @deprecated Turbo LoRA goes through customLoras; template does not read this field. */
   turboLoraEnabled?: boolean
 }
 
-/** Снап к кратному 32. */
+/** Snap to multiple of 32. */
 function snap32(n: number): number {
   return Math.max(32, Math.round(n / 32) * 32)
 }
 
 /**
- * Размеры генерации: короткая сторона = targetShortSide, длинная — по
- * пропорции контрольного видео; обе оси снапятся к 32.
+ * Generation dimensions: short side = targetShortSide, long side — according to
+ * control video aspect ratio; both axes snap to 32.
  */
 export function controlNetSize(
   sourceWidth: number,
@@ -149,8 +149,8 @@ export function controlNetSize(
 }
 
 /**
- * Фактическое число кадров генерации: сетка 17n+5 от длительности,
- * кламп вниз к кадрам контрольного видео.
+ * Actual number of generation frames: 17n+5 grid from duration,
+ * clamped down to control video frame count.
  */
 export function controlNetFrames(duration: number, sourceFrames: number): number {
   const want = Math.max(5, Math.round(duration * 24))
@@ -160,7 +160,7 @@ export function controlNetFrames(duration: number, sourceFrames: number): number
 }
 
 /**
- * Режим «Карта»: только препроцессинг → сохранить depth/canny-видео.
+ * "Map" mode: preprocessing only → save depth/canny video.
  */
 export function buildControlNetPreprocessWorkflow(p: {
   sourceVideo: string
@@ -176,7 +176,7 @@ export function buildControlNetPreprocessWorkflow(p: {
   const vhsEnc = vhsEncodeInputs(p.videoFormat)
   const frames = Math.max(1, Math.min(Math.round((p.duration ?? 5) * 24), p.sourceFrames))
   const { width, height } = controlNetSize(p.sourceWidth, p.sourceHeight, p.targetShortSide ?? 720)
-  const controlType = p.controlType === 'canny' ? 'canny' : (p.controlType === 'pose' ? 'pose' : 'depth') // (правка 512)
+  const controlType = p.controlType === 'canny' ? 'canny' : (p.controlType === 'pose' ? 'pose' : 'depth') // (fix 512)
   const sub = p.outputSubfolder ? `${p.outputSubfolder}/` : ''
 
   return {
@@ -191,7 +191,7 @@ export function buildControlNetPreprocessWorkflow(p: {
         select_every_nth: 1,
       },
       class_type: 'VHS_LoadVideo',
-      _meta: { title: `Контрольное видео → ${width}×${height}, ${frames} кадров` },
+      _meta: { title: `Control video → ${width}×${height}, ${frames} frames` },
     },
     'cn_pre': controlType === 'canny'
       ? {
@@ -236,7 +236,7 @@ export function buildControlNetPreprocessWorkflow(p: {
         crop: 'disabled',
       },
       class_type: 'ImageScale',
-      _meta: { title: `Контроль → точный размер ${width}×${height}` },
+      _meta: { title: `Control → exact size ${width}×${height}` },
     },
     'cn_out': {
       inputs: {
@@ -250,44 +250,44 @@ export function buildControlNetPreprocessWorkflow(p: {
         images: ['cn_prescale', 0],
       },
       class_type: 'VHS_VideoCombine',
-      _meta: { title: `Video Combine (${controlType}-карта)` },
+      _meta: { title: `Video Combine (${controlType} map)` },
     },
   }
 }
 
 /**
- * Режим генерации: препроцессинг + стандартный References-воркфлоу.
+ * Generation mode: preprocessing + standard References workflow.
  *
- * Один ComfyUI workflow, две ветки по controlType:
+ * Single ComfyUI workflow, two branches by controlType:
  *
- *   direct (правка 511):
+ *   direct (fix 511):
  *     cn_src (VHS_LoadVideo) → ref_video_0
- *     — видео подаётся как обычный видео-референс, без карт.
+ *     — video is fed as a regular video reference, without maps.
  *
  *   depth | canny:
- *     1. cn_src → cn_pre → cn_prescale → cn_preout (сохраняет depth/canny mp4)
- *     2. cn_fname (VHS_SelectFilename) извлекает имя файла из cn_preout
- *     3. cn_refload (VHS_LoadVideoPath) загружает этот mp4 как IMAGE frames
+ *     1. cn_src → cn_pre → cn_prescale → cn_preout (saves depth/canny mp4)
+ *     2. cn_fname (VHS_SelectFilename) extracts filename from cn_preout
+ *     3. cn_refload (VHS_LoadVideoPath) loads this mp4 as IMAGE frames
  *     4. ref_video_0 = cn_refload
  *
- * ВНИМАНИЕ: ComfyUI строит DAG — cn_refload зависит от cn_preout,
- * значит препроцессинг выполняется ПЕРЕД генерацией.
+ * NOTE: ComfyUI builds a DAG — cn_refload depends on cn_preout,
+ * which means preprocessing executes BEFORE generation.
  */
 export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, unknown> {
   const { width, height } = controlNetSize(p.sourceWidth, p.sourceHeight, p.targetShortSide ?? 720)
   const frames = controlNetFrames(p.duration ?? 5, p.sourceFrames)
-  const controlType: ControlNetType = p.controlType === 'canny' ? 'canny' : (p.controlType === 'direct' ? 'direct' : (p.controlType === 'pose' ? 'pose' : 'depth')) // (правка 512)
+  const controlType: ControlNetType = p.controlType === 'canny' ? 'canny' : (p.controlType === 'direct' ? 'direct' : (p.controlType === 'pose' ? 'pose' : 'depth')) // (fix 512)
   const sub = p.outputSubfolder ? `${p.outputSubfolder}/` : ''
   const vhsEnc = vhsEncodeInputs(p.videoFormat)
 
   const isDirect = controlType === 'direct'
 
-  // ─── Нода cn_src: VHS_LoadVideo — общая для обеих веток ───
-  // direct: видео идёт как реф напрямую (как на вкладке «Генерация»).
-  // depth/canny: исходник для препроцессинга.
-  // В direct custom_width/height = 0 (как у стандартных видео-рефов: модель
-  // сама работает с исходным разрешением), frame_load_cap = 0 (все кадры).
-  // В depth/canny — точный размер + кламп кадров под генерацию.
+  // ─── cn_src node: VHS_LoadVideo — common to both branches ───
+  // direct: video goes as ref directly (like in "Generation" tab).
+  // depth/canny: source for preprocessing.
+  // In direct mode custom_width/height = 0 (like standard video refs: model
+  // itself works with native resolution), frame_load_cap = 0 (all frames).
+  // In depth/canny — exact size + frame clamping for generation.
   const cnSrcInputs = isDirect
     ? {
         video: p.sourceVideo,
@@ -314,18 +314,18 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
       class_type: 'VHS_LoadVideo',
       _meta: {
         title: isDirect
-          ? 'Контрольное видео (прямой)'
-          : `Контрольное видео → ${width}×${height}, ${frames} кадров`,
+          ? 'Control video (direct)'
+          : `Control video → ${width}×${height}, ${frames} frames`,
       },
     },
   }
 
-  // ─── depth/canny: цепочка препроцессинга + загрузка карты как видео ───
-  // direct: ничего — cn_src сразу подключается к ref_video_0.
+  // ─── depth/canny: preprocessing chain + loading map as video ───
+  // direct: nothing — cn_src connects directly to ref_video_0.
   let refVideo0Src: [string, number] = ['cn_src', 0]
 
   if (!isDirect) {
-    const mapType = controlType === 'canny' ? 'canny' : (controlType === 'pose' ? 'pose' : 'depth') // (правка 512)
+    const mapType = controlType === 'canny' ? 'canny' : (controlType === 'pose' ? 'pose' : 'depth') // (fix 512)
     extraNodes['cn_pre'] = mapType === 'canny'
       ? {
           inputs: {
@@ -335,7 +335,7 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
             resolution: 1024,
           },
           class_type: 'CannyEdgePreprocessor',
-          _meta: { title: 'Canny Edge (контроль)' },
+          _meta: { title: 'Canny Edge (control)' },
         }
       : mapType === 'pose'
         ? {
@@ -349,7 +349,7 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
               pose_estimator: 'dw-ll_ucoco_384.onnx',
             },
             class_type: 'DWPreprocessor',
-            _meta: { title: 'DWPose (контроль)' },
+            _meta: { title: 'DWPose (control)' },
           }
         : {
             inputs: {
@@ -358,7 +358,7 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
               resolution: 1024,
             },
             class_type: 'DepthAnythingV2Preprocessor',
-            _meta: { title: 'Depth Anything V2 (контроль)' },
+            _meta: { title: 'Depth Anything V2 (control)' },
           }
     extraNodes['cn_prescale'] = {
       inputs: {
@@ -369,14 +369,14 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
         crop: 'disabled',
       },
       class_type: 'ImageScale',
-      _meta: { title: `Контроль → точный размер ${width}×${height}` },
+      _meta: { title: `Control → exact size ${width}×${height}` },
     }
     extraNodes['cn_preout'] = {
       inputs: {
         frame_rate: 24,
         loop_count: 0,
-        // (правка 716) Префикс уникален для задачи — cleanup удаляет только
-        // карты ЭТОГО джоба, а не карты параллельных ControlNet-задач.
+        // (fix 716) Prefix is unique per task — cleanup removes only
+        // maps of THIS job, not maps of concurrent ControlNet tasks.
         filename_prefix: `${sub}${p.cnRefPrefix ?? 'Minimax_Studio_cnref'}`,
         ...vhsEnc,
         save_metadata: false,
@@ -385,18 +385,18 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
         images: ['cn_prescale', 0],
       },
       class_type: 'VHS_VideoCombine',
-      _meta: { title: `Сохранить ${mapType}-референс` },
+      _meta: { title: `Save ${mapType} reference` },
     }
-    // Извлекаем имя файла из VHS_FILENAMES вывода cn_preout
+    // Extract filename from VHS_FILENAMES output of cn_preout
     extraNodes['cn_fname'] = {
       inputs: {
         filenames: ['cn_preout', 0],
-        index: -1, // последний (самый полный) файл
+        index: -1, // last (most complete) file
       },
       class_type: 'VHS_SelectFilename',
-      _meta: { title: 'Имя depth/canny карты' },
+      _meta: { title: 'Depth/canny map filename' },
     }
-    // Загружаем карту как видео (как и пользовательские видео-рефы)
+    // Load map as video (just like user video refs)
     extraNodes['cn_refload'] = {
       inputs: {
         video: ['cn_fname', 0],
@@ -408,27 +408,27 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
         select_every_nth: 1,
       },
       class_type: 'VHS_LoadVideoPath',
-      _meta: { title: 'Загрузить depth/canny карту как видео-референс' },
+      _meta: { title: 'Load depth/canny map as video reference' },
     }
     refVideo0Src = ['cn_refload', 0]
   }
 
-  // ─── Стандартный References-воркфлоу ───
-  // (правка 523) Aspect ratio pass 1 — из целевого размера (width:height),
-  // а не захардкоженный '16:9'. Иначе для вертикального видео (9:16) pass 1
-  // генерился бы в горизонтальной канве (например 608×352), а апскейлер
-  // MinimaxH3LatentUpscaler3D в режиме 'target dimensions' растягивал бы этот
-  // горизонтальный latent в вертикальный 704×1280 → картинка сплющивалась
-  // (upscale x1.16 y3.64 — 3× искажение по вертикали).
+  // ─── Standard References workflow ───
+  // (fix 523) Aspect ratio pass 1 — from target dimensions (width:height),
+  // not hardcoded '16:9'. Otherwise for vertical video (9:16) pass 1
+  // would be generated on horizontal canvas (e.g. 608×352), and upscaler
+  // MinimaxH3LatentUpscaler3D in 'target dimensions' mode would stretch this
+  // horizontal latent into vertical 704×1280 → image gets squashed
+  // (upscale x1.16 y3.64 — 3× distortion vertically).
   //
-  // Подбираем lowResMP так, чтобы selectResolution(aspect, lowResMP) дал
-  // близко к targetDimensions (через бинарный поиск). Тогда lowRes ≈ final
-  // и апскейлер масштабирует ~1× (без искажения пропорций).
+  // We select lowResMP such that selectResolution(aspect, lowResMP) produces
+  // close to targetDimensions (via binary search). Then lowRes ≈ final
+  // and upscaler scales ~1× (without aspect ratio distortion).
   const aspectRatio = `${width}:${height}`
   const finalMP = (width * height) / (1024 * 1024)
-  // (правка 523) Бинарный поиск lowResMP, чтобы lowRes был как можно ближе к target
-  // (но не выше). selectResolution снапит к кратному 32, поэтому точное совпадение
-  // возможно не всегда — но апскейлер масштабирует ~1×, пропорции сохраняются.
+  // (fix 523) Binary search lowResMP so that lowRes is as close as possible to target
+  // (but not higher). selectResolution snaps to multiple of 32, so exact match
+  // may not always occur — but upscaler scales ~1×, aspect ratios are preserved.
   let lowResMP: number
   {
     let lo = 0.05, hi = finalMP
@@ -440,31 +440,31 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
         hi = mid
       } else {
         lo = mid
-        // Запоминаем лучший (максимальный lowRes ≤ target)
+        // Remember best (maximum lowRes <= target)
         best = { mp: mid, res }
       }
     }
     lowResMP = best.mp
   }
-  // (правка 523) lowRes кратный 32 (selectResolution уже даёт).
-  // Если lowRes == target — апскейлер early-return (оптимально).
-  // Если lowRes < target — апскейлер масштабирует ~1× (допустимо, без искажения).
+  // (fix 523) lowRes multiple of 32 (selectResolution already provides this).
+  // If lowRes == target — upscaler early-return (optimal).
+  // If lowRes < target — upscaler scales ~1× (acceptable, without distortion).
 
   const stdParams: MiniMaxH3Params = {
     prompt: (p.prompt ?? '').trim(),
     refImages: (p.refImages ?? []).filter(Boolean).slice(0, 9),
-    refVideos: [], // подменится ниже
+    refVideos: [], // replaced below
     mode: 'ref',
-    aspectRatio, // (правка 523) из target size, не '16:9'
+    aspectRatio, // (fix 523) from target size, not '16:9'
     duration: p.duration ?? 5,
     seed: p.seed ?? -1,
     pipeline: p.pipeline === 'full' ? 'full' : 'draft',
     targetDimensions: { width, height },
-    lowResMP, // (правка 523) подобранный под target
+    lowResMP, // (fix 523) tuned for target
     firstSamplerSteps: p.firstSamplerSteps,
-    // Всего шагов в расписании pass 1 (undefined = точка сплита, «6 из 6»).
+    // Total steps in pass 1 schedule (undefined = split point, "6 of 6").
     firstSamplerTotalSteps: p.firstSamplerTotalSteps,
-    refImageSize: p.refImageSize ?? 'max', // (правка 511) дефолт max
+    refImageSize: p.refImageSize ?? 'max', // (fix 511) default max
     outputSubfolder: p.outputSubfolder ?? '',
     videoFormat: p.videoFormat,
     customLoras: p.customLoras,
@@ -496,35 +496,35 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
 
   const stdWorkflow = buildMiniMaxH3Workflow(stdParams)
 
-  // Подключаем контрольное видео как ref_video_0.
-  // direct: cn_src (VHS_LoadVideo) — идентично стандартному паттерну
-  //   (вкладка «Генерация»): видео + аудио (output[2]).
-  // depth/canny: cn_refload (VHS_LoadVideoPath) — карта как видео, без аудио.
+  // Connect control video as ref_video_0.
+  // direct: cn_src (VHS_LoadVideo) — identical to standard pattern
+  //   ("Generation" tab): video + audio (output[2]).
+  // depth/canny: cn_refload (VHS_LoadVideoPath) — map as video, without audio.
   if ('46:11' in stdWorkflow) {
     const refNode = stdWorkflow['46:11'] as Record<string, unknown>
     const inputs = refNode.inputs as Record<string, unknown>
     inputs['ref_videos.ref_video_0'] = refVideo0Src
-    // direct: аудио из исходного видео (VHS_LoadVideo output[2] = AUDIO),
-    // как на вкладке «Генерация» для видео-рефов.
+    // direct: audio from source video (VHS_LoadVideo output[2] = AUDIO),
+    // as on the "Generation" tab for video refs.
     if (isDirect) {
       inputs['ref_video_audios.ref_video_audio_0'] = ['cn_src', 2]
     }
   }
-  // Нода '501' (VHS_LoadVideo для ref video) не создаётся при refVideos:[] —
-  // delete здесь harmless, оставляем на случай будущих изменений.
+  // Node '501' (VHS_LoadVideo for ref video) is not created when refVideos:[] —
+  // delete here is harmless, left in case of future changes.
   delete stdWorkflow['501']
 
-  // ─── Подмена filename_prefix на Minimax_Studio_controlnet ───
-  // buildMiniMaxH3Workflow пишет «<subfolder>/Minimax_Studio» или «Minimax_Studio».
-  // Галерея определяет бейдж «ControlNet» по /Minimax_Studio_controlnet/i в имени файла.
-  // Перебираем все ноды с filename_prefix и подменяем хвост «Minimax_Studio».
+  // ─── Replace filename_prefix with Minimax_Studio_controlnet ───
+  // buildMiniMaxH3Workflow writes "<subfolder>/Minimax_Studio" or "Minimax_Studio".
+  // Gallery detects "ControlNet" badge by /Minimax_Studio_controlnet/i in filename.
+  // Iterate through all nodes with filename_prefix and replace trailing "Minimax_Studio".
   for (const val of Object.values(stdWorkflow)) {
     if (!val || typeof val !== 'object') continue
     const node = val as Record<string, unknown>
     if (node.class_type === 'VHS_VideoCombine' && node.inputs) {
       const inputs = node.inputs as Record<string, unknown>
       if (typeof inputs.filename_prefix === 'string') {
-        // НЕ трогаем Minimax_Studio_cnref (это временная карта, не финальный вывод)
+        // Do NOT touch Minimax_Studio_cnref (that is a temporary map, not the final output)
         if (!/Minimax_Studio_cnref/i.test(inputs.filename_prefix)) {
           inputs.filename_prefix = inputs.filename_prefix.replace(/Minimax_Studio$/, 'Minimax_Studio_controlnet')
         }
@@ -532,7 +532,11 @@ export function buildControlNetWorkflow(p: ControlNetGenParams): Record<string, 
     }
   }
 
-  // Добавляем контрольные узлы
+  // Add control nodes
+  const result: Record<string, unknown> = { ...stdWorkflow, ...extraNodes }
+
+  return result
+}
   const result: Record<string, unknown> = { ...stdWorkflow, ...extraNodes }
 
   return result

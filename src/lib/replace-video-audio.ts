@@ -1,12 +1,13 @@
 /**
- * Замена аудиодорожки сгенерированного видео на оригинальную.
+ * Replace generated video's audio track with the original one.
  *
- * FLF всегда подставляет оригинальную дорожку, если есть аудио-реф;
- * ref-режим — только по галочке «сохранить оригинальный звук и вести по
- * нему» (флаг keep_original_audio). По завершении генерации подставляем
- * дорожку из ComfyUI input/, обрезая её по длительности видео (ffmpeg -t).
+ * FLF always substitutes the original audio track if an audio ref is present;
+ * ref mode does so only when the "keep original audio and guide by it"
+ * checkbox is checked (keep_original_audio flag). Upon generation completion,
+ * we substitute the track from ComfyUI input/, trimming it to the video's
+ * duration (ffmpeg -t).
  *
- * Используется в finalizePendingMeta (pending-meta.ts).
+ * Used in finalizePendingMeta (pending-meta.ts).
  */
 import { promisify } from 'util'
 import { execFile } from 'child_process'
@@ -103,8 +104,8 @@ export async function replaceVideoAudio(
  * needed.
  *
  * FLF historically swapped automatically whenever an audio ref was present.
- * Ref-режим делает это только при явном keep_original_audio (галочка
- * «аудио-гайд + оригинальный звук»).
+ * Ref mode does this only with explicit keep_original_audio (checkbox
+ * "audio guide + original sound").
  */
 export function resolveOriginalAudioReplacement(
   params: Record<string, unknown>,

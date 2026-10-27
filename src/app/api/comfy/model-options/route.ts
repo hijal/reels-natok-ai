@@ -18,22 +18,22 @@ export async function GET(req: NextRequest) {
     model_type: modelType,
     fps: 24,
     // Bounds of the H3 model: 60 = 2.5 s min, 719 = 17·42+5 ≈ 30 s max.
-    // (правка 59) max повышен с 14.4 с (345) до 30 с — по факту модель
-    // генерирует и 30-секундные ролики, реального жёсткого лимита 14.4 с нет.
-    // (правка 55): min 124 — нижняя граница, backend сам поднимает ниже.
-    // (правка 131) min снижен 124 → 42: минимум теперь ~2 с (42 кадра = 1.75 с
-    // при 24 fps, ближайшее к 2 с значение на сетке 17n+5).
-    // (правка 138) min повышен 42 → 60: минимум 2.5 с (60 кадров при 24 fps),
-    // 1.75 с (42 кадра) полностью убрано из диапазона.
+    // (fix 59) max increased from 14.4 s (345) to 30 s — in fact the model
+    // generates 30-second clips as well, there is no real hard limit of 14.4 s.
+    // (fix 55): min 124 is lower bound, backend raises lower values itself.
+    // (fix 131) min decreased 124 → 42: minimum is now ~2 s (42 frames = 1.75 s
+    // at 24 fps, closest to 2 s on 17n+5 grid).
+    // (fix 138) min increased 42 → 60: minimum 2.5 s (60 frames at 24 fps),
+    // 1.75 s (42 frames) completely removed from range.
     frames_minimum: 60,
     frames_maximum: 719,
     frames_steps: 17,
     default_num_inference_steps: 4,
     turbo_available: true,
-    // (правка 124) Значения = ТОЧНОЕ итоговое разрешение (короткая сторона
-    // = качество, соотношение точное). Генерация идёт чуть крупнее (каждая
-    // ось поднята до кратного 32), в конце — кроп ровно до этого номинала:
-    // 16:9 1080p → генерация 1920×1088 → итог 1920×1080.
+    // (fix 124) Values = EXACT final resolution (short side
+    // = quality, aspect ratio exact). Generation is slightly larger (each
+    // axis rounded up to multiple of 32), with crop at the end exactly to this nominal:
+    // 16:9 1080p → generation 1920×1088 → final 1920×1080.
     resolution_presets: {
       '480p': {
         label: '480p',
@@ -69,13 +69,13 @@ export async function GET(req: NextRequest) {
     },
     resolution_preset_order: ['480p', '720p', '1080p'],
     minimax_h3_text_encoder_choices: [
-      { value: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors', label: 'Qwen3VL 32B (рекомендуется)' },
+      { value: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors', label: 'Qwen3VL 32B (recommended)' },
     ],
     minimax_h3_text_encoder_default: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
     omni_reference_limits: { image: 9, video: 3, audio: 3, total: 15 },
     omni_reference_detail_choices: [
-      ['Соответствовать выходу (рекомендуется)', 'match'],
-      ['Максимальная детализация', 'max'],
+      ['Match output (recommended)', 'match'],
+      ['Maximum detail', 'max'],
     ],
   }, {
     // Static stub data — safe for the browser to cache for the session

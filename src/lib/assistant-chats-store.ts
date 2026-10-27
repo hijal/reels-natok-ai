@@ -1,5 +1,5 @@
 /**
- * Assistant chats store (Zustand, persisted to localStorage) — правка 30.
+ * Assistant chats store (Zustand, persisted to localStorage) — fix 30.
  *
  * Multiple named conversations with the local LLM assistant:
  *   - chats survive reloads / tab switches;
@@ -14,25 +14,25 @@ import { persist } from 'zustand/middleware'
 export interface AssistantChatMessage {
   role: 'user' | 'assistant'
   content: string
-  /** (правка 87) Вложение к сообщению (изображение/видео для LLM-анализа). */
+  /** (fix 87) Message attachment (image/video for LLM analysis). */
   attachment?: {
     path: string
     name: string
     kind: 'image' | 'video'
-    /** (правка 108) Местоположение файла:
-     *  'chat'  = data/chat-attachments/ (изолированное хранилище чата — новое);
-     *  'comfy' = ComfyUI/input/ (legacy, правки 86–87) — подаётся через /api/comfy/file.
-     *  Поля без src (старые сообщения) рендерятся как legacy. */
+    /** (fix 108) File location:
+     *  'chat'  = data/chat-attachments/ (isolated chat storage — new);
+     *  'comfy' = ComfyUI/input/ (legacy, fixes 86–87) — served via /api/comfy/file.
+     *  Fields without src (old messages) render as legacy. */
     src?: 'chat' | 'comfy'
   }
 }
 
-/** (правка 427) Режим чата ассистента: 'generate' — промпт вкладки
- *  «Генерация», 'extend' — промпты клипов вкладки «Продление»,
- *  (правка 502) 'controlnet' — промпт вкладки «ControlNet». Режим чата
- *  НЕ меняется после создания: системный промпт, набор референсов и логика
- *  вставки («В промпт» vs «В клип N») у режимов разные, смешение контекстов
- *  давало бы мусор в ответах модели. */
+/** (fix 427) Assistant chat mode: 'generate' — prompt of the
+ *  "Generate" tab, 'extend' — prompts of clips of the "Extend" tab,
+ *  (fix 502) 'controlnet' — prompt of the "ControlNet" tab. Chat mode
+ *  does NOT change after creation: system prompt, reference set, and insertion
+ *  logic ("To prompt" vs "To clip N") are different between modes; mixing contexts
+ *  would result in garbage in model responses. */
 export type AssistantChatMode = 'generate' | 'extend' | 'controlnet'
 
 export interface AssistantChat {
@@ -40,23 +40,23 @@ export interface AssistantChat {
   title: string
   createdAt: number
   updatedAt: number
-  /** (правка 427) Режим чата; у старых persisted-чатов поля нет — merge-гард
-   *  ниже подставляет 'generate'. */
+  /** (fix 427) Chat mode; old persisted chats lack this field — merge guard
+   *  below defaults to 'generate'. */
   mode: AssistantChatMode
   messages: AssistantChatMessage[]
 }
 
 const MAX_CHATS = 20
 const MAX_MESSAGES_PER_CHAT = 200
-/** (правка 267) Лимит длины одного сообщения: лимиты 20×200 не ограничивали
- *  РАЗМЕР — несколько огромных сообщений упирались в квоту localStorage
- *  (QuotaExceededError) и persist молча переставал сохранять чаты. */
+/** (fix 267) Length limit of a single message: the 20x200 limits did not constrain
+ *  SIZE — several huge messages would hit the localStorage quota
+ *  (QuotaExceededError) and persist would silently stop saving chats. */
 const MAX_MESSAGE_CONTENT = 100_000
 
-/** (правка 267) Обрезка контента сообщения до MAX_MESSAGE_CONTENT с пометкой. */
+/** (fix 267) Truncate message content to MAX_MESSAGE_CONTENT with a marker. */
 function capContent(content: string): string {
   return content.length > MAX_MESSAGE_CONTENT
-    ? content.slice(0, MAX_MESSAGE_CONTENT) + '\n… [сообщение усечено]'
+    ? content.slice(0, MAX_MESSAGE_CONTENT) + '\n… [message truncated]'
     : content
 }
 
@@ -65,23 +65,23 @@ interface AssistantChatsState {
   activeChatId: string | null
   /**
    * Pending user message to auto-run when the view mounts (e.g. the
-   * "Улучшить промпт" flow from the prompt editor). Cleared after run.
-   * (правка 266) Несёт id чата, созданного requestImprovePrompt, — improve
-   * выполняется именно в нём, а не в текущем активном чате.
+   * "Improve prompt" flow from the prompt editor). Cleared after run.
+   * (fix 266) Holds the id of the chat created by requestImprovePrompt — improve
+   * executes specifically in it, rather than in the currently active chat.
    */
   pendingImprove: { chatId: string; content: string } | null
-  /** (правка 427) Выбранный режим-фильтр списка чатов («Генерация» /
-   *  «Продление»). Persist — да: вкладка ассистента открывается в том же
-   *  режиме, в котором её оставили. */
+  /** (fix 427) Selected mode-filter for chat list ("Generate" /
+   *  "Extend"). Persisted: yes — assistant tab opens in the same
+   *  mode in which it was left. */
   assistantMode: AssistantChatMode
 
   /** Create a new empty chat, make it active, return its id.
-   *  (правка 427) Режим чата — из аргумента или текущего assistantMode. */
+   *  (fix 427) Chat mode — from argument or current assistantMode. */
   createChat: (mode?: AssistantChatMode) => string
-  /** (правка 427) Переключить режим-фильтр списка чатов. */
+  /** (fix 427) Switch chat list mode-filter. */
   setAssistantMode: (mode: AssistantChatMode) => void
   deleteChat: (id: string) => void
-  /** (правка 264) Переименовать чат. Пустое/пробельное имя — no-op. */
+  /** (fix 264) Rename chat. Empty/whitespace-only title is a no-op. */
   renameChat: (id: string, newTitle: string) => void
   setActiveChat: (id: string) => void
   /** Append a message; auto-titles the chat from the first user message. */
@@ -113,13 +113,13 @@ export const useAssistantChats = create<AssistantChatsState>()(
 
       createChat: (mode) => {
         const id = newId()
-        // (правка 427) Режим нового чата: явный аргумент (например, improve
-        // с карточки клипа) либо текущий режим-фильтр — «Новый чат» в
-        // сайдбаре создаёт чат именно выбранного режима.
+        // (fix 427) New chat mode: explicit argument (e.g. improve
+        // from clip card) or current mode-filter — "New Chat" in
+        // sidebar creates a chat of specifically the selected mode.
         const chatMode: AssistantChatMode = mode ?? get().assistantMode
         set((s) => ({
           chats: capChats([
-            { id, title: 'Новый чат', createdAt: Date.now(), updatedAt: Date.now(), mode: chatMode, messages: [] },
+            { id, title: 'New chat', createdAt: Date.now(), updatedAt: Date.now(), mode: chatMode, messages: [] },
             ...s.chats,
           ]),
           activeChatId: id,
@@ -136,9 +136,9 @@ export const useAssistantChats = create<AssistantChatsState>()(
           if (activeChatId === id) {
             activeChatId = chats[0]?.id ?? null
           }
-          // (правка 108) Файлы вложений удалённого чата существуют только в чате —
-          // удаляем их с диска (best-effort, fire-and-forget). Legacy-файлы
-          // в ComfyUI/input/ НЕ трогаем: они могут быть референсами генерации.
+          // (fix 108) Attachment files of the deleted chat exist only in the chat —
+          // delete them from disk (best-effort, fire-and-forget). Legacy files
+          // in ComfyUI/input/ are NOT touched: they might be generation references.
           const doomed = s.chats.find((c) => c.id === id)
           if (doomed && typeof window !== 'undefined') {
             for (const m of doomed.messages) {
@@ -154,9 +154,9 @@ export const useAssistantChats = create<AssistantChatsState>()(
           return { chats, activeChatId }
         }),
 
-      // (правка 264) Переименование: обновляем только title (без updatedAt —
-      // иначе чат всплывает наверх списка из-за capChats-сортировки, что
-      // дезориентирует при переименовании). Лимит 80 символов.
+      // (fix 264) Renaming: update only title (without updatedAt —
+      // otherwise chat pops to the top of list due to capChats sorting, which
+      // is disorienting during renaming). 80 character limit.
       renameChat: (id, newTitle) =>
         set((s) => {
           const title = newTitle.trim().slice(0, 80)
@@ -175,8 +175,8 @@ export const useAssistantChats = create<AssistantChatsState>()(
             s.chats.map((c) => {
               if (c.id !== id) return c
               const title =
-                (c.title === 'Новый чат' || !c.title) && msg.role === 'user'
-                  ? msg.content.trim().replace(/\s+/g, ' ').slice(0, 48) || 'Чат'
+                (c.title === 'New chat' || !c.title) && msg.role === 'user'
+                  ? msg.content.trim().replace(/\s+/g, ' ').slice(0, 48) || 'Chat'
                   : c.title
               return {
                 ...c,
@@ -190,9 +190,9 @@ export const useAssistantChats = create<AssistantChatsState>()(
 
       clearAll: () =>
         set((s) => {
-          // (правка 108) «Очистить контент» в настройках = удаление ВСЕХ чатов:
-          // удаляем и их файлы вложений из изолированного хранилища
-          // (best-effort, как в deleteChat) — иначе останутся сироты на диске.
+          // (fix 108) "Clear content" in settings = deletion of ALL chats:
+          // delete their attachment files from isolated storage as well
+          // (best-effort, as in deleteChat) — otherwise orphans remain on disk.
           if (typeof window !== 'undefined') {
             for (const c of s.chats) {
               for (const m of c.messages) {
@@ -219,7 +219,7 @@ export const useAssistantChats = create<AssistantChatsState>()(
         chats: state.chats,
         activeChatId: state.activeChatId,
         pendingImprove: state.pendingImprove,
-        assistantMode: state.assistantMode, // (правка 427)
+        assistantMode: state.assistantMode, // (fix 427)
       }),
       merge: (persisted, current) => {
         const raw = persisted as AssistantChatsState | null
@@ -233,9 +233,9 @@ export const useAssistantChats = create<AssistantChatsState>()(
             )
           : []
         chats = capChats(chats)
-        // (правка 267) Старые персисты без лимита размера — обрезаем при регидратации.
-        // (правка 427) Старые персисты без mode — это чаты «Генерации»
-        // (extend-режима тогда не существовало).
+        // (fix 267) Old persists without size limit — truncate upon rehydration.
+        // (fix 427) Old persists without mode — these are "Generate" chats
+        // (extend mode did not exist back then).
         chats = chats.map((c) => ({
           ...c,
           mode: typeof c.mode === 'string' ? c.mode : 'generate',
@@ -245,8 +245,8 @@ export const useAssistantChats = create<AssistantChatsState>()(
           typeof raw?.activeChatId === 'string' && chats.some((c) => c.id === raw.activeChatId)
             ? raw.activeChatId
             : (chats[0]?.id ?? null)
-        // (правка 266) pendingImprove — объект { chatId, content }; старые
-        // персисты со строкой отбрасываем (без chatId их выполнять некуда).
+        // (fix 266) pendingImprove is an object { chatId, content }; discard old
+        // persists with a string (without chatId there is nowhere to execute them).
         const pi = raw?.pendingImprove
         const pendingImprove =
           pi && typeof pi === 'object' &&
@@ -254,8 +254,8 @@ export const useAssistantChats = create<AssistantChatsState>()(
           typeof (pi as { content?: unknown }).content === 'string'
             ? (pi as { chatId: string; content: string })
             : null
-        // (правка 427) Режим-фильтр из персиста; мусор → 'generate'.
-        // (правка 502) Whitelist из трёх режимов (добавлен 'controlnet').
+        // (fix 427) Mode-filter from persist; garbage → 'generate'.
+        // (fix 502) Whitelist of three modes ('controlnet' added).
         const assistantMode: AssistantChatMode =
           raw?.assistantMode === 'extend' || raw?.assistantMode === 'controlnet'
             ? raw.assistantMode

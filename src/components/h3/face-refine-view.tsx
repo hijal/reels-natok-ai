@@ -1,19 +1,17 @@
 'use client'
 
 /**
- * FaceRefineView — вкладка «Face Refine»: перерисовка мелких лиц в готовом
- * видео через набор нод ComfyUI-H3-FaceRefine (детект → кроп → H3 → вклейка
- * обратно).
+ * FaceRefineView — "Face Refine" tab: redrawing small faces in finished
+ * video via ComfyUI-H3-FaceRefine nodes (detect → crop → H3 → composite back).
  *
- * Layout как у Tile Upscale: слева — параметры + статус, справа — галерея.
- * Источник: drag&drop из галереи или файл с диска.
+ * Layout similar to Tile Upscale: left — parameters + status, right — gallery.
+ * Source: drag & drop from gallery or file from disk.
  *
- * «Кого именно перерисовывать» — три способа:
- *  • правило + номер в рейтинге (largest_face / centre_most / left_most …);
- *  • (правка 723) клик по лицу в превью исходника (closest_to_xy) — правило
- *    смотрит только на геометрию кадра и в толпе упирается в одно лицо;
- *  • референс-фото человека (identity_reference) — трекер находит его в
- *    каждом шоте по совпадению лица (insightface).
+ * "Whom to refine" — three methods:
+ *  • rule + rank index (largest_face / centre_most / left_most …);
+ *  • click on face in source preview (closest_to_xy);
+ *  • reference photo of person (identity_reference) — tracker finds them
+ *    in each shot by facial embedding match (insightface).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -51,16 +49,15 @@ import { uploadInputFile } from '@/lib/upload'
 import type { FaceSelectMode } from '@/lib/comfy/face-refine-template'
 
 const SELECT_MODES: Array<{ value: FaceSelectMode; label: string }> = [
-  { value: 'largest_face', label: 'Самое крупное лицо' },
-  { value: 'centre_most', label: 'Ближе к центру кадра' },
-  { value: 'left_most', label: 'Самое левое' },
-  { value: 'right_most', label: 'Самое правое' },
-  { value: 'top_most', label: 'Самое верхнее' },
-  { value: 'bottom_most', label: 'Самое нижнее' },
-  { value: 'smallest_face', label: 'Самое мелкое лицо' },
-  { value: 'detector_score', label: 'Самое уверенное' },
-  // (правка 723) Ставится кликом по кадру в окне выбора лица.
-  { value: 'closest_to_xy', label: 'Точка на лице (клик по кадру)' },
+  { value: 'largest_face', label: 'Largest face' },
+  { value: 'centre_most', label: 'Closest to frame center' },
+  { value: 'left_most', label: 'Leftmost' },
+  { value: 'right_most', label: 'Rightmost' },
+  { value: 'top_most', label: 'Topmost' },
+  { value: 'bottom_most', label: 'Bottommost' },
+  { value: 'smallest_face', label: 'Smallest face' },
+  { value: 'detector_score', label: 'Highest confidence' },
+  { value: 'closest_to_xy', label: 'Point on face (frame click)' },
 ]
 
 export function FaceRefineView() {
@@ -70,12 +67,8 @@ export function FaceRefineView() {
   const setSource = useFaceRefineTarget((s) => s.setSource)
   const identityRef = useFaceRefineTarget((s) => s.identityRef)
   const setIdentityRef = useFaceRefineTarget((s) => s.setIdentityRef)
-  // (правка 723) Точка на лице, указанная кликом по кадру.
   const facePoint = useFaceRefineTarget((s) => s.facePoint)
   const setFacePoint = useFaceRefineTarget((s) => s.setFacePoint)
-  // Нода H3FaceTrackCrop при подключённом identity_reference игнорирует
-  // select/select_index и ведёт человека с фото. Показываем это явно, чтобы
-  // «Правило» и «Номер в рейтинге» не выглядели рабочими впустую.
   const identityOverridesSelection = Boolean(identityRef) && !facePoint
   const params = useFaceRefineTarget((s) => s.params)
   const patchParams = useFaceRefineTarget((s) => s.patchParams)
@@ -85,12 +78,10 @@ export function FaceRefineView() {
     (next: FaceRefineSource | null) => {
       const prev = prevSourceUrlRef.current
       if (prev && prev.startsWith('blob:') && prev !== next?.url) {
-        try { URL.revokeObjectURL(prev) } catch { /* уже отозван */ }
+        try { URL.revokeObjectURL(prev) } catch { /* already revoked */ }
       }
       prevSourceUrlRef.current = next?.url ?? null
       setSource(next)
-      // (правка 723) Точка клика — координаты конкретного ролика: сменили
-      // исходник, значит и лицо выбираем заново.
       setFacePoint(null)
     },
     [setSource, setFacePoint],
@@ -103,9 +94,7 @@ export function FaceRefineView() {
   const [dragOver, setDragOver] = useState(false)
   const [uploadingSrc, setUploadingSrc] = useState(false)
   const [uploadingRef, setUploadingRef] = useState(false)
-  // (правка 722) Есть ли в комбо H3FaceTrackCrop детектор человека.
   const [fallbackAvailable, setFallbackAvailable] = useState<boolean | null>(null)
-  // (правка 723) Размер/fps исходника (ffprobe через GET) и окно выбора лица.
   const [srcProbe, setSrcProbe] = useState<{ fps: number; frames: number } | null>(null)
   const [pickOpen, setPickOpen] = useState(false)
 
@@ -121,11 +110,6 @@ export function FaceRefineView() {
 
   const gallery = useVideoGallery()
 
-  // (правка 722) Список детекторов спрашиваем у бэкенда: модель человека
-  // появляется в комбо только после регистрации models/ultralytics и
-  // перезапуска ComfyUI. Перепроверяем после каждого прогона.
-  // (правка 723) Тем же запросом берём fps/frames исходника: элемент <video>
-  // кадров не отдаёт, а ноде нужен номер кадра клика.
   useEffect(() => {
     let alive = true
     const q = new URLSearchParams()
@@ -155,7 +139,6 @@ export function FaceRefineView() {
     return () => { alive = false }
   }, [busy, source])
 
-  // Цель из стора галереи
   useEffect(() => {
     if (!storeTarget) return
     const file = gallery.files.find(
@@ -163,7 +146,7 @@ export function FaceRefineView() {
     )
     if (file) {
       setSourceSafe(file as FaceRefineSource)
-      toast.success(`Источник: ${file.filename}`)
+      toast.success(`Source: ${file.filename}`)
     } else {
       setSourceSafe({
         url: `/api/comfy/file?filename=${encodeURIComponent(storeTarget.filename)}&subfolder=${encodeURIComponent(storeTarget.subfolder)}`,
@@ -193,17 +176,14 @@ export function FaceRefineView() {
         subfolder: '',
         inputSource: path,
       })
-      toast.success(`Источник: ${file.name}`)
+      toast.success(`Source: ${file.name}`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки видео')
+      toast.error(e instanceof Error ? e.message : 'Error uploading video')
     } finally {
       setUploadingSrc(false)
     }
   }, [setSourceSafe])
 
-  // Референс лица — отдельная картинка в ComfyUI input/.
-  // (правка 723) Фото и точка клика взаимоисключающие: нода при подключённом
-  // identity_reference не смотрит на X/Y, поэтому загрузка фото снимает точку.
   const uploadIdentityRef = useCallback(async (file: File) => {
     setUploadingRef(true)
     try {
@@ -215,12 +195,12 @@ export function FaceRefineView() {
       if (facePoint) {
         setFacePoint(null)
         patchParams({ select: 'largest_face' })
-        toast.success('Референс лица загружен — точка на кадре снята')
+        toast.success('Face reference uploaded — frame point removed')
       } else {
-        toast.success('Референс лица загружен')
+        toast.success('Face reference uploaded')
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки референса')
+      toast.error(e instanceof Error ? e.message : 'Error uploading reference')
     } finally {
       setUploadingRef(false)
     }
@@ -229,11 +209,11 @@ export function FaceRefineView() {
   const start = useCallback(async () => {
     const src = sourceRef.current
     if (!src) {
-      toast.error('Сначала выберите видео-источник')
+      toast.error('First select a source video')
       return
     }
     if (uploadingSrc) {
-      toast.error('Видео ещё загружается')
+      toast.error('Video is still uploading')
       return
     }
 
@@ -246,7 +226,6 @@ export function FaceRefineView() {
       canvas: params.canvas,
       denoise: params.denoise,
       steps: params.steps,
-      // (правка 723) Без точки closest_to_xy мерить нечем — уходит правило.
       select: params.select === 'closest_to_xy' && !facePoint ? 'largest_face' : params.select,
       selectIndex: params.selectIndex,
       identityModel: params.identityModel,
@@ -260,10 +239,7 @@ export function FaceRefineView() {
       undetectedFrames: params.undetectedFrames,
       denoiseSmall: params.denoiseSmall,
       denoiseLarge: params.denoiseLarge,
-      // (правка 722) детектор человека — только если он реально есть в списке
-      // комбо ComfyUI (иначе сервер молча оставит 'none').
       fallback: params.fallback && fallbackAvailable === true,
-      // (правка 723) Клик по лицу: бэкенд переводит выбор в closest_to_xy.
       ...(facePoint ? { facePoint } : {}),
       ...(identityRef ? { identityReference: identityRef.name } : {}),
     }
@@ -296,13 +272,13 @@ export function FaceRefineView() {
           filename: parsed.filename ?? '',
           subfolder: parsed.subfolder ?? '',
         })
-        toast.success(`Источник: ${parsed.filename}`)
-      } catch { toast.error('Не удалось прочитать перетащенное видео') }
+        toast.success(`Source: ${parsed.filename}`)
+      } catch { toast.error('Failed to read dragged video') }
       return
     }
     const f = e.dataTransfer.files?.[0]
     if (f) void uploadLocalFile(f)
-    else toast.error('Нужно видео')
+    else toast.error('A video file is required')
   }
 
   const identityPreview = identityRef
@@ -311,7 +287,7 @@ export function FaceRefineView() {
 
   return (
     <div className="flex h-full w-full min-w-0">
-      {/* ═══ Панель параметров ═══ */}
+      {/* ═══ Parameter Panel ═══ */}
       <aside className="w-[360px] shrink-0 border-r border-border bg-[var(--surface-1)] flex flex-col">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center gap-2">
@@ -320,14 +296,14 @@ export function FaceRefineView() {
           </div>
 
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            H3 плохо рисует лица, когда голова занимает малую долю кадра. Нода
-            находит лицо, перерисовывает его крупно и вклеивает обратно — остальной
-            кадр остаётся исходным.
+            H3 struggles with faces when the head occupies a small portion of the frame. The node
+            detects the face, re-renders it at high resolution, and composites it back — the rest of the
+            frame remains untouched.
           </p>
 
-          {/* Источник */}
+          {/* Source */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground font-medium">Источник</Label>
+            <Label className="text-xs text-muted-foreground font-medium">Source</Label>
             {source ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -343,7 +319,7 @@ export function FaceRefineView() {
                   name={source.filename}
                   url={source.url}
                   className="w-20 h-12 rounded object-cover bg-black shrink-0"
-                  title="Открыть исходное видео во весь экран"
+                  title="Open source video in full screen"
                 >
                   <video
                     src={source.url}
@@ -356,12 +332,12 @@ export function FaceRefineView() {
                 </RefPreviewThumb>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-foreground truncate">{source.filename}</p>
-                  {uploadingSrc && <p className="text-[10px] text-yellow-400">загрузка…</p>}
+                  {uploadingSrc && <p className="text-[10px] text-yellow-400">uploading…</p>}
                 </div>
                 {!busy && (
                   <button onClick={() => setSourceSafe(null)}
                     className="text-[10px] text-muted-foreground hover:text-foreground shrink-0">
-                    убрать
+                    remove
                   </button>
                 )}
               </div>
@@ -380,7 +356,7 @@ export function FaceRefineView() {
                 )}
               >
                 <FileVideoIcon className="w-4 h-4 shrink-0" />
-                <span>Кликните для выбора, перетащите карточку из галереи или файл с диска</span>
+                <span>Click to select, drag a card from gallery or drop a file from disk</span>
               </div>
             )}
             <input
@@ -396,19 +372,17 @@ export function FaceRefineView() {
             />
           </div>
 
-          {/* Кого перерисовывать */}
+          {/* Whom to refine */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground font-medium">Кого перерисовывать</Label>
+            <Label className="text-xs text-muted-foreground font-medium">Face to Refine</Label>
 
-            {/* (правка 723) Клик по лицу: правило видит только геометрию кадра и
-                в толпе упирается в одно и то же лицо. Точка задаёт цель напрямую. */}
             {facePoint ? (
               <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-2">
                 <CrosshairIcon className="w-4 h-4 text-yellow-400 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-foreground">Лицо выбрано кликом</p>
+                  <p className="text-xs font-medium text-foreground">Face selected by click</p>
                   <p className="text-[10px] text-muted-foreground font-mono">
-                    X {facePoint.x} · Y {facePoint.y} · кадр {facePoint.frame}
+                    X {facePoint.x} · Y {facePoint.y} · frame {facePoint.frame}
                   </p>
                 </div>
                 {!busy && (
@@ -417,7 +391,7 @@ export function FaceRefineView() {
                       onClick={() => setPickOpen(true)}
                       className="text-[10px] text-yellow-400 hover:text-yellow-300"
                     >
-                      изменить
+                      change
                     </button>
                     <button
                       onClick={() => {
@@ -425,7 +399,7 @@ export function FaceRefineView() {
                         patchParams({ select: 'largest_face' })
                       }}
                       className="text-muted-foreground hover:text-foreground"
-                      title="Сбросить точку и вернуться к правилу"
+                      title="Reset point and return to rule"
                     >
                       <XIcon className="w-3.5 h-3.5" />
                     </button>
@@ -438,23 +412,22 @@ export function FaceRefineView() {
                 onClick={() => setPickOpen(true)}
                 disabled={!source || busy}
                 className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:border-yellow-500/40 hover:bg-[var(--surface-2)] transition-all disabled:opacity-50"
-                title="Открыть кадр исходника и кликнуть по нужному лицу"
+                title="Open source frame and click on target face"
               >
                 <CrosshairIcon className="w-3.5 h-3.5" />
-                Указать лицо кликом по кадру
+                Select face by clicking on frame
               </button>
             )}
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground" title="Правило выбора субъекта. Он выбирается ОДИН раз на шот, дальше трекер ведёт то же лицо.">
-                Правило
+              <Label className="text-xs text-muted-foreground" title="Subject selection rule. Selected ONCE per shot, tracker follows the same face afterwards.">
+                Rule
               </Label>
               <Select
                 value={params.select === 'closest_to_xy' && !facePoint ? 'largest_face' : params.select}
                 onValueChange={(v) => {
                   const mode = v as FaceSelectMode
                   patchParams({ select: mode })
-                  // (правка 723) Точка и правило взаимоисключающие.
                   if (mode !== 'closest_to_xy') setFacePoint(null)
                   else if (!facePoint) setPickOpen(true)
                 }}
@@ -472,8 +445,8 @@ export function FaceRefineView() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground" title="Номер лица в рейтинге правила: 0 — первое, 1 — второе и так далее. При выборе кликом не используется.">
-                Номер в рейтинге
+              <Label className="text-xs text-muted-foreground" title="Face index in rule ranking: 0 — first, 1 — second, etc. Not used when selecting by click.">
+                Rank index
               </Label>
               <Select
                 value={String(params.selectIndex)}
@@ -485,32 +458,28 @@ export function FaceRefineView() {
                 </SelectTrigger>
                 <SelectContent className="bg-[var(--surface-3)] border-border">
                   {[0, 1, 2, 3].map((n) => (
-                    <SelectItem key={n} value={String(n)}>{n + 1}-е лицо</SelectItem>
+                    <SelectItem key={n} value={String(n)}>{n + 1}th face</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {identityOverridesSelection && (
                 <p className="text-[10px] leading-snug text-yellow-400/90">
-                  Выбран референс конкретного человека — нода использует его,
-                  а правило и номер в рейтинге игнорируются. Чтобы вернуть
-                  правило, уберите фото референса.
+                  A specific person reference is selected — the node uses it, while the rule and rank index are ignored. To restore the rule, remove the reference photo.
                 </p>
               )}
             </div>
 
-            {/* Референс конкретного человека — надёжнее правила: трекер
-                находит его в каждом шоте, даже если нумерация сбилась. */}
+            {/* Reference of specific person */}
             <div className="space-y-1">
               <Label
                 className="text-xs text-muted-foreground"
-                title="Фото конкретного человека. Трекер сопоставляет лица по эмбеддингу (insightface) и ведёт этого человека через весь ролик. Требует buffalo_l и пакет insightface."
+                title="Photo of a specific person. Tracker matches faces by embedding (insightface) and tracks this person throughout the video. Requires buffalo_l and insightface package."
               >
-                Референс конкретного человека (необязательно)
+                Specific person reference (optional)
               </Label>
               {identityRef ? (
                 <div className={cn(
                   'flex items-center gap-2 rounded-lg border border-border bg-[var(--surface-2)] p-2',
-                  // (правка 723) С точкой клика фото в воркфлоу не идёт.
                   facePoint && 'opacity-60',
                 )}>
                   {identityPreview && (
@@ -541,7 +510,7 @@ export function FaceRefineView() {
                   {uploadingRef
                     ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
                     : <ImageIcon className="w-3.5 h-3.5" />}
-                  Загрузить фото человека
+                  Upload photo of person
                 </button>
               )}
               <input
@@ -555,27 +524,22 @@ export function FaceRefineView() {
                   e.target.value = ''
                 }}
               />
-              {/* (правка 723) Пока лицо указано кликом, трекер выбирает его
-                  геометрией, а не по фото — предупреждаем, чтобы не гадать,
-                  почему фото «не сработало». */}
               {facePoint && identityRef && (
                 <p className="text-[10px] text-yellow-400/90 leading-snug">
-                  Не используется: лицо выбрано кликом, трекер берёт его с точки.
-                  Уберите точку (✕ в карточке) или загрузите фото заново, чтобы
-                  искать человека по лицу.
+                  Not used: face is selected by click, tracker uses point coordinates. Remove point (✕ on card) or upload photo again to search by face.
                 </p>
               )}
             </div>
           </div>
 
-          {/* Параметры пайплайна */}
+          {/* Pipeline parameters */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label
                 className="text-xs text-muted-foreground"
-                title="Канва, в которой H3 перерисовывает лицо. 512 дешевле 768 примерно в 2.25 раза по latent-токенам; выше 768 — заметно дороже по VRAM и времени (максимум движка — 1344)."
+                title="Canvas size in which H3 re-renders the face. 512 is about 2.25x cheaper than 768 in latent tokens; above 768 uses significantly more VRAM and time (engine maximum is 1344)."
               >
-                Канва (px)
+                Canvas (px)
               </Label>
               <Select
                 value={String(params.canvas)}
@@ -588,15 +552,15 @@ export function FaceRefineView() {
                 <SelectContent className="bg-[var(--surface-3)] border-border">
                   {[384, 512, 640, 768, 896, 1024, 1152, 1280].map((n) => (
                     <SelectItem key={n} value={String(n)}>
-                      {n}{n > 768 ? ' — выше эталона' : ''}
+                      {n}{n > 768 ? ' — above reference' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground" title="Шаги сэмплирования. Наша модель 4-шаговая — столько и нужно.">
-                Шаги
+              <Label className="text-xs text-muted-foreground" title="Sampling steps. Our model is 4-step — this is the recommended value.">
+                Steps
               </Label>
               <Select
                 value={String(params.steps)}
@@ -616,8 +580,8 @@ export function FaceRefineView() {
           </div>
 
           <SettingSlider
-            label="Денойз"
-            labelTitle="Насколько сильно модель перерисовывает лицо. H3 — flow matching со сдвигом 12: 0.25 даёт эффективную sigma 0.800 (кадр переписывается целиком). Рабочий диапазон 0.25–0.40."
+            label="Denoise"
+            labelTitle="How strongly the model redraws the face. H3 uses flow matching with shift 12: 0.25 gives effective sigma 0.800 (frame rewritten entirely). Working range: 0.25–0.40."
             value={params.denoise}
             min={0.05}
             max={0.6}
@@ -627,22 +591,22 @@ export function FaceRefineView() {
             disabled={busy}
           />
 
-          {/* Дополнительные параметры */}
+          {/* Advanced Parameters */}
           <div className="space-y-2">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-border hover:border-yellow-500/30 transition-all text-left"
             >
-              <span className="text-xs font-medium text-muted-foreground">Дополнительные параметры</span>
+              <span className="text-xs font-medium text-muted-foreground">Advanced Parameters</span>
               <span className={cn('text-[10px] text-muted-foreground transition-transform', showAdvanced && 'rotate-180')}>▼</span>
             </button>
 
             {showAdvanced && (
               <div className="space-y-3 pl-1">
                 <SettingSlider
-                  label="Кроп лица (×)"
-                  labelTitle="Сторона кропа как кратное высоты лица. 2.5 помещает лицо примерно в 40% холста. Больше — больше контекста, но меньше увеличение."
+                  label="Face crop factor (×)"
+                  labelTitle="Crop bounding box side as a multiple of face height. 2.5 places the face at ~40% of the canvas. Larger values provide more context, but less magnification."
                   value={params.cropFactor}
                   min={1.2}
                   max={5}
@@ -652,8 +616,8 @@ export function FaceRefineView() {
                   disabled={busy}
                 />
                 <SettingSlider
-                  label="Порог детектора"
-                  labelTitle="Ниже — ловит больше профилей и мелких лиц, но и больше ложных срабатываний."
+                  label="Detector confidence"
+                  labelTitle="Lower threshold detects more profile views and tiny faces, but increases false positives."
                   value={params.confidence}
                   min={0.05}
                   max={0.9}
@@ -663,8 +627,8 @@ export function FaceRefineView() {
                   disabled={busy}
                 />
                 <SettingSlider
-                  label="Денойз: мелкие лица ×"
-                  labelTitle="Множитель денойза для самых мелких лиц. Ниже 1.0 — весь ролик становится мягче."
+                  label="Denoise: small faces ×"
+                  labelTitle="Denoise multiplier for very small faces. Below 1.0 makes the whole clip softer."
                   value={params.denoiseSmall}
                   min={0}
                   max={1}
@@ -674,8 +638,8 @@ export function FaceRefineView() {
                   disabled={busy}
                 />
                 <SettingSlider
-                  label="Денойз: крупные лица ×"
-                  labelTitle="Множитель денойза для крупных лиц — у них уже есть детали, их не нужно переписывать."
+                  label="Denoise: large faces ×"
+                  labelTitle="Denoise multiplier for large faces — they already have details and need less redrawing."
                   value={params.denoiseLarge}
                   min={0}
                   max={1}
@@ -686,8 +650,8 @@ export function FaceRefineView() {
                 />
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground" title="Что вклеивается обратно: только прямоугольник лица или весь кроп (с волосами и фоном — может дать видимый прямоугольник).">
-                    Вклейка
+                  <Label className="text-xs text-muted-foreground" title="What is pasted back: only face rectangle, face ellipse, or full crop (with hair and background — may show a visible boundary).">
+                    Composite region
                   </Label>
                   <Select
                     value={params.pasteRegion}
@@ -698,16 +662,16 @@ export function FaceRefineView() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-[var(--surface-3)] border-border">
-                      <SelectItem value="face_only">Только лицо</SelectItem>
-                      <SelectItem value="face_ellipse">Лицо овалом</SelectItem>
-                      <SelectItem value="full_crop">Весь кроп</SelectItem>
+                      <SelectItem value="face_only">Only face</SelectItem>
+                      <SelectItem value="face_ellipse">Face ellipse</SelectItem>
+                      <SelectItem value="full_crop">Full crop</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground" title="Что делать с кадрами, где лицо не найдено (отвернулся, закрыт).">
-                    Кадры без лица
+                  <Label className="text-xs text-muted-foreground" title="What to do with frames where face is not detected (turned away, occluded).">
+                    Frames without detected face
                   </Label>
                   <Select
                     value={params.undetectedFrames}
@@ -718,15 +682,14 @@ export function FaceRefineView() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-[var(--surface-3)] border-border">
-                      <SelectItem value="fade_out">Плавно убрать вклейку</SelectItem>
-                      <SelectItem value="skip">Оставить как есть</SelectItem>
-                      <SelectItem value="composite_anyway">Вклеить всё равно</SelectItem>
+                      <SelectItem value="fade_out">Fade out composite</SelectItem>
+                      <SelectItem value="skip">Skip (keep original)</SelectItem>
+                      <SelectItem value="composite_anyway">Composite anyway</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* (правка 722) Детектор человека на кадрах, где лица не видно:
-                    верх бокса человека даёт реальное положение головы. */}
+                {/* Person fallback checkbox */}
                 <label
                   className={cn(
                     'flex items-start gap-2 rounded-lg border border-border bg-[var(--surface-2)] p-2.5 transition-all',
@@ -744,21 +707,21 @@ export function FaceRefineView() {
                   />
                   <span className="space-y-0.5">
                     <span className="block text-xs font-medium text-foreground">
-                      Далёкие планы: искать человека
+                      Distant shots: detect person
                     </span>
                     <span className="block text-[10px] text-muted-foreground leading-relaxed">
                       {fallbackAvailable === true
-                        ? 'Лица не видно (человек спиной, в капюшоне) — голова берётся от бокса человека. Без этого такие кадры интерполируются.'
+                        ? 'When face is not visible (turned back, wearing hood) — head position is taken from person bounding box. Without this, missing frames are interpolated.'
                         : fallbackAvailable === null
-                          ? 'Проверяю модели детекторов…'
-                          : 'Нужна модель segm/person_yolov8m-seg.pt в models/ultralytics — после установки перезапустите студию.'}
+                          ? 'Checking detector models…'
+                          : 'Requires segm/person_yolov8m-seg.pt model in models/ultralytics — restart studio after installation.'}
                     </span>
                   </span>
                 </label>
 
                 <SettingSlider
-                  label="Размытие края (px)"
-                  labelTitle="Радиус размытия маски вклейки в пикселях исходника. Меньше — резче стык."
+                  label="Feather radius (px)"
+                  labelTitle="Feathering radius of composite mask in source pixels. Smaller values give sharper edges."
                   value={params.feather}
                   min={0}
                   max={40}
@@ -768,8 +731,8 @@ export function FaceRefineView() {
                   disabled={busy}
                 />
                 <SettingSlider
-                  label="Колор-матч"
-                  labelTitle="Сведение среднего и отклонения перерисованного лица к исходному участку — без этого лицо выглядит вклеенным."
+                  label="Color match"
+                  labelTitle="Matches mean and deviation of redrawn face to original area — prevents face from looking pasted on."
                   value={params.colourMatch}
                   min={0}
                   max={1}
@@ -779,8 +742,8 @@ export function FaceRefineView() {
                   disabled={busy}
                 />
                 <SettingSlider
-                  label="Прозрачность вклейки"
-                  labelTitle="Общая непрозрачность перерисованного лица. Ниже 1.0 — смесь с исходником."
+                  label="Composite opacity"
+                  labelTitle="Overall opacity of redrawn face. Below 1.0 blends with original."
                   value={params.blend}
                   min={0}
                   max={1}
@@ -793,16 +756,16 @@ export function FaceRefineView() {
             )}
           </div>
 
-          {/* Запуск */}
+          {/* Start */}
           <div className="flex gap-2 pt-1">
             <Button onClick={start} disabled={!source} className="flex-1 gap-1.5">
               <PlayIcon className="w-4 h-4" />
-              {busy ? 'Ещё в очередь' : 'Запустить Face Refine'}
+              {busy ? 'Queue another' : 'Run Face Refine'}
             </Button>
           </div>
         </div>
 
-        {/* Статус */}
+        {/* Status */}
         <div className="shrink-0 border-t border-border p-3 bg-[var(--surface-1)]/90 backdrop-blur-sm">
           <GenerationStatus
             isGenerating={busy}
@@ -819,7 +782,7 @@ export function FaceRefineView() {
         </div>
       </aside>
 
-      {/* ═══ Галерея ═══ */}
+      {/* ═══ Gallery ═══ */}
       <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-y-auto p-3">
           <VideoGalleryGrid
@@ -827,19 +790,17 @@ export function FaceRefineView() {
             loading={gallery.loading}
             onRefresh={() => void gallery.load()}
             onDeleteFile={gallery.deleteFile}
-            emptyHint="Результаты Face Refine появятся здесь"
+            emptyHint="Face Refine results will appear here"
           />
         </div>
       </section>
 
-      {/* (правка 723) Окно выбора лица кликом по кадру исходника. */}
+      {/* Dialog for selecting face by click on source frame */}
       {source && (
         <FacePickDialog
           open={pickOpen}
           onOpenChange={(open) => {
             setPickOpen(open)
-            // (правка 723) Закрыли окно, ничего не выбрав, — правило
-            // closest_to_xy без точки мерить нечем, возвращаем дефолт.
             if (!open && !facePoint) patchParams({ select: 'largest_face' })
           }}
           url={source.url}

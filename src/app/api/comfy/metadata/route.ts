@@ -10,11 +10,11 @@ import { readDraftPrompt } from '@/lib/refine-meta'
  * overwrites the fresher client data.
  *
  * GET /api/comfy/metadata?filename=&subfolder=
- * Читает сайдкар вывода и возвращает промпт драфта, зачищенный для
- * refine-conditioning (без аудио-секций и тегов-референсов). Префилл
- * Caption вкладки «Refine» убран (промпт/референсы резолвит сервер
- * /api/comfy/refine через readDraftSource) — endpoint остаётся как
- * утилита чтения сайдкара.
+ * Reads output sidecar and returns draft prompt, cleaned up for
+ * refine-conditioning (without audio sections and reference tags). Prefill
+ * Caption of the "Refine" tab was removed (prompt/references resolved by server
+ * /api/comfy/refine via readDraftSource) — endpoint remains as a
+ * sidecar reading utility.
  */
 export const dynamic = 'force-dynamic'
 
@@ -42,12 +42,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'filename and params are required' }, { status: 400 })
     }
 
-    // (правка 722) СЛИЯНИЕ, а не перезапись: серверный писатель (pending-meta)
-    // уже мог записать свой набор полей в этот же сайдкар — реально
-    // применённые кастомные LoRA (`lora`), output_subfolder, flf_resolution и
-    // т.д. Клиент о них не знает, и полная перезапись их вычёркивала
-    // («метаданные записываются не все и не везде»). Новые поля перетирают
-    // старые, незнакомые старые — сохраняются.
+    // (fix 722) MERGE, not overwrite: the server-side writer (pending-meta)
+    // might have already written its set of fields into this same sidecar — actually
+    // applied custom LoRAs (`lora`), output_subfolder, flf_resolution,
+    // etc. The client doesn't know about them, and full overwrite wiped them out
+    // ("metadata is not recorded completely or everywhere"). New fields override
+    // old ones, unfamiliar old fields are preserved.
     const metaFile = writeMetaSidecar(body.filename, body.subfolder || '', body.params, { merge: true })
     if (!metaFile) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 })

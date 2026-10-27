@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const modelId: string = body.modelId || ''
 
     if (!modelId) {
-      return NextResponse.json({ error: 'Укажите modelId' }, { status: 400 })
+      return NextResponse.json({ error: 'Specify modelId' }, { status: 400 })
     }
 
     const result = cancelDownload(modelId)

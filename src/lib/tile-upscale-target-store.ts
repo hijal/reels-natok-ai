@@ -1,10 +1,10 @@
 'use client'
 
 /**
- * TileUpscaleTargetStore — мост «галерея → вкладка Tile Upscale» + её UI-состояние.
+ * TileUpscaleTargetStore — bridge "gallery → Tile Upscale tab" + its UI state.
  *
- * Аналогичен RefineTargetStore: кнопка в галерее кладёт цель сюда и шлёт
- * событие 'h3:goto-tile-upscale'. TileUpscaleView забирает цель.
+ * Analogous to RefineTargetStore: the button in gallery puts the target here
+ * and emits the 'h3:goto-tile-upscale' event. TileUpscaleView picks up the target.
  */
 import { create } from 'zustand'
 
@@ -17,31 +17,31 @@ export interface TileUpscaleSource {
   url: string
   filename: string
   subfolder: string
-  /** Файл с диска, уже загруженный в ComfyUI input/. */
+  /** Disk file already uploaded to ComfyUI input/. */
   inputSource?: string
 }
 
-/** Параметры вкладки Tile Upscale — переживают переключение вкладок. */
+/** Tile Upscale tab parameters — preserved across tab switching. */
 export interface TileUpscaleUiParams {
-  /** Короткая сторона целевого разрешения: 720|1080|1440|2160. Default 1080. (правка 265) */
+  /** Short side of target resolution: 720|1080|1440|2160. Default 1080. (edit 265) */
   targetResolution: number
-  /** Уровень денойза 0–1. Default 0.1. */
+  /** Denoise level 0–1. Default 0.1. */
   denoise: number
-  /** Количество шагов. Default 2. */
+  /** Number of steps. Default 2. */
   steps: number
-  /** Размер тайла в пикселях (multiple of 32). Количество тайлов — авто. */
+  /** Tile size in pixels (multiple of 32). Number of tiles is auto. */
   tileSize: number
-  /** Пространственное перекрытие, px. */
+  /** Spatial overlap, px. */
   overlap: number
-  /** Ширина фейда, px. */
+  /** Fade width, px. */
   fade: number
-  /** Длина временного куска, кадры. */
+  /** Temporal chunk length, frames. */
   chunkFrames: number
-  /** Временное перекрытие, кадры. */
+  /** Temporal overlap, frames. */
   temporalOverlap: number
   /** Anchor strength 0–1. */
   anchorStrength: number
-  /** (правка 481) SyncTile: per-step синхронизация тайлов (швы без мерцания). */
+  /** (edit 481) SyncTile: per-step tile synchronization (flicker-free seams). */
   syncTiles: boolean
 }
 
@@ -73,8 +73,8 @@ export const useTileUpscaleTarget = create<TileUpscaleState>((set, get) => ({
   setTarget: (target) => set({ target }),
   clear: () => set({ target: null }),
   source: null,
-  // (правка 558) blob:URL предыдущего файла с диска ревокаем — каждый
-  // перевыбор источника оставлял блоб в памяти до конца сессии.
+  // (edit 558) Revoke blob:URL of previous disk file — every source
+  // reselection previously leaked the blob in memory until end of session.
   setSource: (source) => {
     const prev = get().source
     if (prev?.url.startsWith('blob:') && prev.url !== source?.url) {

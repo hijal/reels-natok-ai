@@ -1,14 +1,14 @@
 /**
- * (правка 331) Журнал inflight-постановок: clientToken → prompt_id.
+ * (fix 331) In-flight dispatch journal: clientToken → prompt_id.
  *
- * Проблема: страница перезагружена, пока POST /api/comfy/generate был в
- * полёте — сервер мог уже поставить задачу в ComfyUI, а фронт prompt_id
- * не знает → задача-зомби без отслеживания. Теперь фронт генерит
- * clientToken и шлёт его в теле POST; сервер после постановки пишет
- * соответствие сюда. После перезагрузки фронт спрашивает
- * GET /api/comfy/inflight?token=… и re-attach'ит поллинг.
+ * Problem: the page is reloaded while POST /api/comfy/generate was in
+ * flight — the server might have already queued the prompt in ComfyUI, but the
+ * frontend does not know prompt_id → zombie task without tracking. Now frontend
+ * generates clientToken and sends it in the POST body; server writes the
+ * mapping here after dispatching. After reload, frontend asks
+ * GET /api/comfy/inflight?token=… and re-attaches polling.
  *
- * Файл: data/inflight-generate.json, записи живут 24 часа.
+ * File: data/inflight-generate.json, entries live for 24 hours.
  */
 import fs from 'fs'
 import path from 'path'
@@ -35,9 +35,9 @@ function loadJournal(): Record<string, InflightEntry> {
     for (const [token, e] of Object.entries(parsed)) {
       if (e && typeof e.ts === 'number' && now - e.ts < MAX_AGE_MS) fresh[token] = e
     }
-    // (правка 716) Вычищенный журнал СРАЗУ сохраняем: раньше просроченные
-    // записи отбрасывались только в памяти, и файл оставался с ними до
-    // следующей записи.
+    // (fix 716) Save cleaned-up journal IMMEDIATELY: previously expired
+    // entries were only discarded in memory, and the file remained with them
+    // until the next write.
     if (Object.keys(fresh).length !== Object.keys(parsed).length) {
       try { saveJournal(fresh) } catch { /* non-critical */ }
     }
@@ -54,8 +54,8 @@ function saveJournal(map: Record<string, InflightEntry>) {
   } catch { /* non-critical */ }
 }
 
-/** (правка 692) Полный сброс журнала — заводской сброс: старые clientToken
- *  записи (stale prompts, отменённые задачи) удаляются. */
+/** (fix 692) Complete journal reset — factory reset: old clientToken
+ *  entries (stale prompts, cancelled tasks) are removed. */
 export function clearInflight() {
   try {
     const file = journalFile()
@@ -63,7 +63,7 @@ export function clearInflight() {
   } catch { /* non-critical */ }
 }
 
-/** /api/comfy/generate: задача принята ComfyUI — запоминаем соответствие. */
+/** /api/comfy/generate: task accepted by ComfyUI — remember mapping. */
 export function recordInflight(clientToken: string, promptId: string) {
   try {
     const map = loadJournal()
@@ -72,8 +72,8 @@ export function recordInflight(clientToken: string, promptId: string) {
   } catch { /* non-critical */ }
 }
 
-/** GET /api/comfy/inflight: найти prompt_id по clientToken (null — ещё
- *  не поставлена или запись протухла). */
+/** GET /api/comfy/inflight: find prompt_id by clientToken (null — not yet
+ *  dispatched or entry has expired). */
 export function lookupInflight(clientToken: string): string | null {
   try {
     return loadJournal()[clientToken]?.prompt_id ?? null

@@ -1,19 +1,19 @@
 'use client'
 
 /**
- * DesktopTitleBar — тонкая шапка окна вместо нативного заголовка Windows
- * (правка 562; кнопки — правка 563). Работает ТОЛЬКО внутри Electron-окна:
- *   • electron/main.js ставит titleBarStyle:'hidden' — нативных кнопок нет;
- *   • свои HTML-кнопки управляют окном через preload-IPC (window.h3desktop):
- *     без фоновой плашки, в теме приложения, с hover-подсветкой;
- *   • на заставке (/splash) — ТОЛЬКО маленькая кнопка закрытия; в самом
- *     приложении — все три (свернуть/развернуть/закрыть);
- *   • вся полоса — область перетаскивания окна (-webkit-app-region: drag,
- *     класс .h3-titlebar в globals.css), двойной клик = максимизация;
- *   • в обычном браузере (фолбэк start.bat без Electron) не рендерится.
+ * DesktopTitleBar — slim window titlebar replacing native Windows titlebar
+ * (edit 562; buttons — edit 563). Operates ONLY within an Electron window:
+ *   • electron/main.js sets titleBarStyle:'hidden' — no native buttons;
+ *   • custom HTML buttons manage window via preload-IPC (window.h3desktop):
+ *     no background plate, matched to app theme, hover lighting;
+ *   • on splash (/splash) — ONLY a small close button; in the app
+ *     itself — all three (minimize/maximize/close);
+ *   • entire bar is draggable window region (-webkit-app-region: drag,
+ *     class .h3-titlebar in globals.css), double-click = maximize toggle;
+ *   • not rendered in a standard browser (fallback start.bat without Electron).
  *
- * Фон шапки — константа #1c1c20: единый «хром» окна во всех темах;
- * контент ниже живёт своей темой.
+ * Titlebar background — constant #1c1c20: unified window chrome in all themes;
+ * content below follows its own theme.
  */
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
@@ -22,7 +22,7 @@ import { MinusIcon, SquareIcon, XIcon } from 'lucide-react'
 const isElectron = () =>
   typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent)
 
-/** Кнопка окна: без фона, тонкий глиф, мягкая hover-подсветка. */
+/** Window button: no background, slim glyph, soft hover highlight. */
 function CaptionButton({
   onClick,
   title,
@@ -52,7 +52,7 @@ function CaptionButton({
 }
 
 export function DesktopTitleBar() {
-  // SSR/гидратация: userAgent на сервере не Electron → рендерим после mount.
+  // SSR/hydration: userAgent on server is not Electron -> render after mount.
   const [show, setShow] = useState(false)
   useEffect(() => setShow(isElectron()), [])
   const pathname = usePathname()
@@ -63,7 +63,7 @@ export function DesktopTitleBar() {
   }).h3desktop
   if (!api) return null
 
-  // (правка 563) Заставка ждёт бэкенд — только закрытие, маленькое.
+  // (edit 563) Splash screen waiting for backend — only close button, small.
   const isSplash = pathname === '/splash'
 
   return (
@@ -79,25 +79,25 @@ export function DesktopTitleBar() {
       <span className="flex-1" />
 
       {isSplash ? (
-        /* Заставка: только маленький крестик. */
+        /* Splash: small close icon only. */
         <button
           type="button"
           onClick={() => api.close()}
-          title="Закрыть"
+          title="Close"
           className="h3-no-drag h-7 w-8 mr-1 flex items-center justify-center rounded-md text-[#8b8b94] hover:bg-red-500/80 hover:text-white transition-colors"
         >
           <XIcon className="w-3.5 h-3.5" />
         </button>
       ) : (
-        /* Приложение: свернуть / развернуть / закрыть. */
+        /* Application: minimize / maximize / close. */
         <div className="h-full flex items-stretch">
-          <CaptionButton onClick={() => api.minimize()} title="Свернуть">
+          <CaptionButton onClick={() => api.minimize()} title="Minimize">
             <MinusIcon className="w-3.5 h-3.5" />
           </CaptionButton>
-          <CaptionButton onClick={() => api.maximizeToggle()} title="Развернуть / восстановить">
+          <CaptionButton onClick={() => api.maximizeToggle()} title="Maximize / Restore">
             <SquareIcon className="w-3 h-3" />
           </CaptionButton>
-          <CaptionButton onClick={() => api.close()} title="Закрыть" danger>
+          <CaptionButton onClick={() => api.close()} title="Close" danger>
             <XIcon className="w-4 h-4" />
           </CaptionButton>
         </div>

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { lookupInflight } from '@/lib/inflight-journal'
 
 /**
- * (правка 331) GET /api/comfy/inflight?token=<clientToken>
- * Восстановление prompt_id после перезагрузки страницы во время POST
- * /api/comfy/generate: фронт прислал clientToken в теле POST, сервер
- * записал соответствие при постановке в ComfyUI. 404 — задача ещё не
- * поставлена (POST всё ещё в обработке) или токен неизвестен.
+ * (fix 331) GET /api/comfy/inflight?token=<clientToken>
+ * Restores prompt_id after page reload during POST
+ * /api/comfy/generate: frontend sent clientToken in POST body, server
+ * recorded the mapping when queued in ComfyUI. 404 — task is not yet
+ * queued (POST is still being processed) or token is unknown.
  */
 export const dynamic = 'force-dynamic'
 

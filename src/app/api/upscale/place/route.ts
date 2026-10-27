@@ -7,19 +7,19 @@ import { sanitizeFolderPath } from '@/lib/gallery-folders'
 import { ensureUpscaleMeta } from '@/lib/upscale-meta'
 
 /**
- * (правка 727) POST /api/upscale/place
- * Body: { path: "<output_path>", subfolder: "проект/сцены",
- *        job_id?: "<id>", source_name?: "<имя исходника>" }
+ * (fix 727) POST /api/upscale/place
+ * Body: { path: "<output_path>", subfolder: "project/scenes",
+ *        job_id?: "<id>", source_name?: "<source name>" }
  *
- * DLSS-мост всегда публикует результат в КОРЕНЬ output (UPSCALE_OUTPUT_DIR),
- * поэтому переиспользованный ролик из папки раньше терял свою папку. Роут
- * переносит готовый файл (и его .meta.json) в выбранную подпапку; при
- * совпадении имени добавляет суффикс. Возвращает новый путь — очередь
- * дописывает в него generation_time.
+ * DLSS bridge always publishes result to output ROOT (UPSCALE_OUTPUT_DIR),
+ * so a reused video from a folder previously lost its folder. This route
+ * moves the finished file (and its .meta.json) to the chosen subfolder; on
+ * name collision it adds a suffix. Returns the new path — queue
+ * appends generation_time to it.
  *
- * Сама мета: если сайдкара ещё нет (ensureUpscaleMeta в /api/upscale/job
- * работает fire-and-forget и мог не успеть), создаём его уже на новом месте —
- * с наследованием промпта из сайдкара исходника (source_name + подпапка).
+ * Metadata itself: if sidecar does not exist yet (ensureUpscaleMeta in /api/upscale/job
+ * is fire-and-forget and may not have finished), we create it at the new location —
+ * inheriting prompt from the source sidecar (source_name + subfolder).
  */
 export const dynamic = 'force-dynamic'
 
@@ -31,18 +31,18 @@ export async function POST(req: NextRequest) {
     const rawPath = typeof body?.path === 'string' ? body.path : ''
     const sub = sanitizeFolderPath(typeof body?.subfolder === 'string' ? body.subfolder : '')
     if (!rawPath) {
-      return NextResponse.json({ error: 'Нужен path' }, { status: 400 })
+      return NextResponse.json({ error: 'path is required' }, { status: 400 })
     }
 
     const OUTPUT_DIR = path.resolve(getAppConfig().outputDir)
     const src = path.resolve(rawPath)
     if (src !== OUTPUT_DIR && !src.startsWith(OUTPUT_DIR + path.sep)) {
-      return NextResponse.json({ error: 'Файл вне папки output' }, { status: 400 })
+      return NextResponse.json({ error: 'File outside output folder' }, { status: 400 })
     }
     if (!existsSync(src)) {
-      return NextResponse.json({ error: 'Файл результата не найден' }, { status: 404 })
+      return NextResponse.json({ error: 'Result file not found' }, { status: 404 })
     }
-    // '' — общая папка: результат уже на месте, двигать некуда.
+    // '' — shared folder: result is already in place, nowhere to move.
     if (!sub) {
       return NextResponse.json({ ok: true, path: src, subfolder: '' })
     }
@@ -57,11 +57,11 @@ export async function POST(req: NextRequest) {
     while (existsSync(dest)) {
       dest = path.join(dir, `${stem}_${counter++}${ext}`)
       if (counter > 1000) {
-        return NextResponse.json({ error: 'Слишком много совпадений имён' }, { status: 500 })
+        return NextResponse.json({ error: 'Too many name collisions' }, { status: 500 })
       }
     }
 
-    // Перенос в пределах одного диска — rename; иначе копия + удаление.
+    // Same filesystem move — rename; otherwise copy + delete.
     try {
       await fs.rename(src, dest)
     } catch (e) {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       await fs.unlink(src)
     }
 
-    // Сайдкар едет вместе с видео (если сервер статуса уже успел его создать).
+    // Sidecar moves together with video (if status server already managed to create it).
     const srcMeta = `${src}.meta.json`
     const destMeta = `${dest}.meta.json`
     if (existsSync(srcMeta)) {
@@ -82,18 +82,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Гарантируем мету на новом месте (иначе finalize молча ничего не допишет).
+    // Ensure metadata at new location (otherwise finalize silently appends nothing).
     if (!existsSync(destMeta)) {
       const jobId = typeof body?.job_id === 'string' && body.job_id ? body.job_id : `place_${Date.now().toString(36)}`
       const sourceName = typeof body?.source_name === 'string' ? path.basename(body.source_name) : ''
-      // Абсолютный путь исходника → ensureUpscaleMeta найдёт его сайдкар даже
-      // во вложенной папке и унаследует промпт/референсы.
+      // Absolute path to source → ensureUpscaleMeta will find its sidecar even
+      // in a nested folder and inherit prompt/references.
       const sourceHint = sourceName ? path.join(dir, sourceName) : undefined
       await ensureUpscaleMeta(dest, jobId, sourceHint).catch(() => {})
     }
 
-    // source_video в сайдкаре — реальный исходник (мост в поле input кладёт
-    // временную копию из data/upscale-input, её имя в галерее бесполезно).
+    // source_video in sidecar — real source (bridge puts a temporary copy
+    // from data/upscale-input into input field, its name is useless in gallery).
     if (existsSync(destMeta)) {
       try {
         const meta = JSON.parse(await fs.readFile(destMeta, 'utf-8')) as Record<string, unknown>
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
           ;(meta.source_video as { subfolder?: string }).subfolder = sub
         }
         await fs.writeFile(destMeta, JSON.stringify(meta, null, 2), 'utf-8')
-      } catch { /* битый сайдкар — оставляем как есть */ }
+      } catch { /* corrupted sidecar — leave as is */ }
     }
 
     return NextResponse.json({

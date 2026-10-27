@@ -97,9 +97,9 @@ def _write_report(
         "dlssnr_evidence": evidence["evidence"],
         "elapsed_seconds": result.elapsed_seconds,
     }
-    # (правка 716) Имя отчёта — с меткой времени: раньше оно строилось из
-    # имени выходного файла, и два входа с одинаковым stem из разных папок
-    # ПЕРЕЗАПИСЫВАЛИ отчёт друг друга (в отчёте оставались данные последнего).
+    # (fix 716) Report name includes timestamp: previously it was built from
+    # the output file name, and two inputs with the same stem from different folders
+    # OVERWROTE each other's report (leaving data only from the last one).
     stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns() % 1_000_000:06d}"
     report_path = LOGS / f"{Path(result.output_path).stem}_{stamp}.report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

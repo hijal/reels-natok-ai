@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /api/llm/abort — stop the current LLM generation (best effort).
  *
- * (правка 717) Принимает request_id (query или тело) и передаёт его дальше:
- * прерывание должно попасть ровно в ту генерацию, которую остановили. Без
- * адресации «Стоп» мог оборвать СЛЕДУЮЩИЙ запрос (прерывание приходило
- * позже, чем новый /chat).
+ * (fix 717) Accepts request_id (query or body) and forwards it:
+ * abort must hit exactly the generation that was stopped. Without
+ * addressing, "Stop" could abort the NEXT request (abort arrived
+ * later than new /chat).
  */
 export async function POST(req: NextRequest) {
   const backend = llmBackend()
@@ -26,16 +26,16 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch {
-    /* без id — прерываем текущую генерацию (старый режим) */
+    /* no id — abort current generation (legacy mode) */
   }
-  // (правка 351) Bonsai-бэкенд (prism llama-server) не имеет endpoint /abort —
-  // запрос возвращал 404 и логировал ошибку. Для bonsai не шлём ничего и
-  // честно сообщаем клиенту aborted:false: серверная генерация продолжается,
-  // прерывается только локальный стрим (SSE-чтение на клиенте).
+  // (fix 351) Bonsai backend (prism llama-server) has no /abort endpoint —
+  // the request returned 404 and logged an error. For bonsai we send nothing and
+  // honestly report aborted:false to client: server generation continues,
+  // only local stream (client-side SSE read) is aborted.
   if (backend !== 'bonsai') {
-    // (правка 587) Раньше aborted=true ставился безусловно — даже когда
-    // запрос /abort не дошёл до сервера (ECONNREFUSED проглатывался
-    // .catch(() => {})), и клиент считал генерацию остановленной.
+    // (fix 587) Previously aborted=true was set unconditionally — even when
+    // the /abort request didn't reach the server (ECONNREFUSED swallowed by
+    // .catch(() => {})), and client considered generation stopped.
     try {
       const r = await fetch(`http://127.0.0.1:${LLM_PORT}/abort`, {
         method: 'POST',

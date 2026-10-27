@@ -1,21 +1,21 @@
 /**
- * (правка 392) Общий хелпер LatentCut с дроблением под лимит ComfyUI.
+ * (fix 392) Shared LatentCut helper with chunking under ComfyUI limit.
  *
- * ComfyUI валидирует inputs LatentCut: index/amount ≤ MAX_RESOLUTION
- * (16384, comfy_extras/nodes_latent.py:186-187) — превышение отклоняет
- * ВЕСЬ prompt на submit (HTTP 400). Для длинных источников аудио-шаги
- * (5/3 на кадр) упираются в лимит при ~6,8 мин, видео-токены — при ~39 мин.
+ * ComfyUI validates LatentCut inputs: index/amount <= MAX_RESOLUTION
+ * (16384, comfy_extras/nodes_latent.py:186-187) — exceeding rejects
+ * the ENTIRE prompt on submit (HTTP 400). For long sources, audio steps
+ * (5/3 per frame) hit the limit at ~6.8 min, video tokens — at ~39 min.
  *
- * chainLatentCut возвращает ссылку [nodeId, 0] на ноду, эквивалентную
- * LatentCut(samples, dim, index, amount): при превышении лимита диапазон
- * [index, index+amount) дробится на окна по границам, кратным MAX
- * (каждое окно — LatentCut из ИСХОДНИКА + докrop головы/хвоста), куски
- * склеиваются LatentConcat по той же dim. Клампинг по фактической длине
- * источника сохраняется (LatentCut клампит, короткие куски просто
- * конкатенируются).
+ * chainLatentCut returns a reference [nodeId, 0] to the node equivalent
+ * to LatentCut(samples, dim, index, amount): when exceeding the limit,
+ * the range [index, index+amount) is split into windows along boundaries
+ * that are multiples of MAX (each window is a LatentCut from the SOURCE +
+ * head/tail cropping), and pieces are joined by LatentConcat along the same dim.
+ * Clamping to the actual source length is preserved (LatentCut clamps, short
+ * chunks are simply concatenated).
  *
- * base — базовый id ноды; при дроблении суффиксы _w/_h/_t/_cat делают
- * id уникальными внутри prompt (base обязан быть уникален у вызывающего).
+ * base — base node id; during chunking, suffixes _w/_h/_t/_cat make
+ * the id unique within the prompt (base must be unique to the caller).
  */
 
 export const LATENT_CUT_MAX = 16_384
@@ -51,7 +51,7 @@ export function chainLatentCut(
     nodes[wid] = {
       inputs: { samples, dim, index: c0, amount: LATENT_CUT_MAX },
       class_type: 'LatentCut',
-      _meta: { title: `${title} — окно ${part + 1}` },
+      _meta: { title: `${title} — window ${part + 1}` },
     }
     let cur: LatentRef = [wid, 0]
     if (h > c0) {
@@ -59,7 +59,7 @@ export function chainLatentCut(
       nodes[hid] = {
         inputs: { samples: cur, dim, index: h - c0, amount: LATENT_CUT_MAX },
         class_type: 'LatentCut',
-        _meta: { title: `${title} — срез головы окна ${part + 1}` },
+        _meta: { title: `${title} — window head crop ${part + 1}` },
       }
       cur = [hid, 0]
     }
@@ -67,7 +67,7 @@ export function chainLatentCut(
     nodes[tid] = {
       inputs: { samples: cur, dim, index: 0, amount: e - h },
       class_type: 'LatentCut',
-      _meta: { title: `${title} — кусок ${part + 1} (${e - h})` },
+      _meta: { title: `${title} — chunk ${part + 1} (${e - h})` },
     }
     pieces.push([tid, 0])
     part++
@@ -78,7 +78,7 @@ export function chainLatentCut(
     nodes[cid] = {
       inputs: { samples1: acc, samples2: pieces[i], dim },
       class_type: 'LatentConcat',
-      _meta: { title: `${title} — склейка кусков` },
+      _meta: { title: `${title} — pieces concat` },
     }
     acc = [cid, 0]
   }

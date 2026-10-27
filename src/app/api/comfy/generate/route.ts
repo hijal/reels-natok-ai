@@ -11,11 +11,11 @@ import { recordPendingMeta } from '@/lib/pending-meta'
 import { recordInflight } from '@/lib/inflight-journal'
 import { loadLoras, listLoraFiles, TURBO_LORA_NAME } from '@/lib/loras-config'
 import { getAppConfig } from '@/lib/app-config'
-import { sanitizeFolderPath } from '@/lib/gallery-folders' // (правка 495)
-import { resolveSourceLatent } from '@/lib/refine-meta' // (правка 420)
+import { sanitizeFolderPath } from '@/lib/gallery-folders' // (fix 495)
+import { resolveSourceLatent } from '@/lib/refine-meta' // (fix 420)
 import { resolveFfmpeg } from '@/lib/thumb'
 import { probeVideoFile } from '@/lib/video-probe'
-import { compressRefVideo480 } from '@/lib/ref-video-compress' // (правка 493)
+import { compressRefVideo480 } from '@/lib/ref-video-compress' // (fix 493)
 import { runGeneration, assertGenerationAllowed } from '@/lib/vram-arbiter'
 import type { MiniMaxH3Params } from '@/lib/comfy/minimax-h3-template'
 
@@ -33,25 +33,25 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    // (правка 716) Лимит тела. Везде в проекте загрузки идут потоком с
-    // явным лимитом (multipart-stream.ts, 1 ГБ на загрузку), а здесь
-    // req.json() буферизует тело целиком, включая refImagesBase64 — клиент
-    // мог прислать сотни мегабайт и уронить процесс Next.js по памяти.
+    // (fix 716) Body limit. Everywhere in the project uploads are streamed with
+    // an explicit limit (multipart-stream.ts, 1 GB per upload), but here
+    // req.json() buffers the entire body including refImagesBase64 — a client
+    // could send hundreds of megabytes and crash the Next.js process with OOM.
     const MAX_BODY_BYTES = 256 * 1024 * 1024
     const declared = Number(req.headers.get('content-length') || 0)
     if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
       return NextResponse.json(
-        { error: 'Запрос слишком большой (максимум 256 МБ). Загрузите референсы через /api/comfy/upload.' },
+        { error: 'Request body too large (maximum 256 MB). Upload references via /api/comfy/upload.' },
         { status: 413 },
       )
     }
     const body = await req.json() as MiniMaxH3Params & {
       refImagesBase64?: string[]
       extendRefsBase64?: string[]
-      /** (правка 385, ОТКАЧЕНА правкой 417; возвращено правкой 420 в новом
-       *  качестве) extend: адрес оригинала в output/. Используется ТОЛЬКО
-       *  для резолва первозданного латента исходника под пост-сборку
-       *  combined-латента (правка 420) — в генерацию не подаётся. */
+      /** (fix 385, REVERTED by fix 417; reintroduced by fix 420 in a new
+       *  role) extend: original address in output/. Used ONLY
+       *  to resolve the pristine source latent for post-assembly of
+       *  combined latent (fix 420) — not fed into generation. */
       extendSourceName?: string
       extendSourceSubfolder?: string
     }
@@ -61,35 +61,35 @@ export async function POST(req: NextRequest) {
     }
     const cfg = getAppConfig()
 
-    // (правка 91) Папка проекта — дальше уходит в filename_prefix VHS
-    // («folder/Minimax_Studio») и в пути сайдкаров. Клиент шлёт '' (общая)
-    // или путь существующей папки.
-    // (правка 495) Вложенные папки: многоуровневый относительный путь
-    // ('a/b'), каждый сегмент санитизируется, '.'/'..' отбрасываются.
+    // (fix 91) Project folder — forwarded to VHS filename_prefix
+    // ("folder/Minimax_Studio") and sidecar paths. Client sends '' (common)
+    // or path to existing folder.
+    // (fix 495) Nested folders: multi-level relative path
+    // ('a/b'), each segment sanitized, '.'/'..' stripped.
     body.outputSubfolder = sanitizeFolderPath(String(body.outputSubfolder ?? ''))
 
-    // Fast-path 409 (до загрузки референсов): ассистент занят — не тратим
-    // время на upload и не оставляем осиротевших файлов в input/ ComfyUI.
-    // Полная проверка выполняется под mutex в runGeneration.
+    // Fast-path 409 (before reference upload): assistant is busy — avoid wasting
+    // time on upload and leaving orphaned files in ComfyUI input/.
+    // Full check is executed under mutex in runGeneration.
     const quickBlock = assertGenerationAllowed()
     if (quickBlock) {
       return NextResponse.json({ error: quickBlock }, { status: 409 })
     }
 
-    // (правка 587) Имена, залитые в input/ ComfyUI в ЭТОМ запросе: если
-    // генерация будет отбита ПОЗЖЕ (409/503 под mutex — быстрый чек выше не
-    // ловит окно между ним и runGeneration), удаляем их, не оставляя сирот.
+    // (fix 587) File names uploaded to ComfyUI input/ during THIS request: if
+    // generation is rejected LATER (409/503 under mutex — quick check above does
+    // not cover the window between it and runGeneration), delete them without leaving orphans.
     const uploadedThisRequest: string[] = []
 
     // Upload base64 images if provided
     if (body.refImagesBase64?.length) {
-      // (правка 716) Потолок на число картинок: модель принимает до 9
-      // изображений-референсов. Без ограничения клиент мог прислать
-      // тысячи base64-картинок — каждая декодировалась и писалась на диск.
+      // (fix 716) Cap on image count: model accepts up to 9
+      // image references. Without a limit the client could send
+      // thousands of base64 images — each decoded and written to disk.
       const MAX_REF_IMAGES = 9
       if (body.refImagesBase64.length > MAX_REF_IMAGES) {
         return NextResponse.json(
-          { error: `Слишком много референсов (максимум ${MAX_REF_IMAGES})` },
+          { error: `Too many references (maximum ${MAX_REF_IMAGES})` },
           { status: 400 },
         )
       }
@@ -101,8 +101,8 @@ export async function POST(req: NextRequest) {
         const uploaded = await uploadImage(buf, name)
         uploadedThisRequest.push(uploaded)
         body.refImages = body.refImages || []
-        // (правка 341) push, а не присваивание по индексу: staged-имена уже
-        // лежат в refImages[0..n], и base64-загрузка затирала их по индексу.
+        // (fix 341) push instead of index assignment: staged names already
+        // reside in refImages[0..n], and base64 upload overwrote them by index.
         body.refImages.push(uploaded)
       }
     }
@@ -115,9 +115,9 @@ export async function POST(req: NextRequest) {
         const comfyName = await uploadImage(staged, name)
         uploadedThisRequest.push(comfyName)
         transfers[name] = comfyName
-        // Локальную копию удаляем: клиент обновляет пути через
-        // staged_transfers, а .local-input/ иначе растёт бесконечно и
-        // продолжает затенять превью (file-роут смотрит staging первым).
+        // Delete local copy: client updates paths via
+        // staged_transfers, otherwise .local-input/ grows indefinitely and
+        // continues shadowing previews (file route checks staging first).
         await deleteStaged(name)
         return comfyName
       }
@@ -133,11 +133,11 @@ export async function POST(req: NextRequest) {
         body.refVideos[i].path = await transferStaged(body.refVideos[i].path)
       }
     }
-    // (правка 493) «Сжать видео»: референсы с флагом compress ресайзятся до
-    // 480p (короткая сторона, пропорции сохраняются). Подменяем путь ТОЛЬКО
-    // для сабмита — в мету уходит оригинальный файл + флаг compress (так
-    // «Повторить» восстановит исходник и сожмёт его заново, а сжатые копии
-    // кэшируются — повторный прогон бесплатен).
+    // (fix 493) "Compress video": references with compress flag are resized to
+    // 480p (short side, aspect ratio preserved). We swap the path ONLY
+    // for submit — original file + compress flag goes into meta (so
+    // "Repeat" will restore source and recompress it, while compressed copies
+    // are cached — rerun is free).
     let refVideosForSubmit = body.refVideos
     if (body.refVideos?.some((v) => v.compress === true)) {
       refVideosForSubmit = []
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
             refVideosForSubmit.push({ ...v, path: await compressRefVideo480(v.path) })
           } catch (e) {
             return NextResponse.json(
-              { error: `Сжатие видео-референса «${v.path}»: ${e instanceof Error ? e.message : String(e)}` },
+              { error: `Compressing video reference "${v.path}": ${e instanceof Error ? e.message : String(e)}` },
               { status: 500 },
             )
           }
@@ -161,19 +161,19 @@ export async function POST(req: NextRequest) {
         body.refAudios[i] = await transferStaged(body.refAudios[i])
       }
     }
-    // (правка 146) Кадры режима flf — тот же staged-трансфер, что у референсов
+    // (fix 146) flf mode frames — same staged transfer as references
     if (body.firstFrame) body.firstFrame = await transferStaged(body.firstFrame)
     if (body.lastFrame) body.lastFrame = await transferStaged(body.lastFrame)
-    // (правка 164) Источник видео для продления — staged transfer
-    // (правка 421) basename(): если файла нет в стейджинге, transferStaged
-    // возвращает сырое клиентское имя, а оно дальше уходит в
-    // path.join(input/, ...) — то же, что basename у outputSubfolder (91).
+    // (fix 164) Video source for extension — staged transfer
+    // (fix 421) basename(): if file is not in staging, transferStaged
+    // returns raw client name, which is then passed to
+    // path.join(input/, ...) — same as basename in outputSubfolder (91).
     if (body.extendSourceVideo) body.extendSourceVideo = path.basename(await transferStaged(body.extendSourceVideo))
 
-    // (правка 212) Extend: итоговое разрешение клипов = РАЗМЕР ИСХОДНИКА.
-    // Раньше оставался дефолт (16:9 + finalResolution) — клипы генерились
-    // в чужом разрешении, и на шве «оригинал → продолжение» был виден
-    // скачок масштаба. ffmpeg -i даёт точные W×H исходника.
+    // (fix 212) Extend: target resolution of clips = SOURCE SIZE.
+    // Previously default remained (16:9 + finalResolution) — clips were generated
+    // in foreign resolution, and at the seam "original → continuation" a scale
+    // jump was visible. ffmpeg -i gives exact W×H of source.
     if (body.mode === 'extend' && body.extendSourceVideo) {
       try {
         const srcPath = path.join(cfg.inputDir, body.extendSourceVideo)
@@ -183,16 +183,16 @@ export async function POST(req: NextRequest) {
             const probe = await execFileAsync(ffmpegBin, ['-hide_banner', '-i', srcPath], { timeout: 15_000 })
               .then(() => '')
               .catch((e: unknown) => ((e as { stderr?: string }).stderr ?? ''))
-            // (правка 359) Разрешение ищем ТОЛЬКО в строке видеопотока —
-            // общий /\d+x\d+/ мог зацепить размер из метаданных/тегов.
+            // (fix 359) Look for resolution ONLY in video stream line —
+            // general /\d+x\d+/ could match size from metadata/tags.
             const videoLine = probe.split('\n').find((l) => /Stream #.*Video:/.test(l)) ?? probe
             const m = /(\d{2,5})x(\d{2,5})/.exec(videoLine)
             if (m) {
               let w = parseInt(m[1], 10)
               let h = parseInt(m[2], 10)
-              // (правка 218) SAR≠1: генерируем в DISPLAY-аспекте — как файл
-              // выглядит при воспроизведении (конкат склейки тоже считает
-              // цель по DAR), иначе клип и исходник расходятся по пропорции.
+              // (fix 218) SAR≠1: generate in DISPLAY aspect — how file
+              // looks upon playback (concat also calculates
+              // target by DAR), otherwise clip and source diverge in aspect ratio.
               const sarM = /SAR (\d+):(\d+) DAR (\d+):(\d+)/.exec(probe)
               if (sarM) {
                 const sw = parseInt(sarM[1], 10)
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
                   h = h * sh
                 }
               }
-              // чётные стороны — yuv420p не умеет нечётные
+              // even dimensions — yuv420p does not support odd dimensions
               body.targetDimensions = {
                 width: 2 * Math.round(w / 2),
                 height: 2 * Math.round(h / 2),
@@ -211,13 +211,13 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch {
-        // проба не удалась — остаётся путь по aspectRatio, как раньше
+        // probe failed — fallback to aspectRatio path as before
       }
 
-      // (правка 254) Фактическая длина исходника в кадрах: план хвоста
-      // латент-маскирующей цепочки клампится к ней в билдере. Без этого
-      // короткий исходник давал сдвиг preserved-зоны маски → «чистый шум»
-      // в начале первого клипа.
+      // (fix 254) Actual length of source in frames: tail plan
+      // of latent masking chain is clamped to it in builder. Without this,
+      // a short source gave a shift of mask preserved zone → "pure noise"
+      // at the beginning of the first clip.
       try {
         const srcPath2 = path.join(cfg.inputDir, body.extendSourceVideo)
         if (fs.existsSync(srcPath2)) {
@@ -225,19 +225,19 @@ export async function POST(req: NextRequest) {
           if (Number.isFinite(pr.frames) && pr.frames > 0) {
             body.extendSourceFrames = pr.frames
           }
-          // (правка 420) Резолв первозданного латента исходника — НЕ для
-          // генерации (сид остаётся пиксельным, правки 409/419), а для
-          // ПОСТ-СБОРКИ combined-латента итога: таймлайн склейки собирается
-          // из латентных кусков ПОСЛЕ сэмплеров и сохраняется файлом
-          // (lossless-рефайн/апскейл продлённого видео). Латента нет или он
-          // не бьётся с mp4 — билдер сам энкоднет исходник целиком (fallback).
+          // (fix 420) Resolution of pristine source latent — NOT for
+          // generation (seed remains pixel-based, fixes 409/419), but for
+          // POST-ASSEMBLY of combined result latent: concat timeline is assembled
+          // from latent chunks AFTER samplers and saved to file
+          // (lossless refine/upscale of extended video). If latent is missing or
+          // does not match mp4 — builder encodes entire source itself (fallback).
           const srcName = typeof body.extendSourceName === 'string' ? path.basename(body.extendSourceName) : ''
           const srcSubRaw = typeof body.extendSourceSubfolder === 'string'
             ? body.extendSourceSubfolder.split(/[\\/]/).filter(Boolean)
             : []
           if (srcName && srcSubRaw.length <= 1 && !srcSubRaw.some((x) => x === '.' || x === '..')) {
             const resolved = resolveSourceLatent(srcSubRaw[0] ?? '', srcName, pr, (reason) =>
-              console.warn(`[generate/extend] первозданный латент не используется (${srcName}): ${reason}`),
+              console.warn(`[generate/extend] pristine latent not used (${srcName}): ${reason}`),
             )
             if (resolved) {
               body.extendSourceLatentFile = resolved.file
@@ -245,25 +245,25 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch {
-        // проба кадров не удалась — билдер останется на плане по длительности
+        // frame probe failed — builder stays on duration plan
       }
     }
 
-    // (правка 161) extend-рефы: картинки загружаются в ВНУТРЕННИЙ кэш
-    // Extender-ноды через /h3_extender/ref/upload — нода ожидает
-    // content-addressed descriptor (id = 64 hex), а НЕ имя файла из
-    // input/ ComfyUI. Поэтому: (1) staged-файл читаем локально;
-    // (2) upload в кэш ноды;
-    // (3) в body.extendRefsDescriptor[] — descriptors (не имена файлов),
-    //     body.extendRefs — оставляем имена для метаданных («Повторить»).
-    // (правка 161) Клиент может прислать extendRefsBase64 — массив base64
-    // (data-URI), если картинки ещё не загружены в staged.
+    // (fix 161) extend refs: images are uploaded to INTERNAL cache
+    // of Extender node via /h3_extender/ref/upload — node expects
+    // content-addressed descriptor (id = 64 hex), NOT a file name from
+    // ComfyUI input/. Therefore: (1) read staged file locally;
+    // (2) upload to node cache;
+    // (3) in body.extendRefsDescriptor[] — descriptors (not filenames),
+    //     body.extendRefs — keep filenames for metadata ("Repeat").
+    // (fix 161) Client may send extendRefsBase64 — array of base64
+    // (data-URI), if images are not yet uploaded to staged.
     const extendRefDescriptors: ExtenderRefDescriptor[] = []
     const extendRefsStaged: string[] = []
     if (body.extendRefs?.length) {
       for (const rawName of body.extendRefs) {
-        // (правка 421) basename(): имя приходит от клиента и дальше уходит в
-        // path.join(input/, ...) — единообразно с остальными роутами.
+        // (fix 421) basename(): name comes from client and goes to
+        // path.join(input/, ...) — consistent with other routes.
         const name = path.basename(String(rawName))
         const staged = await readStaged(name)
         if (staged) {
@@ -272,11 +272,11 @@ export async function POST(req: NextRequest) {
           extendRefsStaged.push(name)
           await deleteStaged(name)
         } else {
-          // Файл уже в ComfyUI input/ — читаем с диска и upload в кэш ноды.
+          // File already in ComfyUI input/ — read from disk and upload to node cache.
           const filePath = path.join(cfg.inputDir, name)
           if (!fs.existsSync(filePath)) {
             return NextResponse.json(
-              { error: `Реф продления «${name}» не найден в input/ ComfyUI — удалите его из списка и загрузите заново.` },
+              { error: `Extension ref "${name}" not found in ComfyUI input/ — remove it from list and upload again.` },
               { status: 400 },
             )
           }
@@ -302,26 +302,26 @@ export async function POST(req: NextRequest) {
     if (extendRefDescriptors.length > 0) {
       body.extendRefDescriptors = extendRefDescriptors as unknown as Array<Record<string, unknown> & { id: string }>
       if (extendRefsStaged.length > 0) {
-        // Обновляем имена (staged → comfy) для метаданных.
+        // Update names (staged → comfy) for metadata.
         body.extendRefs = extendRefsStaged.map((n) => transfers[n] ?? n)
       }
     }
 
-    // Custom LoRAs: inject enabled ones from config (правка 44).
-    // (правка 89) Сверка с файлами на диске: запись в loras.json, файл
-    // которой удалён вручную мимо приложения, — «призрак», ComfyUI упал бы
-    // на загрузке несуществующей лоры. Такие записи молча пропускаем.
+    // Custom LoRAs: inject enabled ones from config (fix 44).
+    // (fix 89) Verification with disk files: entry in loras.json whose
+    // file was deleted manually outside the app is a "ghost", ComfyUI would crash
+    // trying to load nonexistent lora. We quietly skip such entries.
     //
-    // Встроенная турбо-лора — обычная запись loras.json (включена по
-    // умолчанию) и идёт через ту же цепочку customLoras. Исключение:
-    // режим «Кадры» (flf) с добавленным аудио — там турбо-лора пропускается
-    // (аудио-гайд стабильнее без 4-шагового ускорителя). Обычные LoRA
-    // пользователя не фильтруются никогда.
+    // Built-in turbo LoRA is a normal loras.json entry (enabled by
+    // default) and passes through the same customLoras chain. Exception:
+    // "Frames" mode (flf) with audio added — there turbo LoRA is skipped
+    // (audio guide is more stable without 4-step accelerator). User's regular LoRAs
+    // are never filtered.
     const loraFiles = new Set(listLoraFiles())
     const allEntries = loadLoras()
     const flfWithAudio = body.mode === 'flf' && (body.refAudios?.length ?? 0) > 0
-    // ref + Audio Guide: как flf+audio, 4-шаговая турбо-лора мешает
-    // стабильности аудио-гайда — на время такого прогона её пропускаем.
+    // ref + Audio Guide: like flf+audio, 4-step turbo LoRA interferes with
+    // audio guide stability — skip it during such a run.
     const refAudioGuide = body.mode === 'ref' && body.audioGuide === true && (body.refAudios?.length ?? 0) > 0
     const loraEntries = allEntries.filter(
       (e) =>
@@ -329,42 +329,42 @@ export async function POST(req: NextRequest) {
         loraFiles.has(e.name) &&
         !((flfWithAudio || refAudioGuide) && e.name === TURBO_LORA_NAME),
     )
-    // Турбо-лора применяется через customLoras, а не отдельной нодой шаблона;
-    // поля оставляем согласованными на случай, если их прочитает другой код.
+    // Turbo LoRA is applied via customLoras rather than a dedicated template node;
+    // we keep the fields consistent in case other code reads them.
     const turboEntry = allEntries.find((e) => e.name === TURBO_LORA_NAME)
     body.turboLoraEnabled =
       turboEntry?.enabled === true && loraFiles.has(TURBO_LORA_NAME) && !flfWithAudio && !refAudioGuide
     body.turboLoraStrength = turboEntry?.strength ?? 1.0
-    // (правка 89) Исходный промпт БЕЗ триггеров — уйдёт в метаданные,
-    // иначе «Повторить генерацию» допишет триггеры к уже дописанному
-    // промпту и они начнут накапливаться с каждым повтором.
+    // (fix 89) Source prompt WITHOUT triggers — goes into metadata,
+    // otherwise "Repeat generation" will append triggers to already appended
+    // prompt and they will accumulate with each repeat.
     const promptForMeta = body.prompt
-    // (правка 483) То же для extend-клипов: conditioning продления строится
-    // из extendClips[i].prompt (а не body.prompt), поэтому триггеры
-    // дописываем в КАЖДЫЙ клип. Оригиналы сохраняем — в мету уходят чистые,
-    // иначе «Повторить» накапливал бы триггеры в клипах.
+    // (fix 483) Same for extend clips: extension conditioning is built
+    // from extendClips[i].prompt (not body.prompt), so triggers are
+    // appended to EACH clip. Originals are preserved — clean ones go into meta,
+    // otherwise "Repeat" would accumulate triggers in clips.
     const extendClipsForMeta = body.extendClips
     body.customLoras = loraEntries.length > 0
       ? loraEntries.map((e) => ({ name: e.name, strength: e.strength }))
       : undefined
     if (loraEntries.length > 0) {
-      // Append trigger words to the prompt (правка 46)
+      // Append trigger words to the prompt (fix 46)
       const triggers = loraEntries
         .map((e) => e.trigger?.trim())
         .filter((t): t is string => !!t)
       if (triggers.length > 0) {
         const suffix = ' ' + triggers.join(', ')
         body.prompt = body.prompt + suffix
-        // (правка 483) extend: триггеры в промпт каждого клипа
+        // (fix 483) extend: triggers into prompt of each clip
         if (body.mode === 'extend' && body.extendClips?.length) {
           body.extendClips = body.extendClips.map((c) => ({ ...c, prompt: c.prompt + suffix }))
         }
       }
     }
 
-    // Diffusion model: inject from config if set (правка 45).
-    // (правка 89) Файл мог быть удалён с диска после выбора — проверяем
-    // существование, иначе шаблон падает на UNETLoader с отсутствующим файлом.
+    // Diffusion model: inject from config if set (fix 45).
+    // (fix 89) File could be deleted from disk after selection — check
+    // existence, otherwise template crashes on UNETLoader with missing file.
     if (cfg.diffusionModel) {
       const modelPath = path.join(cfg.comfyRoot, 'ComfyUI', 'models', 'diffusion_models', cfg.diffusionModel)
       if (fs.existsSync(modelPath)) {
@@ -372,15 +372,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // VRAM arbitration: LLM должен ПОЛНОСТЬЮ покинуть VRAM до загрузки MiniMax.
-    // Mutex держится и на submit — окно для гонки с чатом исключено.
-    // (правка 493) refVideosForSubmit — с подменёнными путями сжатых копий.
+    // VRAM arbitration: LLM must COMPLETELY leave VRAM before loading MiniMax.
+    // Mutex is held on submit as well — race window with chat is eliminated.
+    // (fix 493) refVideosForSubmit — with substituted paths of compressed copies.
     const run = await runGeneration(() => submitVideo({ ...body, refVideos: refVideosForSubmit }))
     if (!run.ok) {
-      // (правка 587) Отказ ПОСЛЕ загрузки референсов (409/503 из-под mutex —
-      // LLM-чат начался между quick-чеком и здесь) оставлял файлы-сироты в
-      // input/ ComfyUI. Удаляем best-effort; только для 409/503: при 500
-      // submit мог частично встать в очередь, и удаление сломало бы джоб.
+      // (fix 587) Rejection AFTER uploading references (409/503 under mutex —
+      // LLM chat started between quick check and here) left orphan files in
+      // ComfyUI input/. Delete best-effort; only for 409/503: on 500
+      // submit could be partially queued, and deletion would break the job.
       if (uploadedThisRequest.length && (run.status === 409 || run.status === 503)) {
         try {
           await fetch(`${COMFY_URL}/upload/delete`, {
@@ -398,16 +398,16 @@ export async function POST(req: NextRequest) {
       setActivePrompt(result.prompt_id)
       // Server-side metadata: persist the job params NOW so the sidecar can
       // be written on completion even if the browser tab is closed.
-      // (правка 89) промпт без триггерных слов — см. комментарий выше;
-      // (правка 483) extend-клипы в мету — тоже чистые (без триггеров)
+      // (fix 89) prompt without trigger words — see comment above;
+      // (fix 483) extend clips to meta — also clean (without triggers)
       recordPendingMeta(result.prompt_id, {
         ...body,
         prompt: promptForMeta,
         ...(extendClipsForMeta ? { extendClips: extendClipsForMeta } : {}),
       })
-      // (правка 331) Журнал inflight: фронт прислал clientToken в теле POST —
-      // после перезагрузки страницы во время этого запроса он найдёт здесь
-      // prompt_id через GET /api/comfy/inflight и re-attach'ит поллинг.
+      // (fix 331) Inflight journal: frontend sent clientToken in POST body —
+      // after page reload during this request it will find prompt_id here
+      // via GET /api/comfy/inflight and re-attach polling.
       const clientToken = (body as { clientToken?: unknown }).clientToken
       if (typeof clientToken === 'string' && clientToken.length > 0 && clientToken.length <= 100) {
         recordInflight(clientToken, result.prompt_id)

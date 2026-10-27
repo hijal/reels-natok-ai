@@ -1,23 +1,23 @@
 'use client'
 
 /**
- * UpscaleTargetStore — мост «галерея → вкладка Upscale».
+ * UpscaleTargetStore — bridge "gallery → Upscale tab".
  *
- * Кнопка «Отправить на апскейл» на превьюшке видео (и drag&drop карточки
- * галереи в поле загрузки Upscale) кладёт сюда имя файла из общей папки
- * output ComfyUI. UpscaleView забирает цель и шлёт её в
- * POST /api/upscale/import — сервер копирует файл в upscale-input
- * напрямую (видео может быть гигабайтами, браузер не участвует).
+ * The "Send to Upscale" button on a video preview (and dragging & dropping
+ * a gallery card into the Upscale upload zone) puts the filename from the
+ * shared ComfyUI output folder here. UpscaleView takes the target and sends it to
+ * POST /api/upscale/import — the server copies the file directly into upscale-input
+ * (videos can be gigabytes, the browser is not involved).
  *
- * Store нужен, потому что клик происходит ДО монтирования UpscaleView
- * (вкладка меняется), и событие «на лету» было бы потеряно.
+ * The store is needed because the click occurs BEFORE UpscaleView mounts
+ * (the tab switches), and the on-the-fly event would otherwise be lost.
  */
 import { create } from 'zustand'
 
 export interface UpscaleTarget {
-  /** Имя файла в папке output ComfyUI. */
+  /** Filename in the ComfyUI output folder. */
   filename: string
-  /** Подпапка output (обычно '' — галерея листит корень). */
+  /** Output subfolder (usually '' — the gallery lists the root). */
   subfolder: string
 }
 

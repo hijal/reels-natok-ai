@@ -1,9 +1,9 @@
 /**
- * (правка 567) Типы preload-моста Electron (window.h3desktop из
- * electron/preload.js). В браузерном фолбэке моста нет — все поля optional.
+ * (fix 567) Electron preload bridge types (window.h3desktop from
+ * electron/preload.js). In browser fallback the bridge is absent — all fields are optional.
  */
-/** (правка 588) Операция консоли: 'a' — дописать текст, 'r' — записать text
- *  с начала последней строки (эмуляция \r: прогресс-бары ComfyUI/tqdm). */
+/** (fix 588) Console operation: 'a' — append text, 'r' — write text
+ *  from the start of the last line (emulation of \r: ComfyUI/tqdm progress bars). */
 export type ConsoleOp = ['a' | 'r', string]
 
 export interface H3DesktopBridge {
@@ -11,11 +11,11 @@ export interface H3DesktopBridge {
   maximizeToggle: () => void
   close: () => void
   console: {
-    /** Полный накопленный лог (кольцевой буфер ~2 МБ). */
+    /** Full accumulated log (ring buffer ~2 MB). */
     get: () => Promise<string>
-    /** Подписка на батч операций; возвращает функцию отписки. */
+    /** Subscription to an operations batch; returns unsubscribe function. */
     onAppend: (cb: (ops: ConsoleOp[]) => void) => () => void
-    /** Нативный диалог «Сохранить как» → .txt. */
+    /** Native "Save As" dialog → .txt. */
     save: (text: string) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
   }
 }

@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { stopUpscale } from '@/lib/upscale-runner'
 
 /**
- * (правка 74) POST /api/upscale/stop — остановить сервис Upscale
- * (python + Node SSR-прокси, всё дерево процессов).
+ * (fix 74) POST /api/upscale/stop — stop the Upscale service
+ * (python + Node SSR proxy, entire process tree).
  */
 export const dynamic = 'force-dynamic'
 

@@ -6,10 +6,10 @@ import { basename } from 'path'
 
 export const dynamic = 'force-dynamic'
 
-/** (правка 258) comfyBusy() — сетевой запрос к ComfyUI (таймаут до 4 с);
- *  каждый полл /api/llm/status платил эту цену и висел при недоступном
- *  ComfyUI. Кэшируем результат на 3 с: для UI-поллинга свежести достаточно,
- *  а стоимость и hang устранены. */
+/** (fix 258) comfyBusy() is a network request to ComfyUI (timeout up to 4 s);
+ *  every /api/llm/status poll paid this cost and hung when ComfyUI
+ *  was unavailable. We cache the result for 3 s: fresh enough for UI polling,
+ *  while eliminating the cost and hang. */
 let busyCache: { at: number; busy: boolean } | null = null
 async function comfyBusyCached(): Promise<boolean> {
   if (busyCache && Date.now() - busyCache.at < 3000) return busyCache.busy
@@ -22,7 +22,7 @@ async function comfyBusyCached(): Promise<boolean> {
 export async function GET() {
   const s = llmStatus()
   const backend = llmBackend()
-  // (правка 136) Для Bonsai «модель» — GGUF во внешней папке сборки.
+  // (fix 136) For Bonsai, the "model" is a GGUF in the external build folder.
   const modelFile = backend === 'bonsai' ? llmBonsaiPaths().model : llmModelPath()
   let modelBytes = 0
   try {
@@ -30,19 +30,19 @@ export async function GET() {
   } catch {
     modelBytes = 0
   }
-  // (правка 257) У своей модели порог меньше (лёгкие кванты < 100 МБ легальны)
+  // (fix 257) Custom models have a lower threshold (lightweight quants < 100 MB are valid)
   const minBytes = backend === 'custom' ? 1_000_000 : 100_000_000
   return NextResponse.json({
     ...s,
-    // Ассистент сейчас стримит ответ (блокировка генерации)
+    // Assistant is currently streaming a response (generation lock)
     streaming: llmStreaming(),
-    // Ассистент занят: грузит модель (chatActive) ИЛИ пишет ответ —
-    // именно это состояние должно блокировать кнопку генерации в UI
+    // Assistant is busy: loading model (chatActive) OR writing a response —
+    // this exact state should lock the generation button in the UI
     assistantBusy: assertGenerationAllowed() !== null,
-    // Идёт генерация видео — блокировка чата в UI
+    // Video generation in progress — chat locked in the UI
     blockedByGeneration: await comfyBusyCached(),
     modelId: activeLlmModelId(),
-    // (правка 257) Имя файла модели — для подписей UI (своя модель)
+    // (fix 257) Model file name — for UI labels (custom model)
     modelName: basename(modelFile),
     modelBytes,
     modelReady: s.modelExists && modelBytes > minBytes,

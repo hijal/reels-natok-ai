@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { bridgeUrl } from '@/lib/upscale-runner'
 
 /**
- * (правка 74) GET /api/upscale/schema
- * Прокси каталога функций DLSS-моста (defaults + choices) для нативного UI.
+ * (fix 74) GET /api/upscale/schema
+ * DLSS bridge feature catalog proxy (defaults + choices) for native UI.
  */
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +16,6 @@ export async function GET() {
     }
     return NextResponse.json(await r.json())
   } catch {
-    return NextResponse.json({ error: 'Upscale-сервис не отвечает (мост не запущен)' }, { status: 503 })
+    return NextResponse.json({ error: 'Upscale service is not responding (bridge is not running)' }, { status: 503 })
   }
 }

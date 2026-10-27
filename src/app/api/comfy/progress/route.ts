@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const promptId = searchParams.get('prompt_id')
   if (!promptId) {
-    // (правка 360) Отсутствие prompt_id — отличимый ответ: error-поле,
-    // а не {progress:null}, который клиент принимал за «нет данных».
+    // (fix 360) Missing prompt_id — distinct response: error field,
+    // rather than {progress:null}, which the client treated as "no data".
     return NextResponse.json({ error: 'prompt_id required', progress: null }, { status: 400 })
   }
 

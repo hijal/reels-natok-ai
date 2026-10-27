@@ -21,15 +21,15 @@ import {
  */
 export async function GET(req: NextRequest) {
   try {
-    // Турбо-лора в общем списке: включена по умолчанию, как и остальные
-    // файлы, приходит из loras.json (loadLoras добавляет запись, если её нет).
+    // Turbo-LoRA in general list: enabled by default, like the other
+    // files, comes from loras.json (loadLoras adds entry if missing).
     void req
     const files = listLoraFiles()
     const settings = loadLoras()
     const settingsMap = new Map(settings.map((e) => [e.name, e]))
 
     // Build the response: all files with their settings.
-    // Встроенная турбо-лора включена по умолчанию; пользовательские — нет.
+    // Built-in turbo-LoRA is enabled by default; custom ones are not.
     const result = files.map((name) => {
       const s = settingsMap.get(name)
       return {
@@ -41,18 +41,18 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // (правка 89) Чистка «призраков»: записи, чьи файлы удалены вручную из
-    // папки loras, больше не показываются и не должны оставаться в конфиге
-    // (иначе generate-роут обязан фильтровать их по диску — что он и делает,
-    // но мусор в loras.json копить незачем).
-    // (правка 319) GET не мутирует файл без нужды: перезаписываем loras.json,
-    // только если список реально ИЗМЕНИЛСЯ (сравнение по содержимому, а не
-    // только по длине — имена/порядок тоже учитываем).
-    // (правка 716) Если список файлов ПУСТ — ничего не чистим. listLoraFiles()
-    // глотает любую ошибку чтения папки и возвращает [], поэтому при временно
-    // недоступной папке (EBUSY/EACCES на Windows, переехал comfy_dir) prune
-    // давал [] и saveLoras([]) СТИРАЛ все настройки LoRA (enabled/strength/
-    // trigger) — безвозвратно.
+    // (fix 89) Pruning "ghosts": entries whose files were deleted manually from
+    // the loras folder are no longer shown and should not remain in config
+    // (otherwise the generate route must filter them by disk — which it does,
+    // but no need to accumulate garbage in loras.json).
+    // (fix 319) GET does not mutate file unnecessarily: rewrite loras.json
+    // only if the list actually CHANGED (content comparison, not
+    // just length — names/order also taken into account).
+    // (fix 716) If file list is EMPTY — do not prune anything. listLoraFiles()
+    // catches any folder read error and returns [], so if the folder is temporarily
+    // unavailable (EBUSY/EACCES on Windows, moved comfy_dir), prune
+    // yielded [] and saveLoras([]) ERASED all LoRA settings (enabled/strength/
+    // trigger) — permanently.
     const fileSet = new Set(files)
     if (fileSet.size > 0) {
       const pruned = settings.filter((e) => fileSet.has(e.name))
@@ -76,16 +76,16 @@ export async function GET(req: NextRequest) {
  * Body: FormData with 'file' field (.safetensors)
  * Copies the file to the LoRAs folder and adds it to settings.
  *
- * (правка 103) Стриминг — то же, что в /api/comfy/diffusion-models
- * (правки 102/103): `req.formData()` буферизовал ВЕСЬ файл в RAM — на
- * больших LoRAs это OOM-ом убивало процесс ("догружается до 100 %, а
- * лоры нет"). Теперь тело разбирается потоково (@/lib/multipart-stream),
- * байты пишутся в .part-файл, затем атомарный rename. Память O(chunk).
+ * (fix 103) Streaming — same as in /api/comfy/diffusion-models
+ * (fixes 102/103): `req.formData()` buffered ENTIRE file into RAM — on
+ * large LoRAs this killed the process via OOM ("uploads to 100%, but
+ * no LoRA appears"). Now body is parsed via streaming (@/lib/multipart-stream),
+ * bytes are written to a .part file, followed by atomic rename. Memory O(chunk).
  *
- * (правка 106) Тело запроса читается штатным reader'ом Web-потока
- * (req.body.getReader() внутри парсера) — так же, как рабочий роут
- * /api/upscale/upload; Readable.fromWeb больше не используется
- * (на больших загрузках он вызывал ECONNRESET под Next.js).
+ * (fix 106) Request body is read by standard Web-stream reader
+ * (req.body.getReader() inside parser) — same as working route
+ * /api/upscale/upload; Readable.fromWeb is no longer used
+ * (on large uploads it caused ECONNRESET under Next.js).
  */
 export async function POST(req: NextRequest) {
   let tmpDest = ''
@@ -96,19 +96,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Empty request body' }, { status: 400 })
     }
 
-    // (правка 103) Заголовки части приходят первыми — имя файла известно
-    // ДО передачи байтов: 400/409 отдаём до единого записанного байта.
-    // (правка 106) req.body — Web-поток, парсер читает его штатным
-    // reader'ом (без Readable.fromWeb) — как /api/upscale/upload.
+    // (fix 103) Part headers arrive first — filename is known
+    // BEFORE byte transfer: 400/409 returned before a single byte is written.
+    // (fix 106) req.body is a Web stream, parser reads it via standard
+    // reader (without Readable.fromWeb) — like /api/upscale/upload.
     part = await readFirstMultipartPart(webBody, req.headers.get('content-type'))
     if (!part.filename) {
       abortUpload(part)
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Имя из multipart может содержать путь (..\..\model.safetensors) —
-    // оставляем только базовое имя и выкидываем недопустимые для Windows
-    // символы, иначе загрузка превращается в произвольную запись файла.
+    // Name from multipart may contain path (..\..\model.safetensors) —
+    // keep only basename and strip characters invalid for Windows,
+    // otherwise upload turns into arbitrary file write.
     const safeName = path.basename(part.filename).replace(/[\\/:*?"<>|]+/g, '_').trim()
     if (!safeName) {
       abortUpload(part)
@@ -130,14 +130,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `File "${safeName}" already exists in LoRAs folder` }, { status: 409 })
     }
 
-    // (правка 103) Остаточный .part от неудачной загрузки чистим заранее.
+    // (fix 103) Clean up leftover .part from a failed upload in advance.
     const stalePart = dest + '.part'
     if (fs.existsSync(stalePart)) {
       try { fs.unlinkSync(stalePart) } catch { /* ignore */ }
     }
 
-    // (правка 103) Пишем потоково во временный .part, затем атомарный
-    // rename — при сбое частичный файл не блокирует повторную загрузку.
+    // (fix 103) Stream to temporary .part, then atomic
+    // rename — on failure partial file does not block re-upload.
     tmpDest = dest + '.part'
     const ws = fs.createWriteStream(tmpDest)
     await new Promise<void>((resolve, reject) => {
@@ -147,13 +147,13 @@ export async function POST(req: NextRequest) {
       part!.stream.pipe(ws)
     })
     fs.renameSync(tmpDest, dest)
-    tmpDest = '' // успех — cleanup не нужен
+    tmpDest = '' // success — no cleanup needed
 
     // Add to settings.
-    // (правка 256) Только что ЗАГРУЖЕННАЯ лора включается сразу: загрузка —
-    // само по себе намерение использовать (жалоба с YouTube «постоянно
-    // забываю нажать включить»). Заводской сброс (resetLorasToDefaults)
-    // по-прежнему включает только встроенную турбо-лору.
+    // (fix 256) Newly UPLOADED LoRA is enabled immediately: uploading
+    // is itself an intention to use (YouTube complaint "I constantly
+    // forget to click enable"). Factory reset (resetLorasToDefaults)
+    // still enables only the built-in turbo-LoRA.
     const entries = loadLoras()
     entries.push({ name: safeName, strength: 1.0, enabled: true })
     saveLoras(entries)
@@ -174,10 +174,10 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** (правка 103) Прерываем загрузку: клиент больше не читает тело. */
+/** (fix 103) Abort upload: client stops reading body. */
 function abortUpload(part: MultipartFilePart | null): void {
-  try { part?.stream.destroy() } catch { /* уже разрушен */ }
-  try { part?.cancel() } catch { /* уже закрыт */ }
+  try { part?.stream.destroy() } catch { /* already destroyed */ }
+  try { part?.cancel() } catch { /* already closed */ }
 }
 
 /**
@@ -185,9 +185,9 @@ function abortUpload(part: MultipartFilePart | null): void {
  * Body: { name: string, strength?: number, enabled?: boolean }
  * Updates LoRA settings.
  *
- * (правка 133) При смене enabled (вкл/выкл) автоматически сбрасывает патчи
- * ComfyUI (POST /free), чтобы избежать ошибки «shape ... invalid» при
- * повторном включении. Сброс идёт в фоне — не блокирует ответ.
+ * (fix 133) On enabled toggle (on/off) automatically frees ComfyUI
+ * patches (POST /free) to avoid "shape ... invalid" error on
+ * re-enabling. Reset runs in background — does not block response.
  */
 export async function PUT(req: NextRequest) {
   try {
@@ -200,20 +200,20 @@ export async function PUT(req: NextRequest) {
     const entries = loadLoras()
     let entry = entries.find((e) => e.name === name)
     if (!entry) {
-      // Турбо-лора по умолчанию включена, остальные новые записи — выключены.
+      // Turbo-LoRA enabled by default, other new entries are disabled.
       entry = { name, strength: 1.0, enabled: name === TURBO_LORA_NAME }
       entries.push(entry)
     }
 
-    // (правка 133) Запоминаем предыдущее состояние для сброса патчей
+    // (fix 133) Remember previous state for freeing patches
     const wasEnabled = entry.enabled
 
-    // (правка 309) Кламп унифицирован с UI-слайдером: −10…+10 (ComfyUI
-    // LoraLoader поддерживает отрицательные силы — инверсия); серверный
-    // 0…2 молча портил значения, выставленные слайдером.
-    // (правка 716) Валидация типов: strength="abc" давал NaN
-    // (Math.max(-10, NaN) → NaN → в JSON уходил null), а enabled="false"
-    // (строка) — truthy, и LoRA молча включалась.
+    // (fix 309) Clamping unified with UI slider: −10…+10 (ComfyUI
+    // LoraLoader supports negative strengths — inversion); server-side
+    // 0…2 silently corrupted values chosen in slider.
+    // (fix 716) Type validation: strength="abc" produced NaN
+    // (Math.max(-10, NaN) → NaN → sent as null in JSON), and enabled="false"
+    // (string) was truthy, silently enabling LoRA.
     if (strength !== undefined) {
       if (typeof strength !== 'number' || !Number.isFinite(strength)) {
         return NextResponse.json({ error: 'Invalid strength (must be a finite number)' }, { status: 400 })
@@ -226,7 +226,7 @@ export async function PUT(req: NextRequest) {
       }
       entry.enabled = enabled
     }
-    // (правка 320) trigger не строка → 400, а не 500 на .trim()
+    // (fix 320) trigger not a string → 400, not 500 on .trim()
     if (trigger !== undefined) {
       if (typeof trigger !== 'string') {
         return NextResponse.json({ error: 'Invalid trigger' }, { status: 400 })
@@ -235,27 +235,27 @@ export async function PUT(req: NextRequest) {
     }
     saveLoras(entries)
 
-    // (правка 133) Если enabled изменился — сбрасываем патчи ComfyUI.
-    // Это предотвращает ошибку «shape ... invalid» при повторном включении
-    // LoRA, когда ComfyUI кэширует патчи в RAM.
-    // НО не во время генерации: unload_models посреди исполняющегося промпта
-    // убивает задачу (OOM/model-missing). Проверяем занятость ComfyUI.
+    // (fix 133) If enabled changed — reset ComfyUI patches.
+    // This prevents "shape ... invalid" error upon re-enabling
+    // LoRA when ComfyUI caches patches in RAM.
+    // BUT not during generation: unload_models in the middle of executing prompt
+    // kills the task (OOM/model-missing). Check ComfyUI busy state.
     if (enabled !== undefined && enabled !== wasEnabled) {
       const busy = await comfyBusy().catch(() => false)
       if (busy) {
         return NextResponse.json({
           ok: true,
-          warning: 'Патчи ComfyUI не сброшены: идёт генерация. Сброс произойдёт при следующем переключении.',
+          warning: 'ComfyUI patches not reset: generation in progress. Reset will occur on next toggle.',
         })
       }
       const COMFY_URL = (process.env.COMFY_URL || 'http://127.0.0.1:8188').replace(/\/+$/, '')
-      // fire-and-forget: не ждём ответа, не блокируем UI
+      // fire-and-forget: do not await response, do not block UI
       fetch(`${COMFY_URL}/free`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ unload_models: true, free_memory: true }),
         signal: AbortSignal.timeout(5_000),
-      }).catch(() => { /* ComfyUI может быть недоступен — молча игнорируем */ })
+      }).catch(() => { /* ComfyUI may be unavailable — silently ignore */ })
     }
 
     return NextResponse.json({ ok: true })
@@ -274,8 +274,8 @@ export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json()
     const { name, deleteFile } = body as { name: string; deleteFile?: boolean }
-    // (правка 95) Турбо-лора удаляется наравне с остальными: файл исчез
-    // из папки → generate-роут сам не включит её в workflow.
+    // (fix 95) Turbo-LoRA is deleted equally to others: file gone
+    // from folder → generate route won't include it in workflow.
     if (!name) {
       return NextResponse.json({ error: 'Invalid LoRA name' }, { status: 400 })
     }

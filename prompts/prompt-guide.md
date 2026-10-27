@@ -1,39 +1,39 @@
-### Формат B (Ref2VA) — структура промпта
+### Format B (Ref2VA) — Prompt Structure
 
-Шесть полей, строго в этом порядке:
+Six fields, strictly in this order:
 
-1. `subject_definitions` — референсные активы и метки
-2. `summary` — краткое описание задачи и связей
-3. `retention_analysis` — что сохраняется / изменяется
-4. `detailed_description` — кадры по порядку воспроизведения
-5. `overall_soundscape` — атмосфера и физические звуки
-6. `non_diegetic_music` — фоновая музыка (или "N/A")
+1. `subject_definitions` — reference assets and tags
+2. `summary` — brief overview of the task and relationships
+3. `retention_analysis` — what is preserved / altered
+4. `detailed_description` — shots in playback order
+5. `overall_soundscape` — atmosphere and physical sounds
+6. `non_diegetic_music` — background music (or "N/A")
 
-Все секции — на английском (кроме диалогов в `<d>` и видимого в кадре текста).
+All sections must be in English (except dialogues inside `<d>` and text visibly appearing in the frame).
 
-### Метки и их роли
+### Tags and Their Roles
 
-- `<Subject N>` — актив, абстрагированный из референсов (персонаж, объект, локация)
-- `<Picture N>` — изображение-якорь: кадр, композиция, стиль
-- `<Video N>` — видео: движение, путь камеры, ритм
-- `<Audio N>` — аудио: тембр голоса, звуки, музыкальный стиль
+- `<Subject N>` — asset abstracted from references (character, object, location)
+- `<Picture N>` — anchor image: framing, composition, style
+- `<Video N>` — video: motion, camera path, pacing
+- `<Audio N>` — audio: vocal timbre, sound effects, music style
 
-Правило «одна роль»: каждому активу — одна главная задача.
-`<Video N>` и `<Audio N>` нумеруются **независимо** от `<Picture N>`.
-Персонажа задавай как `<Subject N> is ... in <Picture N> — ...`; отдельная строка `<Picture N>` не нужна.
-Каждый прикреплённый референс обязан быть упомянут в промпте своей меткой.
+Rule of "single role": each asset has one primary purpose.
+`<Video N>` and `<Audio N>` are numbered **independently** from `<Picture N>`.
+Define characters as `<Subject N> is ... in <Picture N> — ...`; a separate `<Picture N>` line is not needed.
+Every attached reference must be referenced in the prompt by its respective tag.
 
-### Маркеры связи
+### Link Markers
 
-- Видимое: `fully_preserved` | `weak_reference`
-- Аудио: `fully_copy` | `reference` | `weak_reference`
+- Visual: `fully_preserved` | `weak_reference`
+- Audio: `fully_copy` | `reference` | `weak_reference`
 
-### Говорящие персонажи
+### Speaking Characters
 
-- Глобальный ID `(Sx)` на каждом вокальном событии; `<Audio N>` переиспользует тот же `(Sx)`.
-- `(Sx)` не пишется в `retention_analysis`.
+- Global ID `(Sx)` on each vocal event; `<Audio N>` reuses the same `(Sx)`.
+- `(Sx)` is not included in `retention_analysis`.
 
-### Пример (реальные промпты — значительно подробнее)
+### Example (actual prompts are significantly more detailed)
 
 ```text
 subject_definitions:
