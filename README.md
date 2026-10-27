@@ -461,3 +461,4 @@ node scripts/release.mjs --verify
 > и с того же Windows x64. Иначе `start.bat` попробует пересобрать проект
 > (нужен `npm` и время) или уйдёт в браузерный режим вместо окна приложения.
 
+# reels-natok-ai
