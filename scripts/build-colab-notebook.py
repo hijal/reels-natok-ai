@@ -20,6 +20,8 @@ markdown("""# Reels Natok AI — MiniMax H3
 
 **গল্প/স্ক্রিপ্ট → ছোট দৃশ্য → audio-সহ 1080×1920 episode।**
 
+**Facebook / Instagram Reels output:** সব final video fixed **9:16, Full HD 1080×1920**। Default target **60 seconds (1 minute)**; duration settings থেকে বদলানো যাবে। Model frame rounding-এর কারণে final duration সামান্য বেশি হতে পারে।
+
 1. **Runtime → Change runtime type → GPU**, G4 ও High-RAM পাওয়া গেলে নির্বাচন করো। এই configuration-এর জন্য G4 / L4 / A100 বা ভালো GPU, অন্তত 22 GiB reported VRAM ও 45 GiB available host RAM দরকার। এগুলো conservative checks; generation সফল হওয়ার নিশ্চয়তা নয়। GPU-এর আসল নাম নিচে দেখাবে।
 2. ওপর থেকে cell-গুলো চালাও। প্রথমে শুধু একটি 5-second scene পরীক্ষা করো।
 3. একটি UTF-8 `.txt` গল্প/স্ক্রিপ্ট = একটি episode। `DRAMA SCRIPT` দিয়ে শুরু হলে supplied one-shot scenes সরাসরি import হবে—Qwen লাগে না। সাধারণ গল্পে `auto-story` local Qwen দিয়ে plan বানাবে। Plain prompt paragraphs হলে `scene-paragraphs` নাও। একাধিক `.txt` = series।
@@ -105,6 +107,8 @@ PRESET = '576x1024' #@param ['576x1024', '768x1344']
 FIT = 'pad' #@param ['pad', 'crop']
 SEED = 42 #@param {type:'integer'}
 CHARACTER_CONTEXT = '' #@param {type:'string'}
+
+print(f'Reels export: fixed 9:16, 1080x1920. Story target: {TARGET_SECONDS} seconds (default 60; adjustable).')
 
 from google.colab import files
 from colab_drama import plan_script, digest

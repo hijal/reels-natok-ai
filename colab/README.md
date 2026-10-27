@@ -1,5 +1,11 @@
 # MiniMax H3 drama on Google Colab
 
+Facebook / Instagram Reels output is always **9:16, Full HD 1080×1920 MP4**.
+The default story target is **60 seconds (1 minute)**, with adjustable duration.
+This is the project's starting target, not a claim that one length performs best
+for every reel. Model frame rounding can make the final export slightly longer;
+structured scripts keep their supplied scene durations.
+
 Open **[Reels_Natok_MiniMax_H3.ipynb](Reels_Natok_MiniMax_H3.ipynb)** in
 [Google Colab](https://colab.research.google.com/) using **File → Upload notebook**.
 The notebook embeds its Python helpers, so it works without cloning this repository
@@ -19,7 +25,7 @@ local Qwen text planner adapts unstructured stories before MiniMax generation.
    কয়েক দশক GB; প্রথম setup-এ সময় লাগবে। Model access চাইলে Colab Secrets-এ
    `HF_TOKEN` রাখো; token notebook বা Git-এ লিখবে না।
 3. Cell 7-এ `auto-story` mode রাখো। `LOGLINE`-এ ছোট English idea paste করো,
-   `EPISODE_TITLE` দাও, target duration 60/120 seconds রাখো। Scene বা dialogue
+   `EPISODE_TITLE` দাও। Target duration default 60 seconds; চাইলে বদলাও। Scene বা dialogue
    নিজে লিখতে হবে না। [The Last Slice logline](the-last-slice-s01e01.logline.txt)
    সরাসরি paste করতে পারো। Local text planner scene plan তৈরি করবে।
    File দিয়ে করতে চাইলে `LOGLINE` খালি রেখে গল্প/স্ক্রিপ্ট `.txt` upload করো। এক

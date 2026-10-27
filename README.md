@@ -2,7 +2,8 @@
 
 **Google Colab / G4:** For script upload, scene generation and automatic portrait
 episode assembly, use the separate [Colab notebook and guide](colab/README.md).
-It exports 1080×1920 MP4 and saves scene checkpoints to Drive. GPU inference
+It always exports 9:16, Full HD 1080×1920 MP4, defaults to a 60-second story
+target (adjustable), and saves scene checkpoints to Drive. GPU inference
 requires the notebook's live smoke test; the Windows installer below is not used.
 
 Local web interface for generating cinematic videos with synchronized audio powered by the **MiniMax H3** model. Operates completely offline — requires only an NVIDIA GPU.
