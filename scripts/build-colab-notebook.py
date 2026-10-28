@@ -29,7 +29,7 @@ markdown("""# Reels Natok AI — MiniMax H3
 
 **Language: English.** Story plans and spoken dialogue use English. Auto-story planner গল্পের adaptation করতে পারে; generation-এর আগে plan দেখে নাও। একই চরিত্র/কণ্ঠ বা dialogue হুবহু আসা নিশ্চিত নয়। Generation preset 576×1024 / 768×1344; final 1080×1920 হলো FFmpeg resize, AI detail enhancement নয়।
 
-এই notebook **Windows UI/DLSS চালায় না**। এটি official MiniMax H3 weights ও native ComfyUI nodes দিয়ে notebook-এর ভেতরে কাজ করে; public tunnel লাগে না। Colab GPU/RAM/session availability নির্দিষ্ট নয়। GPU inference এই notebook-এর লেখকের local CPU machine-এ যাচাই করা হয়নি।
+এটি official MiniMax H3 weights ও native ComfyUI nodes দিয়ে notebook-এর ভেতরে কাজ করে; public tunnel লাগে না। Colab GPU/RAM/session availability নির্দিষ্ট নয়। GPU inference এই notebook-এর লেখকের local CPU machine-এ যাচাই করা হয়নি।
 
 মডেলগুলো মোট কয়েক দশক GB; local runtime disk-এ থাকবে। Drive-এ শুধু script, reference, completed scenes ও final episode থাকবে। Runtime reset হলে models আবার download হতে পারে।
 
@@ -334,8 +334,7 @@ Stable hostname চাইলে Colab Secrets-এ `CLOUDFLARE_TUNNEL_TOKEN` এ�
 নিজের password দিতে optional Secret `REELS_WEB_PASSWORD` (অন্তত 12 characters)।
 Token, password বা HF token notebook code/Git-এ লিখবে না।
 
-এটি episode dashboard; পুরোনো Windows Studio-এর DLSS/Voice/Face Refine UI নয়।
-Existing Colab generation/checkpoint/assembly helpers-ই ব্যবহার করে। GPU model
+এটি Colab episode dashboard; generation/checkpoint/assembly helpers ব্যবহার করে। GPU model
 compatibility, actual inference quality ও live Cloudflare connectivity এই local
 CPU environment-এ যাচাই করা যায় না—Colab-এ প্রথম test চালাতে হবে।
 

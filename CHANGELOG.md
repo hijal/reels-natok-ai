@@ -1,5 +1,20 @@
 # Changelog
 
+## Colab-only cleanup — 2026-10-28
+
+- Retained the Colab browser dashboard, notebook-only alternative, script planner,
+  native MiniMax H3 generation, checkpoints/resume, portrait assembly and verified
+  Drive sync/GPU release.
+- Removed the local Next.js studio, npm tooling, Windows installers and launchers,
+  local assistant/STT bridges, DLSS upscaler and desktop custom-node patches.
+- Updated the project guide and agent instructions for the Colab-only source tree.
+- Existing ignored user data, model weights and installed runtimes are preserved.
+
+The entries below are historical records of the retired local studio and do not
+describe the current supported feature set or build commands.
+
+---
+
 All significant code modifications are tagged with the comment `(fix NNN)` — corresponding
 numbers can be used to locate context in source code. This document outlines **release-level**
 changes rather than individual micro-edits.

@@ -23,8 +23,7 @@ See [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-t
 and [named tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
 Default browser generation is **768×1344**; the final 1080×1920 export remains an
-FFmpeg resize. This is the episode workflow through a browser, rather than the
-Windows Studio's DLSS/Voice/Face Refine interface. It reuses the same Linux models,
+FFmpeg resize. It reuses the same Colab models,
 planning, recipe checkpoints and assembly helpers described below.
 
 Keep the launch cell running. Closing the browser leaves jobs running. Reopen
@@ -49,11 +48,10 @@ Open **[Reels_Natok_MiniMax_H3.ipynb](Reels_Natok_MiniMax_H3.ipynb)** in
 The notebook embeds its Python helpers, so it works without cloning this repository
 or publishing these changes first. Nothing needs to run on the local AMD machine.
 
-The Windows installer and browser launcher are not used. This notebook
-installs a separate Linux ComfyUI backend, uses official MiniMax H3 Ref2VA weights,
-and runs native ComfyUI nodes through loopback HTTP. It does not expose a tunnel or
-require the studio's Windows custom-node patches or DLSS. An optional
-local Qwen text planner adapts unstructured stories before MiniMax generation.
+This notebook installs a Linux ComfyUI backend, uses official MiniMax H3 Ref2VA
+weights, and runs native ComfyUI nodes through loopback HTTP. The notebook-only
+mode does not expose a tunnel. An optional Qwen text planner runs in Colab to adapt
+unstructured stories before MiniMax generation.
 
 ## Quick start
 
@@ -164,8 +162,7 @@ non-English scene results for new English requests.
 - Stopping the notebook monitoring cell leaves the backend job running. Use the
   optional interrupt cell to request cancellation. Completed scene files remain.
 
-This is a separate notebook workflow; existing desktop UI generation/extension
-behavior is unchanged. GPU inference has **not been executed in this local
+GPU inference has **not been executed in this local
 CPU-only environment**. CPU assembly and simulated execution/recovery are tested;
 actual planner/model imports, GPU kernels, quality, speed and peak memory require the
 notebook's live smoke test.
@@ -234,10 +231,10 @@ default memory management. Smaller admitted GPUs use CPU text encoding and
 dependency requirements fail instead of silently replacing Colab's CUDA stack.
 
 This notebook uses a pruned **FP8-scaled** Ref2VA checkpoint, the NVFP4 text encoder,
-FP16 video VAE, FP32 audio VAE and compatible Ref2V Turbo LoRA. This avoids requiring
-the desktop's CUDA 13 INT8 setup. Model filenames, upstream metadata and disk space
+FP16 video VAE, FP32 audio VAE and compatible Ref2V Turbo LoRA.
+Model filenames, upstream metadata and disk space
 are checked before downloading. Reserve at least 15 GiB beyond remaining model
-downloads for runtime work/output. Do not select “Download all” in the Windows UI.
+downloads for runtime work/output.
 
 The first installation records the fetched ComfyUI commit; model download records
 the Hugging Face commit. Reruns reuse those revisions. They are resolved at setup

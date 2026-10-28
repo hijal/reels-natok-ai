@@ -1,78 +1,42 @@
-# dependencies
-/node_modules
+# Python caches and development environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
+# Credentials, logs and editor/OS files
+.env
+.env.*
 *.pem
+*.log
+.DS_Store
 Thumbs.db
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Colab runtime artifacts and user outputs
+/ComfyUI/
+/cloudflared
+/runtime-lock.json
+/reels-natok-runtime/
+/reels-natok-ai/
 
-# env files - keep .env (portable config), uncomment to ignore:
-# .env
-
-# (fix 587) The "nul" file is a Git Bash trap: `2>nul` in bash creates
-# a literal file with a Windows reserved name. Plus hidden startup
-# error log and local backup of changes.
-nul
-start_error.log
-/.backup-before-fixes/
-
-# typescript
+# Legacy local installations and user data retained in existing checkouts
+/node_modules/
+/.next/
+/.next-verify/
+/next-env.d.ts
 *.tsbuildinfo
-next-env.d.ts
-
-# logs
-*.log
-
-# installer cache (downloaded installer archives)
-/.install-cache/
-
-# ComfyUI portable install (copied separately, huge)
-/ComfyUI-Easy-Install
-
-# LLM Assistant Bonsai 2 27B (downloaded on demand, huge)
-/Bonsai_2_27B
-
-# DLSS bridge working data (job logs, render artifacts)
-/upscale/jobs/
-/upscale/logs/
-
-# locally staged reference uploads (ComfyUI offline fallback)
-/.local-input
-
-# python bytecode cache
-__pycache__/
-
-# bundled runtimes and binaries (hundreds of MB, not for git: GitHub rejects files >100 MB)
+/ComfyUI-Easy-Install/
+/Bonsai_2_27B/
 /runtime/
 /stt/
-/upscale/bin/
-/tools/ck_pkg/
-
-# user working data (uploaded videos, chat attachments)
-/data/upscale-input/
-/data/upscale-output/
-/data/chat-attachments/
-/data/assistant-ref-cache/
-
-# user state (chat history, unfinished generations, LoRA settings)
-/data/assistant-chats.json
-/data/inflight-generate.json
-/data/loras.json
-
-# internal development docs - not published to GitHub
+/upscale/
+/.local-input/
+/.install-cache/
+/.backup-before-fixes/
+/data/
+/build/
+/out/
 /docs/
-
-# release instructions in root - not tracked in git
 /HOW_TO_RUN.txt
+nul

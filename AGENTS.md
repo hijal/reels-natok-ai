@@ -1,9 +1,17 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# Colab Episode Studio
 
-# This is NOT the Next.js you know
+This repository contains a Colab-hosted MiniMax H3 episode pipeline and an
+authenticated browser dashboard. There is no local Next.js/Windows studio.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- Read `README.md` and `colab/README.md` for the supported workflow.
+- Edit canonical Python helpers and browser assets in `tools/`. Regenerate both
+  notebooks and the session repair script with
+  `python3 scripts/build-colab-notebook.py`; do not edit embedded copies manually.
+- Run `python3 -m unittest discover -s tests -v` after changes. Assembly tests
+  require FFmpeg/ffprobe; dashboard HTTP tests require loopback socket access.
+- Preserve recipe fingerprinting, scene checkpoints, cancellation ownership and
+  export verification before Drive sync/runtime release.
+- Keep credentials out of source, command arguments and logs. Use Colab Secrets.
+- Do not delete generated videos, checkpoints, user data or model weights during
+  source cleanup. Legacy ignored runtime folders may remain in existing checkouts.
+- CPU tests do not validate actual GPU inference or live Cloudflare connectivity.
