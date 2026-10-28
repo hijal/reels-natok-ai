@@ -54,12 +54,21 @@ def scene_schedule(target_seconds, scene_seconds):
 
 def decode_plan(raw, title, context, target_seconds, scene_seconds):
     text = raw.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
     try:
         data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("Planner returned invalid JSON. Inspect response.txt; retry or use scene-paragraph mode.") from exc
+    except json.JSONDecodeError:
+        # Accept prose/Markdown around one complete JSON value. raw_decode
+        # respects nested objects and braces inside quoted scene/dialogue text.
+        # Never skip a broken first container to salvage a nested/later plan.
+        start = re.search(r"[\[{]", text)
+        if start is None:
+            raise ValueError("Planner returned invalid JSON. Inspect response.txt; retry or use scene-paragraph mode.")
+        try:
+            data, end = json.JSONDecoder().raw_decode(text, start.start())
+        except json.JSONDecodeError as exc:
+            raise ValueError("Planner returned invalid JSON. Inspect response.txt; retry or use scene-paragraph mode.") from exc
+        if re.search(r"[\[{]", text[end:]):
+            raise ValueError("Planner returned ambiguous extra JSON. Inspect response.txt; return a single plan.")
     count, duration = scene_schedule(target_seconds, scene_seconds)
     if not isinstance(data, dict) or not isinstance(data.get("scenes"), list) or len(data["scenes"]) != count:
         raise ValueError(f"Planner must return exactly {count} scenes. Retry or use scene-paragraph mode.")

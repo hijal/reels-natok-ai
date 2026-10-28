@@ -14,6 +14,46 @@ from colab_planner import decode_plan, scene_schedule
 
 
 class PlanningTest(unittest.TestCase):
+    def test_planner_accepts_conversational_text_around_one_json_plan(self):
+        raw = json.dumps({'context': 'Same character', 'scenes': [
+            {'prompt': 'She holds {a box} and says "Look at [this]". A sign reads ```json.'}
+        ]})
+        expected = decode_plan(raw, 'Episode', 'Identity', 5, 5)
+        for response in (
+            'Here is your episode plan:\n```json\n' + raw + '\n```',
+            'Here is your episode plan:\n```JSON\n' + raw + '\n```\nEnjoy your film!',
+            'Here is your episode plan:\n```\n' + raw + '\n```',
+            'Here is your episode plan:\n' + raw + '\nEnjoy your film!',
+        ):
+            with self.subTest(response=response):
+                self.assertEqual(decode_plan(response, 'Episode', 'Identity', 5, 5), expected)
+
+    def test_planner_rejects_ambiguous_and_broken_wrapped_json(self):
+        raw = json.dumps({'context': '', 'scenes': [{'prompt': 'One scene.'}]})
+        for response in (
+            raw + '\n' + raw,
+            'Plan A:\n```json\n' + raw + '\n```\nPlan B:\n```json\n' + raw + '\n```',
+            'Here is the plan:\n' + raw + '\n[]',
+            'Here is the plan:\n' + raw + '\n{"scenes":',
+            'Here is the plan:\n{"broken":\n' + raw,
+            'Here is the plan:\n```json\n' + raw[:-1] + '\n```',
+            'Here is the plan:\n[' + raw + ']',
+        ):
+            with self.subTest(response=response), self.assertRaises(ValueError):
+                decode_plan(response, 'Episode', '', 5, 5)
+
+    def test_wrapped_plan_still_requires_valid_scenes_and_context(self):
+        for data in (
+            {'context': '', 'scenes': []},
+            {'context': '', 'scenes': [{'prompt': 'First'}, {'prompt': 'Extra'}]},
+            {'context': '', 'scenes': [{'prompt': ' '}]},
+            {'context': '', 'scenes': [{'prompt': 'x' * 2501}]},
+            {'context': 123, 'scenes': [{'prompt': 'Scene'}]},
+        ):
+            response = 'Here is your plan:\n```json\n' + json.dumps(data) + '\n```'
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                decode_plan(response, 'Episode', '', 5, 5)
+
     def test_auto_story_schedule_and_strict_json_validation(self):
         self.assertEqual(scene_schedule(60, 5), (12, 5))
         self.assertEqual(scene_schedule(120, 10), (12, 10))

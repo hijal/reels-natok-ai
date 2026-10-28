@@ -87,8 +87,10 @@ model/code revision creates a separate recipe folder rather than mixing clips.
 into a scene plan and shared character descriptions. Its additional weights are
 about 15 GB; download occurs on first use. The planner child process exits before
 video generation, releasing its GPU allocations. A saved plan is reused on reruns.
-Planner output must pass JSON and scene-count validation; malformed output stops
-with an error and is retained as `response.txt` for inspection. No scripts are sent
+Planner output may include conversational text or Markdown fences around a single
+JSON plan. It must still pass scene-count and field validation; malformed or
+ambiguous extra JSON stops with an error. The raw response is retained as
+`response.txt` for inspection. No scripts are sent
 to an external hosted LLM API.
 
 `scene-paragraphs` uses your scene divisions directly, with one short visual moment
