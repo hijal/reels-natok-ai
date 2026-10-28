@@ -98,6 +98,9 @@ help continuity; identical identity/voice and exact English speech are not
 guaranteed. Inspect the smoke test before generating an episode.
 
 Structured `DRAMA SCRIPT` files are detected in either mode. The one-shot importer
+ignores accidental leading blank lines, whitespace around the marker and a UTF-8
+BOM. Field indentation stays strict; errors report original source line numbers.
+The importer
 keeps supplied scene durations, dialogue, cast descriptions, variants, action/sound
 cues and the source title. Invalid input produces a line-numbered error rather
 than an LLM rewrite. Multi-shot `SHOT` blocks are currently rejected; use separate

@@ -65,6 +65,9 @@ or separate post-production steps.
 
 - One `.txt` file per episode. For a series, use names such as `series-name-s01e01.txt`.
 - The first line must be exactly `DRAMA SCRIPT`, with no title, Markdown heading or fence above it.
+- The importer tolerates accidental leading blank lines, whitespace around the
+  `DRAMA SCRIPT` marker and a UTF-8 BOM. Field indentation remains strict, and
+  validation errors retain the original file's line numbers.
 - Section order: header → `== CHARACTERS ==` → `== RULES ==` → `== SCENES ==`.
 - Use UTF-8 without a BOM. LF and CRLF line endings are acceptable.
 - Keys are UPPER CASE. A field appears once per block, except repeatable `REF`, `RULE`,

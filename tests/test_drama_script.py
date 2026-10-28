@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from drama_script import parse_drama_script
+from drama_script import is_drama_script, parse_drama_script
 from colab_drama import plan_script
 from colab_planner import plan_story, run_planner
 
@@ -65,6 +65,46 @@ SCENE 2 | 5s | Changed
 
 
 class StructuredImportTest(unittest.TestCase):
+    def test_pasted_whitespace_keeps_structured_plan_in_both_input_paths(self):
+        expected = parse_drama_script(SCRIPT)
+        variants = [
+            '\n' + SCRIPT,
+            ' ' + SCRIPT,
+            '\r\n \t\r\n  ' + SCRIPT.replace('\n', '\r\n'),
+            '\ufeff' + SCRIPT,
+            '\ufeff \n\n  ' + SCRIPT,
+            '\n \ufeff  ' + SCRIPT.replace('DRAMA SCRIPT\n', 'DRAMA SCRIPT  \n', 1),
+        ]
+        with patch('colab_planner.subprocess.Popen') as proc:
+            for text in variants:
+                with self.subTest(prefix=repr(text[:35])):
+                    self.assertTrue(is_drama_script(text))
+                    self.assertEqual(parse_drama_script(text), expected)
+                    self.assertEqual(plan_script(text, duration=15), expected)
+                    self.assertEqual(plan_story(text, 'filename', '', 120, 15,
+                                                '/missing-runtime', '/missing-drive'), expected)
+        proc.assert_not_called()
+
+    def test_padded_invalid_script_raises_with_original_line_number_without_fallback(self):
+        text = '\n \n  ' + SCRIPT.replace('GENRE: Comedy', 'UNKNOWN: Comedy')
+        number = next(i for i, line in enumerate(text.splitlines(), 1) if line.startswith('UNKNOWN:'))
+        with patch('colab_planner.subprocess.Popen') as proc:
+            for parse in (parse_drama_script, plan_script,
+                          lambda value: plan_story(value, 'filename', '', 60, 5,
+                                                   '/missing-runtime', '/missing-drive')):
+                with self.subTest(parse=parse), self.assertRaisesRegex(ValueError, f'DRAMA SCRIPT line {number}:'):
+                    parse(text)
+        proc.assert_not_called()
+
+    def test_marker_must_be_the_entire_first_nonempty_line(self):
+        for text in (None, '', ' \n\ufeff\n', 'DRAMA SCRIPT extra\n',
+                     'A story mentions DRAMA SCRIPT.', 'Intro\n\nDRAMA SCRIPT\n'):
+            with self.subTest(text=text):
+                self.assertFalse(is_drama_script(text))
+        prose = '\n  A cat waits.\n\nA dog arrives.'
+        self.assertEqual([scene['prompt'] for scene in plan_script(prose)['scenes']],
+                         ['A cat waits.', 'A dog arrives.'])
+
     def test_both_input_paths_bypass_qwen_and_preserve_timing_dialogue_and_variants(self):
         with patch('colab_planner.subprocess.Popen') as proc:
             plan = plan_story(SCRIPT, 'filename', '', 120, 15, '/missing-runtime', '/missing-drive')

@@ -9,8 +9,19 @@ SCENE_FIELDS = set("AT CAST LIPSYNC MOOD VISUAL KEYFRAME CAMERA FRAME LIGHT MUSI
 ENTITY_FIELDS = set("ROLE AGE GENDER FACE SKIN EYES HAIR BUILD OUTFIT ACCESSORIES PERSONALITY VOICE ACCENT LOOK LIGHT REF RULE".split())
 
 
+def _drama_script_header(text):
+    """Find the first nonempty line, allowing pasted whitespace and a UTF-8 BOM."""
+    if not isinstance(text, str):
+        return None
+    for index, line in enumerate(text.splitlines()):
+        content = line.strip().lstrip("\ufeff").strip()
+        if content:
+            return index if content == "DRAMA SCRIPT" else None
+    return None
+
+
 def is_drama_script(text):
-    return isinstance(text, str) and text.lstrip("\ufeff").splitlines()[:1] == ["DRAMA SCRIPT"]
+    return _drama_script_header(text) is not None
 
 
 def parse_drama_script(text, context=""):
@@ -20,7 +31,8 @@ def parse_drama_script(text, context=""):
     rather than silently treating them as prose. Timing remains model guidance.
     REF paths are reported for manual upload, not resolved from untrusted text.
     """
-    if not is_drama_script(text):
+    header = _drama_script_header(text)
+    if header is None:
         raise ValueError("Structured script must begin with DRAMA SCRIPT")
     if len(text.encode()) > 2 * 1024 * 1024:
         raise ValueError("Script exceeds 2 MiB")
@@ -51,7 +63,8 @@ def parse_drama_script(text, context=""):
             result[key] = value.strip()
         return result
 
-    for number, raw in enumerate(text.lstrip("\ufeff").splitlines()[1:], 2):
+    # Keep source line numbers intact; normalize only the marker, not field indentation.
+    for number, raw in enumerate(text.splitlines()[header + 1:], header + 2):
         line = raw.strip()
         if not line or line.startswith("//"):
             continue
