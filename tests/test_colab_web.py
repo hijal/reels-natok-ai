@@ -41,6 +41,60 @@ class DashboardFixture:
 
 
 class DashboardTest(DashboardFixture, unittest.TestCase):
+    def test_successful_logins_do_not_exhaust_rate_limit(self):
+        with patch.object(web.time, "monotonic", return_value=100):
+            for _ in range(25):
+                self.assertTrue(self.app.login("test-password-123"))
+            self.assertEqual(self.app.login_attempts, [])
+
+    def test_failed_login_limit_survives_success_and_expires(self):
+        with patch.object(web.time, "monotonic", return_value=100):
+            for _ in range(20):
+                self.assertFalse(self.app.login("wrong"))
+            with self.assertRaisesRegex(ValueError, "Too many login attempts"):
+                self.app.login("wrong")
+            self.assertTrue(self.app.login("test-password-123"))
+            # Success must not clear a shared limiter and enable more guesses.
+            with self.assertRaisesRegex(ValueError, "Too many login attempts"):
+                self.app.login("wrong")
+        with patch.object(web.time, "monotonic", return_value=159.9):
+            with self.assertRaisesRegex(ValueError, "Too many login attempts"):
+                self.app.login("wrong")
+        with patch.object(web.time, "monotonic", return_value=160):
+            self.assertFalse(self.app.login("wrong"))
+            self.assertEqual(self.app.login_attempts, [160])
+
+    def test_snapshot_skips_unavailable_videos_without_losing_jobs_or_other_videos(self):
+        unavailable = []
+        for base in ("episodes", "tests/episodes"):
+            clip = self.app.workspace / base / "example" / "unavailable.mp4"
+            clip.parent.mkdir(parents=True)
+            clip.write_bytes(b"video")
+            unavailable.append(clip)
+        playable = self.app.workspace / "episodes" / "example" / "ready.mp4"
+        playable.write_bytes(b"video")
+        (playable.parent / "scene.tmp.mp4").write_bytes(b"unfinished")
+        job = {"id": "active", "action": "generate", "status": "running", "created": 1}
+        self.app.save_job(job)
+        self.app.jobs = [job]
+        self.app.current = job
+        (self.app.folder / "jobs" / job["id"] / "output.log").write_text("Rendering scene")
+        original_stat = Path.stat
+
+        def stat(path, *args, **kwargs):
+            if path == unavailable[0]:
+                raise FileNotFoundError("Moved during listing")
+            if path == unavailable[1]:
+                raise PermissionError("Drive temporarily unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        with patch.object(Path, "stat", stat):
+            snapshot = self.app.snapshot()
+        self.assertEqual([v["name"] for v in snapshot["videos"]], ["ready.mp4"])
+        self.assertTrue(snapshot["busy"])
+        self.assertEqual(snapshot["jobs"][0]["log"], "Rendering scene")
+        self.assertEqual(len(self.app.snapshot()["videos"]), 3)
+
     def test_validation_rejects_unsafe_references_and_invalid_duration(self):
         with self.assertRaises(ValueError):
             self.app.references(["../secret.png"])
@@ -202,6 +256,27 @@ class HttpTest(DashboardFixture, unittest.TestCase):
         self.login()
         self.assertEqual(self.request("GET", "/api/state")[0], 200)
         self.assertEqual(self.request("POST", "/api/generate", {}, {"Content-Length": str(web.MAX_BODY + 1)})[0], 413)
+
+    def test_state_poll_succeeds_when_a_video_disappears_after_listing(self):
+        folder = self.app.workspace / "episodes" / "example"
+        folder.mkdir(parents=True)
+        disappearing = folder / "removed.mp4"
+        disappearing.write_bytes(b"video")
+        (folder / "ready.mp4").write_bytes(b"video")
+        original_glob = Path.glob
+
+        def glob(path, pattern, **kwargs):
+            for entry in original_glob(path, pattern, **kwargs):
+                if entry == disappearing:
+                    entry.unlink()
+                yield entry
+
+        self.login()
+        with patch.object(Path, "glob", glob):
+            status, _, raw = self.request("GET", "/api/state")
+        self.assertEqual(status, 200)
+        self.assertEqual([v["name"] for v in json.loads(raw)["videos"]], ["ready.mp4"])
+        self.assertEqual(self.request("GET", "/api/state")[0], 200)
 
     def test_upload_and_saved_reference_validation(self):
         self.login()

@@ -149,10 +149,14 @@ class Dashboard:
         with self.lock:
             now = time.monotonic()
             self.login_attempts = [t for t in self.login_attempts if now - t < 60]
+            # Only failed passwords consume the shared rate-limit budget.
+            # A valid login neither uses nor resets other clients' failures.
+            if secrets.compare_digest(hashlib.sha256(password.encode()).digest(), self.password):
+                return True
             if len(self.login_attempts) >= 20:
                 raise ValueError("Too many login attempts. Wait one minute.")
             self.login_attempts.append(now)
-            return secrets.compare_digest(hashlib.sha256(password.encode()).digest(), self.password)
+            return False
 
     def save_job(self, job):
         atomic_json(self.folder / "jobs" / job["id"] / "job.json", job)
@@ -302,8 +306,14 @@ class Dashboard:
                 for p in base.glob("*/*.mp4"):
                     if p.name.endswith(".tmp.mp4"):
                         continue
+                    try:
+                        mtime = p.stat().st_mtime
+                    except OSError:
+                        # A video can disappear or become unavailable on Drive
+                        # after listing. Keep serving the rest of the snapshot.
+                        continue
                     videos.append({"path": str(p.relative_to(self.workspace)), "name": p.name,
-                                   "episode": p.parent.name, "mtime": p.stat().st_mtime})
+                                   "episode": p.parent.name, "mtime": mtime})
             return {"jobs": jobs, "videos": sorted(videos, key=lambda v: v["mtime"], reverse=True)[:120],
                     "busy": bool(self.current and self.current["status"] in ACTIVE), "releasing": self.releasing}
 

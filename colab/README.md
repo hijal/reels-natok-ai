@@ -22,6 +22,11 @@ private. An optional `REELS_WEB_PASSWORD` Colab Secret sets your own password
 See [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
 and [named tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
+Only failed password attempts count toward the shared limit of 20 per 60 seconds.
+Correct passwords remain usable and do not reset that failure budget. Dashboard
+polling skips individual videos that disappear or become temporarily unreadable,
+so other videos and job progress remain available.
+
 Default browser generation is **768×1344**; the final 1080×1920 export remains an
 FFmpeg resize. It reuses the same Colab models,
 planning, recipe checkpoints and assembly helpers described below.
