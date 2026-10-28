@@ -190,7 +190,9 @@ def parse_drama_script(text, context=""):
     for field in ("TITLE", "LOGLINE", "GENRE", "LANGUAGE", "ASPECT", "RESOLUTION", "FPS", "RUNTIME", "STYLE", "SETTING"):
         if field not in headers:
             raise ValueError(f"Missing required header {field}")
-    if (headers["LANGUAGE"].lower(), headers["ASPECT"], headers["RESOLUTION"], headers["FPS"]) != ("english", "9:16", "1080x1920", "24"):
+    if headers["LANGUAGE"].lower() in {"english", "en"}:
+        headers["LANGUAGE"] = "English"
+    if (headers["LANGUAGE"], headers["ASPECT"], headers["RESOLUTION"], headers["FPS"]) != ("English", "9:16", "1080x1920", "24"):
         raise ValueError("This importer supports English, 9:16, 1080x1920 export and 24 fps")
     total = sum(s["duration"] for s in scenes)
     if seconds(headers["RUNTIME"], 1) != total:

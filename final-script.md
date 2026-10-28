@@ -93,7 +93,7 @@ Keep this order. Omit the entire line when an optional field is unused.
 | `TITLE` | Required; episode title | `The First Paycheck — S01E01` |
 | `LOGLINE` | Required; protagonist, conflict and a hint of the payoff | One English sentence |
 | `GENRE` | Required | `Family drama` |
-| `LANGUAGE` | Required; spoken dialogue | `English` |
+| `LANGUAGE` | Required; spoken dialogue. Importer also accepts `en`, case-insensitively, and normalizes it to English. | `English` |
 | `ASPECT` | Required | `9:16` |
 | `RESOLUTION` | Required; final export | `1080x1920` |
 | `FPS` | Required | `24` |

@@ -65,6 +65,23 @@ SCENE 2 | 5s | Changed
 
 
 class StructuredImportTest(unittest.TestCase):
+    def test_english_language_aliases_preserve_the_same_plan_without_qwen(self):
+        expected = parse_drama_script(SCRIPT)
+        with patch('colab_planner.subprocess.Popen') as proc:
+            for language in ('english', 'ENGLISH', 'en', 'EN', 'En'):
+                text = SCRIPT.replace('LANGUAGE: English', f'LANGUAGE: {language}')
+                with self.subTest(language=language):
+                    self.assertEqual(plan_script(text), expected)
+                    self.assertEqual(plan_story(text, 'filename', '', 60, 5,
+                                                '/missing-runtime', '/missing-drive'), expected)
+        proc.assert_not_called()
+
+    def test_non_english_languages_remain_unsupported(self):
+        for language in ('Bangla', 'Bengali', 'bn', 'French', 'en-US'):
+            text = SCRIPT.replace('LANGUAGE: English', f'LANGUAGE: {language}')
+            with self.subTest(language=language), self.assertRaisesRegex(ValueError, 'supports English'):
+                parse_drama_script(text)
+
     def test_pasted_whitespace_keeps_structured_plan_in_both_input_paths(self):
         expected = parse_drama_script(SCRIPT)
         variants = [
